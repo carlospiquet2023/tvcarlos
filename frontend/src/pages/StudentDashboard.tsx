@@ -388,7 +388,7 @@ export default function StudentDashboard() {
                 )}
 
                 {/* ─── SEÇÃO 1: CONTINUAR ESTUDANDO ─── */}
-                {continueCourses.length > 0 && (
+                {continueCourses.length > 1 && (
                     <section className="sd-section">
                         <div className="sd-section-header">
                             <div className="sd-section-title">
@@ -398,7 +398,7 @@ export default function StudentDashboard() {
                             <CarouselNav id="continue" />
                         </div>
                         <Carousel carouselId="continue">
-                            {continueCourses.map(course => {
+                            {continueCourses.slice(1).map(course => {
                                 const lessonNum = getLessonNumber(course);
                                 const thumbUrl = getThumbUrl(course.lastWatchedVideo?.thumbnailUrl || course.thumbnailUrl);
                                 return (
