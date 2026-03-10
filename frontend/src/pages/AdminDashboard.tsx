@@ -1,0 +1,2628 @@
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { useConfig } from '../context/ConfigContext';
+import { Users, BookOpen, Activity, Plus, Trash2, Settings, Save, Eye, EyeOff, CheckCircle, AlertCircle, Upload, Edit3, RefreshCw, Image, Monitor, X, FileSpreadsheet, FileDown, CalendarDays, ClipboardList, BarChart3, Download, Bell, ChevronUp, ChevronDown, Video, ExternalLink, MessageSquare, ShieldCheck, Flag, Ban, Scale, AlertTriangle } from 'lucide-react';
+import axios from 'axios';
+import api from '../lib/api';
+import ReactQuill from 'react-quill-new';
+import 'react-quill-new/dist/quill.snow.css';
+import DOMPurify from 'dompurify';
+import BlockEditor, { BlockRenderer, type ContentBlock, parseContentField } from '../components/BlockEditor';
+import ConfirmModal from '../components/ConfirmModal';
+
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+
+interface StatsData {
+    totalUsers: number;
+    totalCourses: number;
+    totalVideos: number;
+    processingVideos: number;
+    readyVideos: number;
+    pendingVideos: number;
+    errorVideos: number;
+}
+
+interface UserData {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+    createdAt: string;
+}
+
+interface ModuleData {
+    id: string;
+    name: string;
+    pdfUrl: string | null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    videos: any[];
+}
+
+interface CourseData {
+    id: string;
+    name: string;
+    description: string;
+    thumbnailUrl: string | null;
+    calendarUrl: string | null;
+    modules: ModuleData[];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    enrollments: any[];
+}
+
+export default function AdminDashboard() {
+    const { token, user, logout, login: doLogin } = useAuth();
+    const { config } = useConfig();
+    const isTeacher = user?.role === 'TEACHER';
+    const [activeTab, setActiveTab] = useState(isTeacher ? 'courses' : 'overview');
+    const [stats, setStats] = useState<StatsData | null>(null);
+    const [users, setUsers] = useState<UserData[]>([]);
+    const [courses, setCourses] = useState<CourseData[]>([]);
+
+    // Paginação
+    const [userPage, setUserPage] = useState(1);
+    const [userTotalPages, setUserTotalPages] = useState(1);
+    const [userTotal, setUserTotal] = useState(0);
+    const [userSearch, setUserSearch] = useState('');
+    const [userSearchInput, setUserSearchInput] = useState('');
+
+    // Forms state
+    const [newUser, setNewUser] = useState({ name: '', email: '', password: '', role: 'STUDENT' });
+    const [editingUserId, setEditingUserId] = useState<string | null>(null);
+    const [editUserData, setEditUserData] = useState({ name: '', email: '', role: 'STUDENT', password: '' });
+    const [newCourse, setNewCourse] = useState({ name: '', description: '', thumbnailUrl: '' });
+
+    // Module, Video, Enrollment state
+    const [newModule, setNewModule] = useState({ courseId: '', name: '' });
+    const [uploadData, setUploadData] = useState<{ moduleId: string, title: string, file: File | null }>({ moduleId: '', title: '', file: null });
+    const [uploading, setUploading] = useState(false);
+    const [enrollmentData, setEnrollmentData] = useState({ courseId: '', userId: '', enrollmentRole: 'STUDENT' });
+
+    // Video editing state
+    const [editingVideoId, setEditingVideoId] = useState<string | null>(null);
+    const [editVideoData, setEditVideoData] = useState({ title: '', description: '', content: '' });
+    const [editBlocks, setEditBlocks] = useState<ContentBlock[]>([]);
+    const [uploadingImage, setUploadingImage] = useState(false);
+    const [showPreview, setShowPreview] = useState(false);
+    const [editorModalMode, setEditorModalMode] = useState<'edit' | 'preview'>('edit');
+
+    // Excel upload state
+    const [excelUploading, setExcelUploading] = useState(false);
+    const [excelResults, setExcelResults] = useState<{ name: string; email: string; password: string; enrolled: string[]; error?: string }[] | null>(null);
+
+    // Confirm modal state
+    const [confirmAction, setConfirmAction] = useState<{ message: string; action: () => void } | null>(null);
+
+    // Upload progress
+    const [uploadProgress, setUploadProgress] = useState(0);
+
+    // Audit log state
+    const [auditLogs, setAuditLogs] = useState<any[]>([]);
+    const [auditPage, setAuditPage] = useState(1);
+    const [auditTotalPages, setAuditTotalPages] = useState(1);
+
+    // Reports state
+    const [reports, setReports] = useState<any[]>([]);
+
+    // Notification broadcast state
+    const [notifForm, setNotifForm] = useState({ title: '', message: '' });
+
+    // Live Classes state
+    const [liveClasses, setLiveClasses] = useState<any[]>([]);
+    const [liveForm, setLiveForm] = useState({ courseId: '', moduleId: '', title: '', description: '', startAt: '', endAt: '', zoomJoinUrl: '', zoomStartUrl: '', zoomMeetingId: '' });
+    const [editingLiveId, setEditingLiveId] = useState<string | null>(null);
+    const [editingLiveStatus, setEditingLiveStatus] = useState('');
+
+    // Moderation state
+    const [flaggedComments, setFlaggedComments] = useState<any[]>([]);
+    const [flaggedTotal, setFlaggedTotal] = useState(0);
+    const [flaggedPage, setFlaggedPage] = useState(1);
+    const [flaggedTotalPages, setFlaggedTotalPages] = useState(1);
+
+    // Punishment state
+    const [violations, setViolations] = useState<any[]>([]);
+    const [bans, setBans] = useState<any[]>([]);
+    const [appeals, setAppeals] = useState<any[]>([]);
+    const [appealFilter, setAppealFilter] = useState('PENDING');
+    const [punishmentEnabled, setPunishmentEnabled] = useState(false);
+    const [manualBanForm, setManualBanForm] = useState({ userId: '', reason: '', banType: 'TEMP_1D' });
+
+    // Attendance state
+    const [attendanceData, setAttendanceData] = useState<any[]>([]);
+    const [attendanceFilter, setAttendanceFilter] = useState({ courseId: '', moduleId: '', date: new Date().toISOString().split('T')[0] });
+    const [attendanceModules, setAttendanceModules] = useState<any[]>([]);
+    const [attendanceEditModal, setAttendanceEditModal] = useState<{ id: string; userId: string; moduleId: string; date: string; currentStatus: string } | null>(null);
+    const [attendanceEditForm, setAttendanceEditForm] = useState({ status: '', justification: '' });
+    const [attendanceConfig, setAttendanceConfig] = useState({ attendanceEnabled: false, attendanceMinMinutes: 20, attendanceMode: 'FREE' });
+
+    // Settings state
+    const [settingsForm, setSettingsForm] = useState({
+        currentPassword: '',
+        newUsername: '',
+        newPassword: '',
+        confirmPassword: ''
+    });
+    const [showCurrentPass, setShowCurrentPass] = useState(false);
+    const [showNewPass, setShowNewPass] = useState(false);
+    const [settingsMsg, setSettingsMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+    const [settingsLoading, setSettingsLoading] = useState(false);
+
+    // Global Branding State
+    const [brandingForm, setBrandingForm] = useState({
+        platformName: '',
+        namePart1: '',
+        namePart2: '',
+        nameColor1: '#e50914',
+        nameColor2: '#ffffff',
+        primaryColor: '#6366f1',
+        accentColor: '#ec4899',
+        logoUrl: '',
+        bannerUrl: ''
+    });
+    const [brandingMsg, setBrandingMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+    const [brandingLoading, setBrandingLoading] = useState(false);
+
+    const fetchData = useCallback(async () => {
+        try {
+            const headers = { Authorization: `Bearer ${token}` };
+            if (activeTab === 'overview') {
+                const res = await api.get('/api/admin/stats', { headers });
+                setStats(res.data);
+            } else if (activeTab === 'users') {
+                const res = await api.get('/api/admin/users', { headers, params: { page: userPage, limit: 50, search: userSearch } });
+                setUsers(res.data.data);
+                setUserTotalPages(res.data.totalPages);
+                setUserTotal(res.data.total);
+            } else if (activeTab === 'courses') {
+                if (isTeacher) {
+                    const coursesRes = await api.get('/api/admin/courses', { headers });
+                    setCourses(coursesRes.data.data);
+                } else {
+                    const [coursesRes, usersRes] = await Promise.all([
+                        api.get('/api/admin/courses', { headers }),
+                        api.get('/api/admin/users', { headers, params: { limit: 100 } })
+                    ]);
+                    setCourses(coursesRes.data.data);
+                    setUsers(usersRes.data.data);
+                }
+            } else if (activeTab === 'settings') {
+                const res = await api.get('/api/admin/config', { headers });
+                setBrandingForm({
+                    platformName: res.data.platformName || 'EduVault',
+                    namePart1: res.data.namePart1 || 'Edu',
+                    namePart2: res.data.namePart2 || 'Vault',
+                    nameColor1: res.data.nameColor1 || '#e50914',
+                    nameColor2: res.data.nameColor2 || '#ffffff',
+                    primaryColor: res.data.primaryColor || '#6366f1',
+                    accentColor: res.data.accentColor || '#ec4899',
+                    logoUrl: res.data.logoUrl || '',
+                    bannerUrl: res.data.bannerUrl || ''
+                });
+            } else if (activeTab === 'audit') {
+                const res = await api.get('/api/admin/audit-log', { headers, params: { page: auditPage, limit: 50 } });
+                setAuditLogs(res.data.data);
+                setAuditTotalPages(res.data.totalPages);
+            } else if (activeTab === 'reports') {
+                const res = await api.get('/api/admin/reports', { headers });
+                setReports(res.data);
+            } else if (activeTab === 'live') {
+                const [liveRes, coursesRes] = await Promise.all([
+                    api.get('/api/admin/live-classes', { headers }),
+                    api.get('/api/admin/courses', { headers })
+                ]);
+                setLiveClasses(liveRes.data);
+                setCourses(coursesRes.data.data);
+            } else if (activeTab === 'moderation') {
+                const res = await api.get('/api/admin/comments/flagged', { headers, params: { page: flaggedPage, limit: 20 } });
+                setFlaggedComments(res.data.comments);
+                setFlaggedTotal(res.data.total);
+                setFlaggedTotalPages(res.data.totalPages);
+            } else if (activeTab === 'punishment') {
+                const [violRes, bansRes, appealsRes, configRes, usersRes] = await Promise.all([
+                    api.get('/api/admin/violations', { headers }),
+                    api.get('/api/admin/bans', { headers }),
+                    api.get('/api/admin/appeals', { headers, params: { status: appealFilter } }),
+                    api.get('/api/admin/config', { headers }),
+                    api.get('/api/admin/users', { headers, params: { limit: 200 } })
+                ]);
+                setViolations(violRes.data);
+                setBans(bansRes.data);
+                setAppeals(appealsRes.data);
+                setPunishmentEnabled(configRes.data.forumPunishmentEnabled ?? false);
+                setUsers(usersRes.data.data);
+            } else if (activeTab === 'attendance') {
+                const [coursesRes, configRes] = await Promise.all([
+                    api.get('/api/admin/courses', { headers }),
+                    api.get('/api/admin/config', { headers })
+                ]);
+                setCourses(coursesRes.data.data);
+                setAttendanceConfig({
+                    attendanceEnabled: configRes.data.attendanceEnabled ?? false,
+                    attendanceMinMinutes: configRes.data.attendanceMinMinutes ?? 20,
+                    attendanceMode: configRes.data.attendanceMode ?? 'FREE'
+                });
+
+                // Se já existe filtro, buscar presenças
+                if (attendanceFilter.moduleId && attendanceFilter.date) {
+                    const attRes = await api.get('/api/admin/attendance', {
+                        headers,
+                        params: { moduleId: attendanceFilter.moduleId, date: attendanceFilter.date }
+                    });
+                    setAttendanceData(attRes.data);
+                }
+            }
+        } catch (error) { console.error('Error fetching admin data', error); }
+    }, [token, activeTab, userPage, userSearch, auditPage, flaggedPage, appealFilter, isTeacher]);
+
+    useEffect(() => {
+        if (!token) return;
+        fetchData();
+    }, [token, activeTab, fetchData]);
+
+    // Reseta página ao mudar a busca de usuários
+    useEffect(() => {
+        setUserPage(1);
+    }, [userSearch]);
+
+    // Preenche o username atual quando abre a tab
+    useEffect(() => {
+        if (activeTab === 'settings' && user?.username) {
+            setSettingsForm(prev => ({ ...prev, newUsername: user.username || '' }));
+        }
+    }, [activeTab, user]);
+
+    const handleCreateUser = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            await api.post('/api/admin/users', newUser, { headers: { Authorization: `Bearer ${token}` } });
+            setNewUser({ name: '', email: '', password: '', role: 'STUDENT' });
+            fetchData();
+            alert('Usuário criado com sucesso!');
+        } catch (err: unknown) {
+            if (axios.isAxiosError(err)) {
+                alert(err.response?.data?.message || 'Erro');
+            } else {
+                alert('Erro desconhecido');
+            }
+        }
+    };
+
+    const handleDeleteUser = async (id: string) => {
+        try {
+            await api.delete(`/api/admin/users/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+            fetchData();
+        } catch { alert('Erro ao deletar'); }
+    };
+
+    const handleCreateCourse = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            await api.post('/api/admin/courses', newCourse, { headers: { Authorization: `Bearer ${token}` } });
+            setNewCourse({ name: '', description: '', thumbnailUrl: '' });
+            fetchData();
+            alert('Curso criado com sucesso!');
+        } catch { alert('Erro ao criar curso'); }
+    };
+
+    const handleDeleteCourse = async (id: string) => {
+        try {
+            await api.delete(`/api/admin/courses/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+            fetchData();
+        } catch { alert('Erro ao deletar curso'); }
+    };
+
+    const handleCreateModule = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            await api.post('/api/admin/modules', newModule, { headers: { Authorization: `Bearer ${token}` } });
+            setNewModule({ courseId: '', name: '' });
+            fetchData();
+            alert('Módulo criado com sucesso!');
+        } catch { alert('Erro ao criar módulo'); }
+    };
+
+    const handleDeleteModule = async (id: string) => {
+        try {
+            await api.delete(`/api/admin/modules/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+            fetchData();
+        } catch { alert('Erro ao deletar módulo'); }
+    };
+
+    const handleUploadVideo = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!uploadData.file || !uploadData.moduleId || !uploadData.title) {
+            alert('Preencha título, módulo e selecione o arquivo de vídeo.');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('video', uploadData.file);
+        formData.append('title', uploadData.title);
+        formData.append('moduleId', uploadData.moduleId);
+
+        try {
+            setUploading(true);
+            setUploadProgress(0);
+            await api.post('/api/videos/upload', formData, {
+                headers: {
+                    Authorization: `Bearer ${token}`
+                },
+                onUploadProgress: (progressEvent) => {
+                    if (progressEvent.total) {
+                        setUploadProgress(Math.round((progressEvent.loaded * 100) / progressEvent.total));
+                    }
+                }
+            });
+            setUploadData({ moduleId: '', title: '', file: null });
+            fetchData();
+            alert('Vídeo enviado e na fila de processamento!');
+        } catch (err: unknown) {
+            if (axios.isAxiosError(err)) {
+                alert(err.response?.data?.message || 'Erro no upload do vídeo');
+            } else {
+                alert('Erro desconhecido durante o upload');
+            }
+        } finally {
+            setUploading(false);
+            setUploadProgress(0);
+        }
+    };
+
+    const handleDeleteVideo = async (id: string) => {
+        try {
+            await api.delete(`/api/admin/videos/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+            fetchData();
+        } catch { alert('Erro ao deletar vídeo'); }
+    };
+
+    const handleEnrollStudent = async (e: React.FormEvent, courseId: string) => {
+        e.preventDefault();
+        if (!enrollmentData.userId) return;
+        try {
+            await api.post('/api/admin/enrollments', {
+                courseId,
+                userId: enrollmentData.userId,
+                enrollmentRole: enrollmentData.enrollmentRole || 'STUDENT'
+            }, { headers: { Authorization: `Bearer ${token}` } });
+            setEnrollmentData({ courseId: '', userId: '', enrollmentRole: 'STUDENT' });
+            fetchData();
+            alert('Matrícula realizada com sucesso!');
+        } catch (err: unknown) {
+            if (axios.isAxiosError(err)) {
+                alert(err.response?.data?.message || 'Erro ao matricular');
+            } else {
+                alert('Erro ao matricular');
+            }
+        }
+    };
+
+    const handleEnrollAllStudents = async (courseId: string) => {
+        try {
+            const res = await api.post('/api/admin/enrollments/all', { courseId }, { headers: { Authorization: `Bearer ${token}` } });
+            fetchData();
+            alert(`${res.data.enrolled} aluno(s) matriculado(s) com sucesso!`);
+        } catch (err: unknown) {
+            if (axios.isAxiosError(err)) {
+                alert(err.response?.data?.message || 'Erro ao matricular');
+            } else {
+                alert('Erro ao matricular alunos');
+            }
+        }
+    };
+
+    const handleRemoveEnrollment = async (enrollmentId: string) => {
+        try {
+            await api.delete(`/api/admin/enrollments/${enrollmentId}`, { headers: { Authorization: `Bearer ${token}` } });
+            fetchData();
+        } catch { alert('Erro ao remover matrícula'); }
+    };
+
+    // Upload image for thumbnails or content
+    const handleImageUpload = async (file: File): Promise<string | null> => {
+        const formData = new FormData();
+        formData.append('image', file);
+        try {
+            setUploadingImage(true);
+            const res = await api.post('/api/admin/upload-image', formData, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            return res.data.url;
+        } catch {
+            alert('Erro ao fazer upload de imagem');
+            return null;
+        } finally {
+            setUploadingImage(false);
+        }
+    };
+
+    // Upload PDF for module material or course calendar
+    const handlePdfUpload = async (file: File): Promise<string | null> => {
+        const formData = new FormData();
+        formData.append('pdf', file);
+        try {
+            const res = await api.post('/api/admin/upload-pdf', formData, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            return res.data.url;
+        } catch {
+            alert('Erro ao fazer upload do PDF');
+            return null;
+        }
+    };
+
+    const handleUploadModulePdf = async (moduleId: string, file: File) => {
+        const url = await handlePdfUpload(file);
+        if (url) {
+            await api.put(`/api/admin/modules/${moduleId}`, { pdfUrl: url }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            fetchData();
+        }
+    };
+
+    const handleRemoveModulePdf = async (moduleId: string) => {
+        await api.put(`/api/admin/modules/${moduleId}`, { pdfUrl: null }, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        fetchData();
+    };
+
+    const handleUploadCalendar = async (courseId: string, file: File) => {
+        const url = await handlePdfUpload(file);
+        if (url) {
+            await api.put(`/api/admin/courses/${courseId}`, { calendarUrl: url }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            fetchData();
+        }
+    };
+
+    const handleRemoveCalendar = async (courseId: string) => {
+        await api.put(`/api/admin/courses/${courseId}`, { calendarUrl: null }, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        fetchData();
+    };
+
+    // Edit video content
+    const handleEditVideo = async (videoId: string) => {
+        try {
+            const contentToSave = editBlocks.length > 0 ? JSON.stringify(editBlocks) : editVideoData.content;
+            await api.put(`/api/admin/videos/${videoId}`, { ...editVideoData, content: contentToSave }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setEditingVideoId(null);
+            setEditVideoData({ title: '', description: '', content: '' });
+            setEditBlocks([]);
+            fetchData();
+            alert('Vídeo atualizado com sucesso!');
+        } catch { alert('Erro ao atualizar vídeo'); }
+    };
+
+    // Open video for editing — parse content into blocks if possible
+    const openVideoEditor = (v: { id: string; title: string; description: string | null; content: string | null }) => {
+        setEditingVideoId(v.id);
+        setEditVideoData({ title: v.title, description: v.description || '', content: v.content || '' });
+        const parsed = parseContentField(v.content || null);
+        setEditBlocks(parsed.isBlocks ? parsed.blocks : []);
+        setEditorModalMode('edit');
+    };
+
+    // Excel student upload
+    const handleExcelUpload = async (file: File) => {
+        setExcelUploading(true);
+        setExcelResults(null);
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+            const res = await api.post('/api/admin/upload-students-excel', formData, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setExcelResults(res.data.results);
+            fetchData();
+        } catch (err: unknown) {
+            if (axios.isAxiosError(err)) {
+                alert(err.response?.data?.message || 'Erro ao processar Excel');
+            } else {
+                alert('Erro ao processar Excel');
+            }
+        } finally {
+            setExcelUploading(false);
+        }
+    };
+
+    // Reprocess video with ERROR status
+    const handleReprocessVideo = async (videoId: string) => {
+        try {
+            await api.post(`/api/admin/videos/${videoId}/reprocess`, {}, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            fetchData();
+            alert('Vídeo reenfileirado para processamento!');
+        } catch (err: unknown) {
+            if (axios.isAxiosError(err)) {
+                alert(err.response?.data?.message || 'Erro ao reprocessar');
+            } else {
+                alert('Erro ao reprocessar vídeo');
+            }
+        }
+    };
+
+    // Insert image tag into content editor
+    const handleInsertImageInContent = async (file: File) => {
+        const url = await handleImageUpload(file);
+        if (url) {
+            const imgTag = `<img src="${API_BASE}${url}" alt="Imagem do conteúdo" style="max-width:100%;border-radius:8px;margin:1rem 0" />`;
+            setEditVideoData(prev => ({ ...prev, content: prev.content + '\n' + imgTag }));
+        }
+    };
+
+    // Insert HTML template block into content
+    const insertTemplate = (template: string) => {
+        setEditVideoData(prev => ({ ...prev, content: prev.content + '\n' + template }));
+    };
+
+    const CONTENT_TEMPLATES = {
+        heading: '<h2>Título da Seção</h2>\n<p>Texto do parágrafo aqui...</p>',
+        highlight: '<div class="highlight-box">\n  <h4>📌 Regras Importantes</h4>\n  <ul>\n    <li>Item 1</li>\n    <li>Item 2</li>\n    <li>Item 3</li>\n  </ul>\n</div>',
+        example: '<div class="example-box">\n  <h4>📘 Exemplo</h4>\n  <p>Descrição do exemplo...</p>\n</div>',
+        solution: '<div class="solution-box">\n  <h4>✅ Resolução</h4>\n  <p>Calcule:</p>\n  <div class="formula">f(x) = x² + 2x</div>\n  <p><strong>Resultado: 42</strong></p>\n</div>',
+        tip: '<div class="tip-box">\n  <h4>💡 Dica</h4>\n  <p>Texto da dica aqui...</p>\n</div>',
+        warning: '<div class="warning-box">\n  <h4>⚠️ Atenção</h4>\n  <p>Texto de aviso aqui...</p>\n</div>',
+        table: '<table>\n  <thead>\n    <tr><th>Função</th><th>Derivada</th></tr>\n  </thead>\n  <tbody>\n    <tr><td>f(x) = x²</td><td>f\'(x) = 2x</td></tr>\n    <tr><td>f(x) = sen(x)</td><td>f\'(x) = cos(x)</td></tr>\n  </tbody>\n</table>',
+        formula: '<div class="formula">f(x) = ax² + bx + c</div>',
+        twoCols: '<div class="two-cols">\n  <div>\n    <h3>Coluna 1</h3>\n    <p>Conteúdo da esquerda...</p>\n  </div>\n  <div>\n    <h3>Coluna 2</h3>\n    <p>Conteúdo da direita...</p>\n  </div>\n</div>',
+        sidebarCard: '<div class="sidebar-card">\n  <h4>Título do Card</h4>\n  <p>Conteúdo que aparece na sidebar ao lado do texto principal.</p>\n</div>',
+    };
+
+    // Quill editor – modules & formats
+    const quillModules = useMemo(() => ({
+        toolbar: {
+            container: [
+                [{ 'header': [1, 2, 3, false] }],
+                ['bold', 'italic', 'underline', 'strike'],
+                [{ 'color': [] }, { 'background': [] }],
+                [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+                ['blockquote', 'code-block'],
+                [{ 'align': [] }],
+                ['link', 'image'],
+                ['clean']
+            ],
+        },
+    }), []);
+
+    const quillFormats = [
+        'header', 'bold', 'italic', 'underline', 'strike',
+        'color', 'background', 'list', 'blockquote', 'code-block',
+        'align', 'link', 'image'
+    ];
+
+    const handleExportStudents = async () => {
+        try {
+            const res = await api.get('/api/admin/export-students', {
+                headers: { Authorization: `Bearer ${token}` },
+                responseType: 'blob'
+            });
+            const url = window.URL.createObjectURL(new Blob([res.data]));
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `alunos-${new Date().toISOString().split('T')[0]}.xlsx`;
+            a.click();
+            window.URL.revokeObjectURL(url);
+        } catch { alert('Erro ao exportar.'); }
+    };
+
+    const handleSendNotification = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!notifForm.title || !notifForm.message) return;
+        try {
+            const res = await api.post('/api/admin/notifications', notifForm, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            alert(res.data.message);
+            setNotifForm({ title: '', message: '' });
+        } catch { alert('Erro ao enviar notificação.'); }
+    };
+
+    // ── Live Class handlers ──
+    const handleCreateLive = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!liveForm.courseId || !liveForm.title || !liveForm.startAt || !liveForm.zoomJoinUrl) return;
+        try {
+            await api.post('/api/admin/live-classes', liveForm, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setLiveForm({ courseId: '', moduleId: '', title: '', description: '', startAt: '', endAt: '', zoomJoinUrl: '', zoomStartUrl: '', zoomMeetingId: '' });
+            fetchData();
+        } catch { alert('Erro ao criar aula ao vivo.'); }
+    };
+
+    const handleUpdateLive = async (id: string) => {
+        try {
+            await api.put(`/api/admin/live-classes/${id}`, { status: editingLiveStatus }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setEditingLiveId(null);
+            setEditingLiveStatus('');
+            fetchData();
+        } catch { alert('Erro ao atualizar status.'); }
+    };
+
+    const handleDeleteLive = (id: string, title: string) => {
+        setConfirmAction({
+            message: `Remover aula ao vivo "${title}"?`,
+            action: async () => {
+                try {
+                    await api.delete(`/api/admin/live-classes/${id}`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    fetchData();
+                } catch { alert('Erro ao remover aula ao vivo.'); }
+            }
+        });
+    };
+
+    const handleReorderCourse = async (courseId: string, direction: 'up' | 'down') => {
+        const sorted = [...courses].sort((a, b) => ((a as any).order || 0) - ((b as any).order || 0));
+        const idx = sorted.findIndex(c => c.id === courseId);
+        if ((direction === 'up' && idx <= 0) || (direction === 'down' && idx >= sorted.length - 1)) return;
+        const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+        const orders = sorted.map((c, i) => {
+            if (i === idx) return { id: c.id, order: swapIdx };
+            if (i === swapIdx) return { id: c.id, order: idx };
+            return { id: c.id, order: i };
+        });
+        try {
+            await api.put('/api/admin/courses/reorder', { orders }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            fetchData();
+        } catch { alert('Erro ao reordenar.'); }
+    };
+
+    const handleUpdateBranding = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            setBrandingLoading(true);
+            setBrandingMsg(null);
+
+            const headers = {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            };
+
+            await api.put('/api/admin/config', brandingForm, { headers });
+
+            setBrandingMsg({ type: 'success', text: 'Branding global atualizado! Recarregue a página para ver os efeitos.' });
+
+            setTimeout(() => {
+                window.location.reload();
+            }, 1000);
+
+        } catch (err: unknown) {
+            if (axios.isAxiosError(err)) setBrandingMsg({ type: 'error', text: err.response?.data?.message || 'Erro' });
+            else setBrandingMsg({ type: 'error', text: 'Erro desconhecido.' });
+        } finally { setBrandingLoading(false); }
+    };
+
+    const handleUploadBrandLogo = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!e.target.files || e.target.files.length === 0) return;
+        setBrandingLoading(true);
+        const formData = new FormData();
+        formData.append('image', e.target.files[0]);
+        try {
+            const res = await api.post('/api/admin/upload-image', formData, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setBrandingForm({ ...brandingForm, logoUrl: res.data.url });
+        } catch {
+            alert('Erro ao fazer upload da logo.');
+        } finally {
+            setBrandingLoading(false);
+        }
+    };
+
+    const handleUploadBanner = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!e.target.files || e.target.files.length === 0) return;
+        setBrandingLoading(true);
+        const formData = new FormData();
+        formData.append('image', e.target.files[0]);
+        try {
+            const res = await api.post('/api/admin/upload-image', formData, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setBrandingForm({ ...brandingForm, bannerUrl: res.data.url });
+        } catch {
+            alert('Erro ao fazer upload do banner.');
+        } finally {
+            setBrandingLoading(false);
+        }
+    };
+
+    const handleUpdateProfile = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setSettingsMsg(null);
+        setSettingsLoading(true);
+
+        if (settingsForm.newPassword && settingsForm.newPassword !== settingsForm.confirmPassword) {
+            setSettingsMsg({ type: 'error', text: 'As senhas não coincidem.' });
+            setSettingsLoading(false);
+            return;
+        }
+
+        if (!settingsForm.currentPassword) {
+            setSettingsMsg({ type: 'error', text: 'Informe a senha atual para confirmar alterações.' });
+            setSettingsLoading(false);
+            return;
+        }
+
+        try {
+            const payload: Record<string, string> = {
+                currentPassword: settingsForm.currentPassword,
+            };
+            if (settingsForm.newUsername && settingsForm.newUsername !== user?.username) {
+                payload.newUsername = settingsForm.newUsername;
+            }
+            if (settingsForm.newPassword) {
+                payload.newPassword = settingsForm.newPassword;
+            }
+
+            const res = await api.put('/api/auth/profile', payload, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            // Atualizar token e user no contexto
+            doLogin(res.data.token, res.data.user);
+
+            setSettingsForm(prev => ({
+                ...prev,
+                currentPassword: '',
+                newPassword: '',
+                confirmPassword: ''
+            }));
+            setSettingsMsg({ type: 'success', text: res.data.message || 'Credenciais atualizadas!' });
+        } catch (err: unknown) {
+            if (axios.isAxiosError(err)) {
+                setSettingsMsg({ type: 'error', text: err.response?.data?.message || 'Erro ao atualizar.' });
+            } else {
+                setSettingsMsg({ type: 'error', text: 'Erro desconhecido.' });
+            }
+        } finally {
+            setSettingsLoading(false);
+        }
+    };
+
+    // Attendance handlers
+    const fetchAttendance = async () => {
+        if (!attendanceFilter.moduleId || !attendanceFilter.date) return;
+        try {
+            const res = await api.get('/api/admin/attendance', {
+                headers: { Authorization: `Bearer ${token}` },
+                params: { moduleId: attendanceFilter.moduleId, date: attendanceFilter.date }
+            });
+            setAttendanceData(res.data);
+        } catch { console.error('Erro ao buscar presenças'); }
+    };
+
+    const handleAttendanceEdit = async () => {
+        if (!attendanceEditModal || !attendanceEditForm.justification.trim()) {
+            alert('A justificativa é obrigatória.');
+            return;
+        }
+        try {
+            const headers = { Authorization: `Bearer ${token}` };
+            if (attendanceEditModal.id) {
+                await api.put(`/api/admin/attendance/${attendanceEditModal.id}`, {
+                    status: attendanceEditForm.status,
+                    justification: attendanceEditForm.justification
+                }, { headers });
+            } else {
+                await api.post('/api/admin/attendance', {
+                    userId: attendanceEditModal.userId,
+                    moduleId: attendanceEditModal.moduleId,
+                    date: attendanceEditModal.date,
+                    status: attendanceEditForm.status,
+                    justification: attendanceEditForm.justification
+                }, { headers });
+            }
+            setAttendanceEditModal(null);
+            setAttendanceEditForm({ status: '', justification: '' });
+            fetchAttendance();
+            alert('Presença atualizada com sucesso!');
+        } catch (err: unknown) {
+            if (axios.isAxiosError(err)) alert(err.response?.data?.message || 'Erro');
+            else alert('Erro ao atualizar presença.');
+        }
+    };
+
+    const handleSaveAttendanceConfig = async () => {
+        try {
+            await api.put('/api/admin/config', attendanceConfig, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            alert('Configurações de presença salvas!');
+        } catch { alert('Erro ao salvar configurações de presença.'); }
+    };
+
+    return (
+        <>
+        <div className="admin-root">
+            <header className="admin-header">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    {config.logoUrl && (
+                        <img src={`${API_BASE}${config.logoUrl}`} alt={config.platformName} style={{ maxHeight: '36px', borderRadius: '4px', objectFit: 'contain' }} />
+                    )}
+                    <h2 className="admin-brand">
+                        <span style={{ color: config.nameColor1 }}>{config.namePart1}</span>
+                        <span style={{ color: config.nameColor2 }}>{config.namePart2}</span>
+                        {' '}<span>{isTeacher ? 'Professor' : 'Admin'}</span>
+                    </h2>
+                </div>
+                <div className="admin-header-right">
+                    <span className="admin-user-info">{user?.name} ({user?.role})</span>
+                    <button onClick={logout} className="admin-logout-btn">
+                        Sair
+                    </button>
+                </div>
+            </header>
+
+            <div className="admin-layout">
+                {/* Sidebar Tabs */}
+                <aside className="admin-sidebar">
+                    {!isTeacher && (
+                    <button onClick={() => setActiveTab('overview')} className={`admin-nav-btn ${activeTab === 'overview' ? 'active' : ''}`}>
+                        <Activity size={20} /> Visão Geral
+                    </button>
+                    )}
+                    {!isTeacher && (
+                    <button onClick={() => setActiveTab('users')} className={`admin-nav-btn ${activeTab === 'users' ? 'active' : ''}`}>
+                        <Users size={20} /> Alunos
+                    </button>
+                    )}
+                    <button onClick={() => setActiveTab('courses')} className={`admin-nav-btn ${activeTab === 'courses' ? 'active' : ''}`}>
+                        <BookOpen size={20} /> {isTeacher ? 'Meus Cursos' : 'Cursos e Módulos'}
+                    </button>
+                    {!isTeacher && (
+                    <>
+                    <button onClick={() => setActiveTab('audit')} className={`admin-nav-btn ${activeTab === 'audit' ? 'active' : ''}`}>
+                        <ClipboardList size={20} /> Audit Log
+                    </button>
+                    <button onClick={() => setActiveTab('reports')} className={`admin-nav-btn ${activeTab === 'reports' ? 'active' : ''}`}>
+                        <BarChart3 size={20} /> Relatórios
+                    </button>
+                    <button onClick={() => setActiveTab('notifications')} className={`admin-nav-btn ${activeTab === 'notifications' ? 'active' : ''}`}>
+                        <Bell size={20} /> Notificações
+                    </button>
+                    <button onClick={() => setActiveTab('live')} className={`admin-nav-btn ${activeTab === 'live' ? 'active' : ''}`}>
+                        <Video size={20} /> Aulas ao Vivo
+                    </button>
+                    <button onClick={() => setActiveTab('moderation')} className={`admin-nav-btn ${activeTab === 'moderation' ? 'active' : ''}`}>
+                        <ShieldCheck size={20} /> Moderação
+                        {flaggedTotal > 0 && <span className="admin-nav-badge">{flaggedTotal}</span>}
+                    </button>
+                    <button onClick={() => setActiveTab('punishment')} className={`admin-nav-btn ${activeTab === 'punishment' ? 'active' : ''}`}>
+                        <Ban size={20} /> Punições
+                    </button>
+                    <button onClick={() => setActiveTab('attendance')} className={`admin-nav-btn ${activeTab === 'attendance' ? 'active' : ''}`}>
+                        <CheckCircle size={20} /> Presença
+                    </button>
+
+                    <div className="admin-sidebar-divider" />
+
+                    <button onClick={() => setActiveTab('settings')} className={`admin-nav-btn ${activeTab === 'settings' ? 'active' : ''}`}>
+                        <Settings size={20} /> Configurações
+                    </button>
+                    </>
+                    )}
+                </aside>
+
+                {/* Main Content Area */}
+                <main className="admin-main">
+
+                    {/* TAB: OVERVIEW */}
+                    {activeTab === 'overview' && stats && (
+                        <div className="admin-fade-in">
+                            <h2 className="admin-page-title">Estatísticas da Plataforma</h2>
+                            <div className="admin-stats-grid">
+                                <div className="admin-stat-card">
+                                    <h3>Total de Alunos</h3>
+                                    <p className="admin-stat-number">{stats.totalUsers}</p>
+                                </div>
+                                <div className="admin-stat-card">
+                                    <h3>Cursos Ativos</h3>
+                                    <p className="admin-stat-number">{stats.totalCourses}</p>
+                                </div>
+                                <div className="admin-stat-card">
+                                    <h3>Vídeos HLS</h3>
+                                    <p className="admin-stat-number">{stats.totalVideos}</p>
+                                    <small className="admin-stat-sub">{stats.readyVideos} Prontos</small>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* TAB: USERS */}
+                    {activeTab === 'users' && (
+                        <div className="admin-fade-in">
+                            <h2 className="admin-page-title">Gerenciar Alunos</h2>
+
+                            <div className="admin-card">
+                                <h3>Cadastrar Novo Acesso</h3>
+                                <form onSubmit={handleCreateUser} className="admin-form-row">
+                                    <input placeholder="Nome" value={newUser.name} onChange={e => setNewUser({ ...newUser, name: e.target.value })} required className="admin-input" />
+                                    <input type="email" placeholder="Email" value={newUser.email} onChange={e => setNewUser({ ...newUser, email: e.target.value })} required className="admin-input" />
+                                    <input type="password" placeholder="Senha" value={newUser.password} onChange={e => setNewUser({ ...newUser, password: e.target.value })} required className="admin-input" />
+                                    <select value={newUser.role} onChange={e => setNewUser({ ...newUser, role: e.target.value })} className="admin-input">
+                                        <option value="STUDENT">Aluno</option>
+                                        <option value="TEACHER">Professor</option>
+                                        <option value="ADMIN">Admin</option>
+                                    </select>
+                                    <button type="submit" className="admin-btn-primary">
+                                        <Plus size={16} /> Salvar
+                                    </button>
+                                </form>
+                            </div>
+
+                            {/* Excel Upload Card */}
+                            <div className="admin-card">
+                                <h3><FileSpreadsheet size={18} /> Importar Alunos via Excel</h3>
+                                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '0.75rem' }}>
+                                    Cabeçários esperados: <strong>aluno</strong>, <strong>matricula</strong>, <strong>turma</strong>, <strong>cpf</strong>. O sistema gera email e senha automaticamente e matricula nas turmas correspondentes.
+                                </p>
+                                <div className="admin-form-row">
+                                    <input
+                                        type="file"
+                                        accept=".xlsx,.xls"
+                                        onChange={e => {
+                                            if (e.target.files && e.target.files[0]) {
+                                                handleExcelUpload(e.target.files[0]);
+                                                e.target.value = '';
+                                            }
+                                        }}
+                                        disabled={excelUploading}
+                                        style={{ fontSize: '0.85rem', color: 'var(--text-muted)', flex: 1 }}
+                                    />
+                                    {excelUploading && <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Processando...</span>}
+                                </div>
+                                {excelResults && (
+                                    <div className="excel-results">
+                                        <h4>Resultado da Importação ({excelResults.length} alunos)</h4>
+                                        <table className="admin-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Nome</th>
+                                                    <th>Email</th>
+                                                    <th>Senha</th>
+                                                    <th>Matriculado em</th>
+                                                    <th>Status</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {excelResults.map((r, i) => (
+                                                    <tr key={i}>
+                                                        <td>{r.name}</td>
+                                                        <td>{r.email}</td>
+                                                        <td><code>{r.password}</code></td>
+                                                        <td>{r.enrolled.length > 0 ? r.enrolled.join(', ') : '—'}</td>
+                                                        <td>
+                                                            {r.error ? (
+                                                                <span className="admin-status-badge error">{r.error}</span>
+                                                            ) : (
+                                                                <span className="admin-status-badge ready">OK</span>
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="admin-search-bar" style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+                                <input
+                                    type="text"
+                                    placeholder="Buscar por nome ou email..."
+                                    value={userSearchInput}
+                                    onChange={e => setUserSearchInput(e.target.value)}
+                                    onKeyDown={e => { if (e.key === 'Enter') setUserSearch(userSearchInput); }}
+                                    className="admin-input"
+                                    style={{ flex: 1 }}
+                                />
+                                <button onClick={() => setUserSearch(userSearchInput)} className="admin-btn primary" style={{ whiteSpace: 'nowrap' }}>
+                                    Buscar
+                                </button>
+                                {userSearch && (
+                                    <button onClick={() => { setUserSearchInput(''); setUserSearch(''); }} className="admin-btn" style={{ whiteSpace: 'nowrap' }}>
+                                        Limpar
+                                    </button>
+                                )}
+                                <span style={{ alignSelf: 'center', fontSize: '0.85rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                                    {userTotal} usuário(s)
+                                </span>
+                            </div>
+
+                            <table className="admin-table">
+                                <thead>
+                                    <tr>
+                                        <th>Nome</th>
+                                        <th>Email</th>
+                                        <th>Permissão</th>
+                                        <th>Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {users.map(u => (
+                                        <tr key={u.id}>
+                                            <td>
+                                                {editingUserId === u.id ? (
+                                                    <input value={editUserData.name} onChange={e => setEditUserData({ ...editUserData, name: e.target.value })} className="admin-input" style={{ margin: 0, padding: '0.3rem 0.5rem' }} />
+                                                ) : u.name}
+                                            </td>
+                                            <td>
+                                                {editingUserId === u.id ? (
+                                                    <input type="email" value={editUserData.email} onChange={e => setEditUserData({ ...editUserData, email: e.target.value })} className="admin-input" style={{ margin: 0, padding: '0.3rem 0.5rem' }} />
+                                                ) : u.email}
+                                            </td>
+                                            <td>
+                                                {editingUserId === u.id ? (
+                                                    <select value={editUserData.role} onChange={e => setEditUserData({ ...editUserData, role: e.target.value })} className="admin-input" style={{ margin: 0, padding: '0.3rem 0.5rem' }}>
+                                                        <option value="STUDENT">Aluno</option>
+                                                        <option value="TEACHER">Professor</option>
+                                                        <option value="ADMIN">Admin</option>
+                                                    </select>
+                                                ) : <span className={`admin-role-badge ${u.role.toLowerCase()}`}>{u.role === 'TEACHER' ? 'Professor' : u.role === 'ADMIN' ? 'Admin' : 'Aluno'}</span>}
+                                            </td>
+                                            <td style={{ display: 'flex', gap: '0.5rem' }}>
+                                                {editingUserId === u.id ? (
+                                                    <>
+                                                        <button onClick={async () => {
+                                                            try {
+                                                                const payload: Record<string, string> = {};
+                                                                if (editUserData.name !== u.name) payload.name = editUserData.name;
+                                                                if (editUserData.email !== u.email) payload.email = editUserData.email;
+                                                                if (editUserData.role !== u.role) payload.role = editUserData.role;
+                                                                if (editUserData.password) payload.password = editUserData.password;
+                                                                if (Object.keys(payload).length > 0) {
+                                                                    await api.put(`/api/admin/users/${u.id}`, payload, { headers: { Authorization: `Bearer ${token}` } });
+                                                                    fetchData();
+                                                                }
+                                                                setEditingUserId(null);
+                                                            } catch (err: any) {
+                                                                alert(err.response?.data?.message || 'Erro ao atualizar usuário.');
+                                                            }
+                                                        }} className="admin-btn-icon" style={{ color: '#22c55e' }} title="Salvar">
+                                                            <Save size={18} />
+                                                        </button>
+                                                        <button onClick={() => setEditingUserId(null)} className="admin-btn-icon" title="Cancelar">
+                                                            <X size={18} />
+                                                        </button>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <button onClick={() => { setEditingUserId(u.id); setEditUserData({ name: u.name, email: u.email, role: u.role, password: '' }); }} className="admin-btn-icon" title="Editar">
+                                                            <Edit3 size={18} />
+                                                        </button>
+                                                        <button onClick={() => setConfirmAction({ message: `Remover "${u.name}"?`, action: () => handleDeleteUser(u.id) })} className="admin-btn-icon danger">
+                                                            <Trash2 size={18} />
+                                                        </button>
+                                                    </>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+
+                            {/* Paginação */}
+                            {userTotalPages > 1 && (
+                                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.75rem', marginTop: '1rem' }}>
+                                    <button
+                                        onClick={() => setUserPage(p => Math.max(1, p - 1))}
+                                        disabled={userPage <= 1}
+                                        className="admin-btn"
+                                        style={{ padding: '0.4rem 1rem' }}
+                                    >
+                                        ← Anterior
+                                    </button>
+                                    <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+                                        Página {userPage} de {userTotalPages}
+                                    </span>
+                                    <button
+                                        onClick={() => setUserPage(p => Math.min(userTotalPages, p + 1))}
+                                        disabled={userPage >= userTotalPages}
+                                        className="admin-btn"
+                                        style={{ padding: '0.4rem 1rem' }}
+                                    >
+                                        Próxima →
+                                    </button>
+                                </div>
+                            )}
+
+                            <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end' }}>
+                                <button onClick={handleExportStudents} className="admin-btn-primary" style={{ gap: '0.5rem' }}>
+                                    <Download size={16} /> Exportar Alunos (Excel)
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* TAB: COURSES */}
+                    {activeTab === 'courses' && (
+                        <div className="admin-fade-in">
+                            <h2 className="admin-page-title">{isTeacher ? 'Meus Cursos' : 'Gerenciar Cursos'}</h2>
+
+                            {!isTeacher && (
+                            <div className="admin-card">
+                                <h3>Criar Novo Curso</h3>
+                                <form onSubmit={handleCreateCourse} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem' }}>
+                                    <div className="admin-form-row">
+                                        <input placeholder="Nome do Curso (Ex: Módulo Intensivo OAB)" value={newCourse.name} onChange={e => setNewCourse({ ...newCourse, name: e.target.value })} required className="admin-input" style={{ flex: 2 }} />
+                                        <input placeholder="Descrição" value={newCourse.description} onChange={e => setNewCourse({ ...newCourse, description: e.target.value })} className="admin-input" style={{ flex: 2 }} />
+                                    </div>
+                                    <div className="admin-form-row" style={{ alignItems: 'center' }}>
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                                            <Upload size={16} /> Thumbnail:
+                                        </label>
+                                        <input
+                                            type="file"
+                                            accept="image/*"
+                                            onChange={async (e) => {
+                                                if (e.target.files?.[0]) {
+                                                    const url = await handleImageUpload(e.target.files[0]);
+                                                    if (url) setNewCourse(prev => ({ ...prev, thumbnailUrl: url }));
+                                                }
+                                            }}
+                                            style={{ fontSize: '0.8rem', color: 'var(--text-muted)', flex: 1 }}
+                                        />
+                                        {newCourse.thumbnailUrl && (
+                                            <img src={`${API_BASE}${newCourse.thumbnailUrl}`} alt="Preview" style={{ width: '48px', height: '48px', borderRadius: '8px', objectFit: 'cover', border: '1px solid var(--glass-border)' }} />
+                                        )}
+                                        <button type="submit" disabled={uploadingImage} className="admin-btn-primary">
+                                            <Plus size={16} /> Salvar
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                            )}
+
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                                {courses.map(c => (
+                                    <div key={c.id} className="admin-course-card">
+
+                                        {/* Course Header */}
+                                        <div className="admin-course-header">
+                                            <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+                                                {!isTeacher && (
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                                                    <button onClick={() => handleReorderCourse(c.id, 'up')} className="admin-btn-icon" title="Mover para cima" style={{ padding: '0.2rem' }}>
+                                                        <ChevronUp size={16} />
+                                                    </button>
+                                                    <button onClick={() => handleReorderCourse(c.id, 'down')} className="admin-btn-icon" title="Mover para baixo" style={{ padding: '0.2rem' }}>
+                                                        <ChevronDown size={16} />
+                                                    </button>
+                                                </div>
+                                                )}
+                                                {c.thumbnailUrl && (
+                                                    <img src={`${API_BASE}${c.thumbnailUrl}`} alt={c.name} className="admin-course-thumb" />
+                                                )}
+                                                <div>
+                                                    <h3 className="admin-course-name">{c.name}</h3>
+                                                    <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem' }}>{c.description}</p>
+                                                </div>
+                                            </div>
+                                            {!isTeacher && (
+                                            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                                <label className="admin-btn-calendar" title="Upload Calendário PDF">
+                                                    <CalendarDays size={16} />
+                                                    {c.calendarUrl ? 'Trocar Calendário' : 'Calendário PDF'}
+                                                    <input
+                                                        type="file"
+                                                        accept="application/pdf"
+                                                        style={{ display: 'none' }}
+                                                        onChange={e => {
+                                                            if (e.target.files?.[0]) handleUploadCalendar(c.id, e.target.files[0]);
+                                                        }}
+                                                    />
+                                                </label>
+                                                {c.calendarUrl && (
+                                                    <>
+                                                        <a href={`${API_BASE}${c.calendarUrl}`} target="_blank" rel="noopener noreferrer" className="admin-btn-icon primary" title="Ver Calendário">
+                                                            <Eye size={16} />
+                                                        </a>
+                                                        <button onClick={() => handleRemoveCalendar(c.id)} className="admin-btn-icon danger" title="Remover Calendário">
+                                                            <X size={16} />
+                                                        </button>
+                                                    </>
+                                                )}
+                                                <button onClick={() => setConfirmAction({ message: `Deletar curso "${c.name}"? Todos os módulos e vídeos serão removidos.`, action: () => handleDeleteCourse(c.id) })} className="admin-btn-danger">
+                                                    <Trash2 size={18} /> Deletar Curso
+                                                </button>
+                                            </div>
+                                            )}
+                                        </div>
+
+                                        <div className={isTeacher ? '' : 'admin-course-grid'}>
+
+                                            {/* Left Column: Modules & Videos */}
+                                            <div>
+                                                <h4 className="admin-section-label">Grade Curricular (Módulos e Aulas)</h4>
+
+                                                {/* Add Module Form */}
+                                                <form onSubmit={handleCreateModule} className="admin-form-row" style={{ marginBottom: '1.5rem' }}>
+                                                    <input
+                                                        placeholder="Nome do Novo Módulo"
+                                                        required
+                                                        value={newModule.courseId === c.id ? newModule.name : ''}
+                                                        onChange={e => setNewModule({ courseId: c.id, name: e.target.value })}
+                                                        className="admin-input"
+                                                    />
+                                                    <button type="submit" disabled={!newModule.name || newModule.courseId !== c.id} className="admin-btn-success">
+                                                        <Plus size={16} /> Módulo
+                                                    </button>
+                                                </form>
+
+                                                {/* Modules List */}
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                                    {c.modules.map(m => (
+                                                        <div key={m.id} className="admin-module-block">
+
+                                                            <div className="admin-module-header">
+                                                                <strong className="admin-module-name">{m.name}</strong>
+                                                                <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                                                                    <label className="admin-btn-icon primary" title="Upload Material PDF" style={{ cursor: 'pointer' }}>
+                                                                        <FileDown size={16} />
+                                                                        <input
+                                                                            type="file"
+                                                                            accept="application/pdf"
+                                                                            style={{ display: 'none' }}
+                                                                            onChange={e => {
+                                                                                if (e.target.files?.[0]) handleUploadModulePdf(m.id, e.target.files[0]);
+                                                                            }}
+                                                                        />
+                                                                    </label>
+                                                                    {m.pdfUrl && (
+                                                                        <>
+                                                                            <a href={`${API_BASE}${m.pdfUrl}`} target="_blank" rel="noopener noreferrer" className="admin-pdf-badge" title="PDF anexado — clique para ver">
+                                                                                📄 PDF
+                                                                            </a>
+                                                                            <button onClick={() => handleRemoveModulePdf(m.id)} className="admin-btn-icon danger" title="Remover PDF">
+                                                                                <X size={14} />
+                                                                            </button>
+                                                                        </>
+                                                                    )}
+                                                                    <button onClick={() => setConfirmAction({ message: `Deletar módulo "${m.name}"? Vídeos serão removidos.`, action: () => handleDeleteModule(m.id) })} className="admin-btn-icon danger">
+                                                                        <Trash2 size={16} />
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+
+                                                            <div style={{ padding: '1rem' }}>
+                                                                {/* Videos List */}
+                                                                {m.videos && m.videos.length > 0 ? (
+                                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem' }}>
+                                                                        {m.videos.map(v => (
+                                                                            <div key={v.id} className="admin-video-item">
+                                                                                <div className="admin-video-row">
+                                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', overflow: 'hidden' }}>
+                                                                                        <span style={{ color: 'var(--text-muted)' }}>Aula {v.order + 1}</span>
+                                                                                        <span className="admin-video-title">{v.title}</span>
+                                                                                        {v.status === 'READY' ? (
+                                                                                            <span className="admin-status-badge ready">PRONTO</span>
+                                                                                        ) : v.status === 'PROCESSING' ? (
+                                                                                            <span className="admin-status-badge processing">PROCESSANDO</span>
+                                                                                        ) : v.status === 'PENDING' ? (
+                                                                                            <span className="admin-status-badge processing">PENDENTE</span>
+                                                                                        ) : (
+                                                                                            <span className="admin-status-badge error">ERRO</span>
+                                                                                        )}
+                                                                                    </div>
+                                                                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                                                        <button onClick={() => openVideoEditor(v)} className="admin-btn-icon primary">
+                                                                                            <Edit3 size={14} />
+                                                                                        </button>
+                                                                                        {!isTeacher && (v.status === 'ERROR' || v.status === 'PENDING') && (
+                                                                                            <button onClick={() => setConfirmAction({ message: `Reprocessar este vídeo?`, action: () => handleReprocessVideo(v.id) })} className="admin-btn-icon primary" title="Reprocessar">
+                                                                                                <RefreshCw size={14} />
+                                                                                            </button>
+                                                                                        )}
+                                                                                        {!isTeacher && (
+                                                                                        <button onClick={() => setConfirmAction({ message: `Deletar vídeo "${v.title}"?`, action: () => handleDeleteVideo(v.id) })} className="admin-btn-icon danger">
+                                                                                            <Trash2 size={14} />
+                                                                                        </button>
+                                                                                        )}
+                                                                                    </div>
+                                                                                </div>
+                                                                                {editingVideoId === v.id && (
+                                                                                    <div className="admin-edit-inline-badge">
+                                                                                        <Edit3 size={12} /> Editando — modal aberto
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                ) : (
+                                                                    <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1rem', fontStyle: 'italic' }}>Nenhuma aula neste módulo.</p>
+                                                                )}
+
+                                                                {/* Upload Video Form */}
+                                                                <form onSubmit={handleUploadVideo} className="admin-upload-zone">
+                                                                    <span className="admin-upload-label">Adicionar Nova Aula</span>
+                                                                    <input
+                                                                        placeholder="Título do Vídeo"
+                                                                        required
+                                                                        value={uploadData.moduleId === m.id ? uploadData.title : ''}
+                                                                        onChange={e => setUploadData({ ...uploadData, moduleId: m.id, title: e.target.value })}
+                                                                        className="admin-input-sm"
+                                                                    />
+                                                                    <div className="admin-form-row">
+                                                                        <input
+                                                                            type="file"
+                                                                            accept="video/mp4,video/mkv"
+                                                                            required
+                                                                            onChange={e => {
+                                                                                if (e.target.files && e.target.files.length > 0) {
+                                                                                    setUploadData(prev => ({ ...prev, moduleId: m.id, file: e.target.files![0] }));
+                                                                                }
+                                                                            }}
+                                                                            style={{ fontSize: '0.8rem', color: 'var(--text-muted)', flex: 1 }}
+                                                                        />
+                                                                        <button
+                                                                            type="submit"
+                                                                            disabled={uploading || uploadData.moduleId !== m.id}
+                                                                            className="admin-btn-primary-sm"
+                                                                        >
+                                                                            {uploading && uploadData.moduleId === m.id ? 'Enviando...' : 'Upload MP4'}
+                                                                        </button>
+                                                                    </div>
+                                                                    {uploading && uploadData.moduleId === m.id && uploadProgress > 0 && (
+                                                                        <div className="upload-progress-bar">
+                                                                            <div className="upload-progress-fill" style={{ width: `${uploadProgress}%` }} />
+                                                                            <span className="upload-progress-text">{uploadProgress}%</span>
+                                                                        </div>
+                                                                    )}
+                                                                </form>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                    {c.modules.length === 0 && (
+                                                        <div className="admin-empty-box">
+                                                            Nenhum módulo criado. Crie um módulo primeiro para adicionar aulas.
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* Right Column: Enrollments */}
+                                            {!isTeacher && (
+                                            <div>
+                                                <h4 className="admin-section-label">Alunos Matriculados</h4>
+
+                                                {/* Enroll Student Form */}
+                                                <form onSubmit={(e) => handleEnrollStudent(e, c.id)} className="admin-form-row" style={{ marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                                    <select
+                                                        required
+                                                        value={enrollmentData.courseId === c.id ? enrollmentData.userId : ''}
+                                                        onChange={e => setEnrollmentData(prev => ({ ...prev, courseId: c.id, userId: e.target.value }))}
+                                                        className="admin-select"
+                                                        style={{ flex: 2 }}
+                                                    >
+                                                        <option value="">Selecione um usuário...</option>
+                                                        {users.filter(u => u.role === 'STUDENT' || u.role === 'TEACHER').map(u => (
+                                                            <option key={u.id} value={u.id}>{u.name} ({u.email}) — {u.role === 'TEACHER' ? 'Professor' : 'Aluno'}</option>
+                                                        ))}
+                                                    </select>
+                                                    <select
+                                                        value={enrollmentData.courseId === c.id ? (enrollmentData.enrollmentRole || 'STUDENT') : 'STUDENT'}
+                                                        onChange={e => setEnrollmentData(prev => ({ ...prev, courseId: c.id, enrollmentRole: e.target.value }))}
+                                                        className="admin-select"
+                                                        style={{ flex: 1 }}
+                                                    >
+                                                        <option value="STUDENT">Aluno</option>
+                                                        <option value="TEACHER">Professor</option>
+                                                    </select>
+                                                    <button type="submit" disabled={!enrollmentData.userId || enrollmentData.courseId !== c.id} className="admin-btn-primary">
+                                                        Matricular
+                                                    </button>
+                                                </form>
+                                                <button onClick={() => setConfirmAction({ message: 'Matricular TODOS os alunos neste curso?', action: () => handleEnrollAllStudents(c.id) })} className="admin-btn-primary" style={{ marginBottom: '1.5rem', background: 'var(--accent, #ec4899)', width: '100%' }}>
+                                                    <Users size={14} /> Matricular Todos os Alunos
+                                                </button>
+
+                                                {/* Enrollments List */}
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                                    {c.enrollments && c.enrollments.length > 0 ? (
+                                                        c.enrollments.map((e: any) => (
+                                                            <div key={e.id} className="admin-enrollment-item">
+                                                                <div>
+                                                                    <strong style={{ fontSize: '0.95rem' }}>{e.user.name}</strong>
+                                                                    <span style={{ fontSize: '0.75rem', padding: '0.1rem 0.4rem', borderRadius: '4px', background: e.enrollmentRole === 'TEACHER' ? 'var(--accent, #8b5cf6)' : 'var(--primary, #3b82f6)', color: '#fff', marginLeft: '0.4rem' }}>
+                                                                        {e.enrollmentRole === 'TEACHER' ? 'Professor' : 'Aluno'}
+                                                                    </span>
+                                                                    <span className="admin-enrollment-email">{e.user.email}</span>
+                                                                </div>
+                                                                <button onClick={() => setConfirmAction({ message: `Remover matrícula de ${e.user.name}?`, action: () => handleRemoveEnrollment(e.id) })} className="admin-btn-icon danger" title="Remover Matrícula">
+                                                                    <Trash2 size={16} />
+                                                                </button>
+                                                            </div>
+                                                        ))
+                                                    ) : (
+                                                        <div className="admin-empty-box">
+                                                            Nenhum aluno matriculado neste curso.
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* TAB: AUDIT LOG */}
+                    {activeTab === 'audit' && (
+                        <div className="admin-fade-in">
+                            <h2 className="admin-page-title">Audit Log</h2>
+                            <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>Registro de todas as ações administrativas na plataforma.</p>
+
+                            <table className="admin-table">
+                                <thead>
+                                    <tr>
+                                        <th>Data</th>
+                                        <th>Usuário</th>
+                                        <th>Ação</th>
+                                        <th>Alvo</th>
+                                        <th>Detalhes</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {auditLogs.map(log => (
+                                        <tr key={log.id}>
+                                            <td style={{ whiteSpace: 'nowrap', fontSize: '0.85rem' }}>{new Date(log.createdAt).toLocaleString('pt-BR')}</td>
+                                            <td>{log.user?.name || '—'}</td>
+                                            <td><span className="admin-status-badge ready">{log.action}</span></td>
+                                            <td style={{ fontSize: '0.85rem', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{log.target || '—'}</td>
+                                            <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)', maxWidth: '250px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{log.details || '—'}</td>
+                                        </tr>
+                                    ))}
+                                    {auditLogs.length === 0 && (
+                                        <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>Nenhum registro encontrado.</td></tr>
+                                    )}
+                                </tbody>
+                            </table>
+
+                            {auditTotalPages > 1 && (
+                                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.75rem', marginTop: '1rem' }}>
+                                    <button onClick={() => setAuditPage(p => Math.max(1, p - 1))} disabled={auditPage <= 1} className="admin-btn" style={{ padding: '0.4rem 1rem' }}>
+                                        ← Anterior
+                                    </button>
+                                    <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+                                        Página {auditPage} de {auditTotalPages}
+                                    </span>
+                                    <button onClick={() => setAuditPage(p => Math.min(auditTotalPages, p + 1))} disabled={auditPage >= auditTotalPages} className="admin-btn" style={{ padding: '0.4rem 1rem' }}>
+                                        Próxima →
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* TAB: REPORTS */}
+                    {activeTab === 'reports' && (
+                        <div className="admin-fade-in">
+                            <h2 className="admin-page-title">Relatórios dos Cursos</h2>
+                            <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>Visão geral de progresso e conclusão por curso.</p>
+
+                            <div className="admin-stats-grid" style={{ gap: '1.5rem' }}>
+                                {reports.map(r => (
+                                    <div key={r.id} className="admin-stat-card" style={{ position: 'relative', overflow: 'hidden' }}>
+                                        <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem' }}>{r.name}</h3>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                                            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{r.totalStudents} alunos</span>
+                                            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{r.totalVideos} aulas</span>
+                                        </div>
+                                        <div className="report-progress-bar">
+                                            <div className="report-progress-fill" style={{ width: `${r.completionRate}%` }} />
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem' }}>
+                                            <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{r.completionRate}% conclusão</span>
+                                            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{r.completedLessons}/{r.totalPossibleLessons} aulas</span>
+                                        </div>
+                                    </div>
+                                ))}
+                                {reports.length === 0 && (
+                                    <div className="admin-empty-box">Nenhum curso encontrado.</div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* TAB: NOTIFICATIONS */}
+                    {activeTab === 'notifications' && (
+                        <div className="admin-fade-in">
+                            <h2 className="admin-page-title">Enviar Notificação</h2>
+                            <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>Envie uma notificação para todos os alunos da plataforma.</p>
+
+                            <div className="admin-card">
+                                <form onSubmit={handleSendNotification} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                    <input
+                                        placeholder="Título da notificação"
+                                        value={notifForm.title}
+                                        onChange={e => setNotifForm({ ...notifForm, title: e.target.value })}
+                                        required
+                                        className="admin-input"
+                                    />
+                                    <textarea
+                                        placeholder="Mensagem..."
+                                        value={notifForm.message}
+                                        onChange={e => setNotifForm({ ...notifForm, message: e.target.value })}
+                                        required
+                                        className="admin-input"
+                                        style={{ minHeight: '100px', resize: 'vertical' }}
+                                    />
+                                    <button type="submit" className="admin-btn-primary" style={{ alignSelf: 'flex-start' }}>
+                                        <Bell size={16} /> Enviar para todos os alunos
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* TAB: LIVE CLASSES */}
+                    {activeTab === 'live' && (
+                        <div className="admin-fade-in">
+                            <h2 className="admin-page-title">Aulas ao Vivo (Zoom)</h2>
+                            <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
+                                Agende aulas ao vivo e compartilhe o link do Zoom com os alunos matriculados.
+                            </p>
+
+                            {/* Form: Nova Aula ao Vivo */}
+                            <div className="admin-card" style={{ marginBottom: '2rem' }}>
+                                <h3>Agendar Nova Aula ao Vivo</h3>
+                                <form onSubmit={handleCreateLive} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '1rem' }}>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                                        <select
+                                            value={liveForm.courseId}
+                                            onChange={e => setLiveForm({ ...liveForm, courseId: e.target.value, moduleId: '' })}
+                                            required
+                                            className="admin-input"
+                                        >
+                                            <option value="">Selecionar Curso *</option>
+                                            {courses.map(c => (
+                                                <option key={c.id} value={c.id}>{c.name}</option>
+                                            ))}
+                                        </select>
+                                        <select
+                                            value={liveForm.moduleId}
+                                            onChange={e => setLiveForm({ ...liveForm, moduleId: e.target.value })}
+                                            className="admin-input"
+                                        >
+                                            <option value="">Módulo (opcional)</option>
+                                            {liveForm.courseId && courses.find(c => c.id === liveForm.courseId)?.modules.map(m => (
+                                                <option key={m.id} value={m.id}>{m.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <input
+                                        placeholder="Título da aula *"
+                                        value={liveForm.title}
+                                        onChange={e => setLiveForm({ ...liveForm, title: e.target.value })}
+                                        required
+                                        className="admin-input"
+                                    />
+                                    <input
+                                        placeholder="Descrição (opcional)"
+                                        value={liveForm.description}
+                                        onChange={e => setLiveForm({ ...liveForm, description: e.target.value })}
+                                        className="admin-input"
+                                    />
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                                        <div>
+                                            <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>Data/Hora Início *</label>
+                                            <input
+                                                type="datetime-local"
+                                                value={liveForm.startAt}
+                                                onChange={e => setLiveForm({ ...liveForm, startAt: e.target.value })}
+                                                required
+                                                className="admin-input"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>Data/Hora Fim (opcional)</label>
+                                            <input
+                                                type="datetime-local"
+                                                value={liveForm.endAt}
+                                                onChange={e => setLiveForm({ ...liveForm, endAt: e.target.value })}
+                                                className="admin-input"
+                                            />
+                                        </div>
+                                    </div>
+                                    <input
+                                        placeholder="Link do Zoom (Join URL) *"
+                                        value={liveForm.zoomJoinUrl}
+                                        onChange={e => setLiveForm({ ...liveForm, zoomJoinUrl: e.target.value })}
+                                        required
+                                        className="admin-input"
+                                    />
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                                        <input
+                                            placeholder="Link do Host (Start URL, opcional)"
+                                            value={liveForm.zoomStartUrl}
+                                            onChange={e => setLiveForm({ ...liveForm, zoomStartUrl: e.target.value })}
+                                            className="admin-input"
+                                        />
+                                        <input
+                                            placeholder="Meeting ID (opcional)"
+                                            value={liveForm.zoomMeetingId}
+                                            onChange={e => setLiveForm({ ...liveForm, zoomMeetingId: e.target.value })}
+                                            className="admin-input"
+                                        />
+                                    </div>
+                                    <button type="submit" className="admin-btn-primary" style={{ alignSelf: 'flex-start' }}>
+                                        <Plus size={16} /> Agendar Aula ao Vivo
+                                    </button>
+                                </form>
+                            </div>
+
+                            {/* List: Aulas Agendadas */}
+                            <div className="admin-card">
+                                <h3>Aulas Agendadas</h3>
+                                {liveClasses.length === 0 ? (
+                                    <div className="admin-empty-box">Nenhuma aula ao vivo agendada.</div>
+                                ) : (
+                                    <div className="live-class-list">
+                                        {liveClasses.map((lc: any) => (
+                                            <div key={lc.id} className={`live-class-item status-${lc.status.toLowerCase()}`}>
+                                                <div className="live-class-info">
+                                                    <div className="live-class-header">
+                                                        <strong>{lc.title}</strong>
+                                                        <span className={`live-status-badge ${lc.status.toLowerCase()}`}>
+                                                            {lc.status === 'SCHEDULED' ? '📅 Agendada' : lc.status === 'LIVE' ? '🔴 Ao Vivo' : lc.status === 'ENDED' ? '✅ Encerrada' : '🎬 Gravada'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="live-class-meta">
+                                                        <span>📚 {lc.course?.name}</span>
+                                                        {lc.module && <span>📁 {lc.module.name}</span>}
+                                                        <span>🕐 {new Date(lc.startAt).toLocaleString('pt-BR')}</span>
+                                                        {lc.endAt && <span>→ {new Date(lc.endAt).toLocaleString('pt-BR')}</span>}
+                                                    </div>
+                                                    {lc.zoomJoinUrl && (
+                                                        <a href={lc.zoomJoinUrl} target="_blank" rel="noopener noreferrer" className="live-zoom-link">
+                                                            <ExternalLink size={14} /> Link do Zoom
+                                                        </a>
+                                                    )}
+                                                </div>
+                                                <div className="live-class-actions">
+                                                    {editingLiveId === lc.id ? (
+                                                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                                            <select
+                                                                value={editingLiveStatus}
+                                                                onChange={e => setEditingLiveStatus(e.target.value)}
+                                                                className="admin-input"
+                                                                style={{ width: 'auto', minWidth: '140px' }}
+                                                            >
+                                                                <option value="SCHEDULED">Agendada</option>
+                                                                <option value="LIVE">Ao Vivo</option>
+                                                                <option value="ENDED">Encerrada</option>
+                                                            </select>
+                                                            <button onClick={() => handleUpdateLive(lc.id)} className="admin-btn-primary" style={{ padding: '0.4rem 0.75rem' }}>
+                                                                <Save size={14} />
+                                                            </button>
+                                                            <button onClick={() => setEditingLiveId(null)} className="admin-btn-secondary" style={{ padding: '0.4rem 0.75rem' }}>
+                                                                <X size={14} />
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        <>
+                                                            <button
+                                                                onClick={() => { setEditingLiveId(lc.id); setEditingLiveStatus(lc.status); }}
+                                                                className="admin-btn-secondary"
+                                                                style={{ padding: '0.4rem 0.75rem' }}
+                                                                title="Alterar status"
+                                                            >
+                                                                <Edit3 size={14} />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDeleteLive(lc.id, lc.title)}
+                                                                className="admin-btn-danger"
+                                                                style={{ padding: '0.4rem 0.75rem' }}
+                                                                title="Remover"
+                                                            >
+                                                                <Trash2 size={14} />
+                                                            </button>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* TAB: MODERATION */}
+                    {activeTab === 'moderation' && (
+                        <div className="admin-fade-in">
+                            <h2 className="admin-page-title">Moderação de Comentários</h2>
+                            <p style={{ color: '#94a3b8', marginBottom: '1.5rem' }}>
+                                Comentários flagrados automaticamente pelo filtro de profanidade ou denunciados por alunos.
+                            </p>
+
+                            {flaggedComments.length === 0 ? (
+                                <div style={{ textAlign: 'center', padding: '3rem', color: '#64748b' }}>
+                                    <ShieldCheck size={48} style={{ marginBottom: '1rem', opacity: 0.5 }} />
+                                    <h3>Tudo limpo!</h3>
+                                    <p>Nenhum comentário pendente de moderação.</p>
+                                </div>
+                            ) : (
+                                <div className="admin-moderation-list">
+                                    {flaggedComments.map((c: any) => (
+                                        <div key={c.id} className="admin-mod-card">
+                                            <div className="admin-mod-header">
+                                                <div className="admin-mod-user">
+                                                    <strong>{c.user.name}</strong>
+                                                    <span className="admin-mod-role">{c.user.role}</span>
+                                                    <span className="admin-mod-time">{new Date(c.createdAt).toLocaleString('pt-BR')}</span>
+                                                </div>
+                                                <div className="admin-mod-lesson">
+                                                    {c.video.module.course.name} → {c.video.title}
+                                                </div>
+                                            </div>
+                                            <div className="admin-mod-text">{c.text}</div>
+                                            {c.flagged && (
+                                                <span className="admin-mod-flag auto">
+                                                    <Flag size={12} /> Filtro automático
+                                                </span>
+                                            )}
+                                            {c.reports.length > 0 && (
+                                                <div className="admin-mod-reports">
+                                                    <strong><Flag size={12} /> {c.reports.length} denúncia(s):</strong>
+                                                    {c.reports.map((r: any) => (
+                                                        <div key={r.id} className="admin-mod-report-item">
+                                                            <span>{r.user.name}:</span> {r.reason}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                            <div className="admin-mod-actions">
+                                                <button
+                                                    className="admin-btn admin-btn-sm admin-btn-success"
+                                                    onClick={async () => {
+                                                        try {
+                                                            await api.put(`/api/admin/comments/${c.id}/approve`, {}, {
+                                                                headers: { Authorization: `Bearer ${token}` }
+                                                            });
+                                                            fetchData();
+                                                        } catch { /* ignore */ }
+                                                    }}
+                                                >
+                                                    <CheckCircle size={14} /> Aprovar
+                                                </button>
+                                                <button
+                                                    className="admin-btn admin-btn-sm admin-btn-danger"
+                                                    onClick={async () => {
+                                                        try {
+                                                            await api.delete(`/api/admin/comments/${c.id}`, {
+                                                                headers: { Authorization: `Bearer ${token}` }
+                                                            });
+                                                            fetchData();
+                                                        } catch { /* ignore */ }
+                                                    }}
+                                                >
+                                                    <Trash2 size={14} /> Remover
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            {flaggedTotalPages > 1 && (
+                                <div className="admin-pagination">
+                                    <button disabled={flaggedPage <= 1} onClick={() => setFlaggedPage(p => p - 1)}>Anterior</button>
+                                    <span>Página {flaggedPage} de {flaggedTotalPages}</span>
+                                    <button disabled={flaggedPage >= flaggedTotalPages} onClick={() => setFlaggedPage(p => p + 1)}>Próxima</button>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* TAB: PUNISHMENT */}
+                    {activeTab === 'punishment' && (
+                        <div className="admin-fade-in">
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                                <h2 className="admin-page-title" style={{ margin: 0 }}>Sistema de Punições</h2>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                    <label className="punishment-toggle-label">
+                                        <span style={{ color: punishmentEnabled ? '#22c55e' : '#ef4444', fontWeight: 600 }}>
+                                            {punishmentEnabled ? 'Ativo' : 'Desativado'}
+                                        </span>
+                                        <button
+                                            className={`punishment-toggle-btn ${punishmentEnabled ? 'active' : ''}`}
+                                            onClick={async () => {
+                                                try {
+                                                    const res = await api.put('/api/admin/punishment-toggle', {}, {
+                                                        headers: { Authorization: `Bearer ${token}` }
+                                                    });
+                                                    setPunishmentEnabled(res.data.forumPunishmentEnabled);
+                                                } catch { /* ignore */ }
+                                            }}
+                                        >
+                                            <span className="punishment-toggle-thumb" />
+                                        </button>
+                                    </label>
+                                    <button className="admin-btn admin-btn-sm" onClick={() => fetchData()}>
+                                        <RefreshCw size={14} /> Atualizar
+                                    </button>
+                                </div>
+                            </div>
+
+                            {!punishmentEnabled && (
+                                <div className="punishment-warning">
+                                    <AlertTriangle size={20} />
+                                    <span>O sistema de punição automática está <strong>desativado</strong>. Violações serão registradas, mas bans não serão aplicados automaticamente.</span>
+                                </div>
+                            )}
+
+                            {/* Seção: Recursos (Appeals) */}
+                            <div className="punishment-section">
+                                <h3><Scale size={18} /> Recursos dos Alunos</h3>
+                                <div className="punishment-filter-row">
+                                    {['PENDING', 'APPROVED', 'REJECTED'].map(s => (
+                                        <button
+                                            key={s}
+                                            className={`punishment-filter-btn ${appealFilter === s ? 'active' : ''}`}
+                                            onClick={() => setAppealFilter(s)}
+                                        >
+                                            {s === 'PENDING' ? 'Pendentes' : s === 'APPROVED' ? 'Aprovados' : 'Rejeitados'}
+                                        </button>
+                                    ))}
+                                </div>
+                                {appeals.length === 0 ? (
+                                    <p className="punishment-empty">Nenhum recurso {appealFilter === 'PENDING' ? 'pendente' : appealFilter === 'APPROVED' ? 'aprovado' : 'rejeitado'}.</p>
+                                ) : (
+                                    <div className="punishment-list">
+                                        {appeals.map((a: any) => (
+                                            <div key={a.id} className="punishment-card appeal-card">
+                                                <div className="punishment-card-header">
+                                                    <strong>{a.user.name}</strong>
+                                                    <span className="punishment-card-email">{a.user.email}</span>
+                                                    <span className="punishment-card-time">{new Date(a.createdAt).toLocaleString('pt-BR')}</span>
+                                                </div>
+                                                <div className="punishment-card-body">
+                                                    <p className="punishment-card-reason">{a.reason}</p>
+                                                </div>
+                                                {a.status === 'PENDING' && (
+                                                    <div className="punishment-card-actions">
+                                                        <button
+                                                            className="admin-btn admin-btn-sm admin-btn-success"
+                                                            onClick={async () => {
+                                                                try {
+                                                                    await api.put(`/api/admin/appeals/${a.id}`, { status: 'APPROVED', adminNote: 'Recurso aceito' }, {
+                                                                        headers: { Authorization: `Bearer ${token}` }
+                                                                    });
+                                                                    fetchData();
+                                                                } catch { /* ignore */ }
+                                                            }}
+                                                        >
+                                                            <CheckCircle size={14} /> Aprovar
+                                                        </button>
+                                                        <button
+                                                            className="admin-btn admin-btn-sm admin-btn-danger"
+                                                            onClick={async () => {
+                                                                try {
+                                                                    await api.put(`/api/admin/appeals/${a.id}`, { status: 'REJECTED', adminNote: 'Recurso negado' }, {
+                                                                        headers: { Authorization: `Bearer ${token}` }
+                                                                    });
+                                                                    fetchData();
+                                                                } catch { /* ignore */ }
+                                                            }}
+                                                        >
+                                                            <X size={14} /> Rejeitar
+                                                        </button>
+                                                    </div>
+                                                )}
+                                                {a.adminNote && (
+                                                    <div className="punishment-card-note">Nota: {a.adminNote}</div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Seção: Bans Ativos */}
+                            <div className="punishment-section">
+                                <h3><Ban size={18} /> Bans</h3>
+                                {bans.length === 0 ? (
+                                    <p className="punishment-empty">Nenhum ban registrado.</p>
+                                ) : (
+                                    <div className="punishment-list">
+                                        {bans.map((b: any) => (
+                                            <div key={b.id} className={`punishment-card ban-card ${b.active ? 'ban-active' : 'ban-expired'}`}>
+                                                <div className="punishment-card-header">
+                                                    <strong>{b.user.name}</strong>
+                                                    <span className={`punishment-ban-type ${b.banType.toLowerCase()}`}>{b.banType.replace('_', ' ')}</span>
+                                                    <span className={`punishment-ban-status ${b.active ? 'active' : 'inactive'}`}>
+                                                        {b.active ? 'ATIVO' : 'Expirado'}
+                                                    </span>
+                                                </div>
+                                                <div className="punishment-card-body">
+                                                    <p><strong>Motivo:</strong> {b.reason}</p>
+                                                    <p><strong>Criado:</strong> {new Date(b.createdAt).toLocaleString('pt-BR')}</p>
+                                                    {b.expiresAt && <p><strong>Expira:</strong> {new Date(b.expiresAt).toLocaleString('pt-BR')}</p>}
+                                                    {!b.expiresAt && <p><strong>Permanente</strong></p>}
+                                                </div>
+                                                {b.active && (
+                                                    <div className="punishment-card-actions">
+                                                        <button
+                                                            className="admin-btn admin-btn-sm admin-btn-warning"
+                                                            onClick={async () => {
+                                                                try {
+                                                                    await api.put(`/api/admin/bans/${b.id}/lift`, {}, {
+                                                                        headers: { Authorization: `Bearer ${token}` }
+                                                                    });
+                                                                    fetchData();
+                                                                } catch { /* ignore */ }
+                                                            }}
+                                                        >
+                                                            Revogar Ban
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Seção: Ban Manual */}
+                            <div className="punishment-section">
+                                <h3><Plus size={18} /> Aplicar Ban Manual</h3>
+                                <div className="punishment-manual-form">
+                                    <select
+                                        value={manualBanForm.userId}
+                                        onChange={e => setManualBanForm({ ...manualBanForm, userId: e.target.value })}
+                                        className="admin-input"
+                                    >
+                                        <option value="">Selecione o aluno...</option>
+                                        {users.filter(u => u.role === 'STUDENT').map(u => (
+                                            <option key={u.id} value={u.id}>{u.name} ({u.email})</option>
+                                        ))}
+                                    </select>
+                                    <select
+                                        value={manualBanForm.banType}
+                                        onChange={e => setManualBanForm({ ...manualBanForm, banType: e.target.value })}
+                                        className="admin-input"
+                                    >
+                                        <option value="TEMP_1D">1 Dia</option>
+                                        <option value="TEMP_2D">2 Dias</option>
+                                        <option value="TEMP_10D">10 Dias</option>
+                                        <option value="PERMANENT">Permanente</option>
+                                    </select>
+                                    <input
+                                        type="text"
+                                        value={manualBanForm.reason}
+                                        onChange={e => setManualBanForm({ ...manualBanForm, reason: e.target.value })}
+                                        placeholder="Motivo do ban..."
+                                        className="admin-input"
+                                    />
+                                    <button
+                                        className="admin-btn admin-btn-danger"
+                                        disabled={!manualBanForm.userId || !manualBanForm.reason.trim()}
+                                        onClick={async () => {
+                                            try {
+                                                await api.post('/api/admin/bans', manualBanForm, {
+                                                    headers: { Authorization: `Bearer ${token}` }
+                                                });
+                                                setManualBanForm({ userId: '', reason: '', banType: 'TEMP_1D' });
+                                                fetchData();
+                                            } catch { /* ignore */ }
+                                        }}
+                                    >
+                                        <Ban size={14} /> Aplicar Ban
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Seção: Histórico de Violações */}
+                            <div className="punishment-section">
+                                <h3><AlertTriangle size={18} /> Histórico de Violações</h3>
+                                {violations.length === 0 ? (
+                                    <p className="punishment-empty">Nenhuma violação registrada.</p>
+                                ) : (
+                                    <div className="punishment-table-wrap">
+                                        <table className="punishment-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Aluno</th>
+                                                    <th>Palavra</th>
+                                                    <th>Severidade</th>
+                                                    <th>Ação</th>
+                                                    <th>Data</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {violations.map((v: any) => (
+                                                    <tr key={v.id}>
+                                                        <td>{v.user.name}</td>
+                                                        <td className="punishment-word">{v.word}</td>
+                                                        <td>
+                                                            <span className={`punishment-severity ${v.severity.toLowerCase()}`}>
+                                                                {v.severity === 'LIGHT' ? 'Leve' : v.severity === 'MEDIUM' ? 'Média' : 'Grave'}
+                                                            </span>
+                                                        </td>
+                                                        <td className="punishment-action-label">{v.autoAction}</td>
+                                                        <td>{new Date(v.createdAt).toLocaleString('pt-BR')}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* TAB: SETTINGS */}
+                    {activeTab === 'settings' && (
+                        <div className="admin-fade-in">
+                            <h2 className="admin-page-title">Configurações da Conta</h2>
+                            <p style={{ color: 'var(--text-muted)', marginBottom: '2rem' }}>Altere seu nome de usuário e senha de acesso.</p>
+
+                            <div className="settings-card">
+                                {settingsMsg && (
+                                    <div className={`settings-alert ${settingsMsg.type}`}>
+                                        {settingsMsg.type === 'success' ? <CheckCircle size={18} /> : <AlertCircle size={18} />}
+                                        {settingsMsg.text}
+                                    </div>
+                                )}
+
+                                <form onSubmit={handleUpdateProfile} className="settings-form">
+                                    {/* Username */}
+                                    <div className="settings-field">
+                                        <label>Nome de Usuário</label>
+                                        <input
+                                            type="text"
+                                            value={settingsForm.newUsername}
+                                            onChange={e => setSettingsForm({ ...settingsForm, newUsername: e.target.value })}
+                                            placeholder="Novo nome de usuário"
+                                            className="settings-input"
+                                        />
+                                        <small style={{ color: 'var(--text-muted)' }}>
+                                            Login atual: <strong>{user?.username || user?.email}</strong>
+                                        </small>
+                                    </div>
+
+                                    <div style={{ borderTop: '1px solid var(--glass-border)', margin: '1.5rem 0' }} />
+
+                                    {/* Nova Senha */}
+                                    <div className="settings-field">
+                                        <label>Nova Senha</label>
+                                        <div style={{ position: 'relative' }}>
+                                            <input
+                                                type={showNewPass ? 'text' : 'password'}
+                                                value={settingsForm.newPassword}
+                                                onChange={e => setSettingsForm({ ...settingsForm, newPassword: e.target.value })}
+                                                placeholder="Deixe em branco para manter a atual"
+                                                className="settings-input"
+                                            />
+                                            <button type="button" onClick={() => setShowNewPass(!showNewPass)} className="settings-eye-btn">
+                                                {showNewPass ? <EyeOff size={18} /> : <Eye size={18} />}
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="settings-field">
+                                        <label>Confirmar Nova Senha</label>
+                                        <input
+                                            type="password"
+                                            value={settingsForm.confirmPassword}
+                                            onChange={e => setSettingsForm({ ...settingsForm, confirmPassword: e.target.value })}
+                                            placeholder="Repita a nova senha"
+                                            className="settings-input"
+                                        />
+                                    </div>
+
+                                    <div style={{ borderTop: '1px solid var(--glass-border)', margin: '1.5rem 0' }} />
+
+                                    {/* Senha Atual (obrigatória para confirmar) */}
+                                    <div className="settings-field">
+                                        <label>Senha Atual <span style={{ color: 'var(--danger)' }}>*</span></label>
+                                        <div style={{ position: 'relative' }}>
+                                            <input
+                                                type={showCurrentPass ? 'text' : 'password'}
+                                                value={settingsForm.currentPassword}
+                                                onChange={e => setSettingsForm({ ...settingsForm, currentPassword: e.target.value })}
+                                                placeholder="Informe sua senha atual para confirmar"
+                                                className="settings-input"
+                                                required
+                                            />
+                                            <button type="button" onClick={() => setShowCurrentPass(!showCurrentPass)} className="settings-eye-btn">
+                                                {showCurrentPass ? <EyeOff size={18} /> : <Eye size={18} />}
+                                            </button>
+                                        </div>
+                                        <small style={{ color: 'var(--text-muted)' }}>Obrigatório para confirmar qualquer alteração.</small>
+                                    </div>
+
+                                    <button
+                                        type="submit"
+                                        className="settings-save-btn"
+                                        disabled={settingsLoading}
+                                    >
+                                        <Save size={18} />
+                                        {settingsLoading ? 'Salvando...' : 'Salvar Alterações'}
+                                    </button>
+                                </form>
+                            </div>
+
+                            <hr className="admin-divider" />
+
+                            <h2 className="admin-page-title">Aparência da Plataforma (Branding Global)</h2>
+                            <p style={{ color: 'var(--text-muted)', marginBottom: '2rem' }}>Personalize as cores, o nome e o logo. Estas alterações afetam todos os usuários imediatamente.</p>
+
+                            <div className="settings-card">
+                                {brandingMsg && (
+                                    <div className={`settings-alert ${brandingMsg.type}`}>
+                                        {brandingMsg.type === 'success' ? <CheckCircle size={18} /> : <AlertCircle size={18} />}
+                                        {brandingMsg.text}
+                                    </div>
+                                )}
+
+                                <form onSubmit={handleUpdateBranding} className="settings-form">
+                                    <div className="settings-field">
+                                        <label>Nome da Plataforma (título da aba do navegador)</label>
+                                        <input
+                                            type="text"
+                                            value={brandingForm.platformName}
+                                            onChange={e => setBrandingForm({ ...brandingForm, platformName: e.target.value })}
+                                            placeholder="Ex: EduVault"
+                                            className="settings-input"
+                                            required
+                                        />
+                                    </div>
+
+                                    <div className="settings-field">
+                                        <label>Nome Estilizado (aparece no header)</label>
+                                        <small style={{ color: 'var(--text-muted)', display: 'block', marginBottom: '0.5rem' }}>
+                                            Divida o nome em duas partes para aplicar cores diferentes. Ex: <strong style={{ color: brandingForm.nameColor1 }}>{brandingForm.namePart1 || 'Edu'}</strong><strong style={{ color: brandingForm.nameColor2 }}>{brandingForm.namePart2 || 'Vault'}</strong>
+                                        </small>
+                                        <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                                            <div style={{ flex: 1, minWidth: '120px' }}>
+                                                <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Parte 1</label>
+                                                <input
+                                                    type="text"
+                                                    value={brandingForm.namePart1}
+                                                    onChange={e => setBrandingForm({ ...brandingForm, namePart1: e.target.value })}
+                                                    placeholder="Edu"
+                                                    className="settings-input"
+                                                />
+                                            </div>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Cor 1</label>
+                                                <input
+                                                    type="color"
+                                                    value={brandingForm.nameColor1}
+                                                    onChange={e => setBrandingForm({ ...brandingForm, nameColor1: e.target.value })}
+                                                    style={{ width: '40px', height: '36px', padding: '0', border: 'none', borderRadius: '4px', cursor: 'pointer', background: 'transparent' }}
+                                                />
+                                                <span style={{ fontFamily: 'monospace', color: 'var(--text-muted)', fontSize: '0.8rem' }}>{brandingForm.nameColor1}</span>
+                                            </div>
+                                            <div style={{ flex: 1, minWidth: '120px' }}>
+                                                <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Parte 2</label>
+                                                <input
+                                                    type="text"
+                                                    value={brandingForm.namePart2}
+                                                    onChange={e => setBrandingForm({ ...brandingForm, namePart2: e.target.value })}
+                                                    placeholder="Vault"
+                                                    className="settings-input"
+                                                />
+                                            </div>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Cor 2</label>
+                                                <input
+                                                    type="color"
+                                                    value={brandingForm.nameColor2}
+                                                    onChange={e => setBrandingForm({ ...brandingForm, nameColor2: e.target.value })}
+                                                    style={{ width: '40px', height: '36px', padding: '0', border: 'none', borderRadius: '4px', cursor: 'pointer', background: 'transparent' }}
+                                                />
+                                                <span style={{ fontFamily: 'monospace', color: 'var(--text-muted)', fontSize: '0.8rem' }}>{brandingForm.nameColor2}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="settings-field">
+                                        <label>Cor Primária (Tema)</label>
+                                        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                                            <input
+                                                type="color"
+                                                value={brandingForm.primaryColor}
+                                                onChange={e => setBrandingForm({ ...brandingForm, primaryColor: e.target.value })}
+                                                style={{ width: '50px', height: '40px', padding: '0', border: 'none', borderRadius: '4px', cursor: 'pointer', background: 'transparent' }}
+                                                required
+                                            />
+                                            <span style={{ fontFamily: 'monospace', color: 'var(--text-muted)' }}>{brandingForm.primaryColor}</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="settings-field">
+                                        <label>Cor de Destaque (Accent)</label>
+                                        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                                            <input
+                                                type="color"
+                                                value={brandingForm.accentColor}
+                                                onChange={e => setBrandingForm({ ...brandingForm, accentColor: e.target.value })}
+                                                style={{ width: '50px', height: '40px', padding: '0', border: 'none', borderRadius: '4px', cursor: 'pointer', background: 'transparent' }}
+                                                required
+                                            />
+                                            <span style={{ fontFamily: 'monospace', color: 'var(--text-muted)' }}>{brandingForm.accentColor}</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="settings-field">
+                                        <label>Logo da Plataforma</label>
+                                        {brandingForm.logoUrl && (
+                                            <div style={{ marginBottom: '1rem' }}>
+                                                <img src={`${API_BASE}${brandingForm.logoUrl}`} alt="Logo Preview" style={{ maxHeight: '60px', borderRadius: '8px', border: '1px solid var(--glass-border)' }} />
+                                            </div>
+                                        )}
+                                        <input
+                                            type="file"
+                                            accept="image/png, image/jpeg, image/svg+xml"
+                                            onChange={handleUploadBrandLogo}
+                                            disabled={brandingLoading}
+                                            style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}
+                                        />
+                                        <small style={{ color: 'var(--text-muted)' }}>Faça o upload de uma imagem PNG ou SVG com fundo transparente.</small>
+                                    </div>
+
+                                    <div className="settings-field">
+                                        <label>Banner do Dashboard (Aluno)</label>
+                                        {brandingForm.bannerUrl && (
+                                            <div style={{ marginBottom: '1rem' }}>
+                                                <img src={`${API_BASE}${brandingForm.bannerUrl}`} alt="Banner Preview" style={{ maxHeight: '120px', width: '100%', objectFit: 'cover', borderRadius: '12px', border: '1px solid var(--glass-border)' }} />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setBrandingForm({ ...brandingForm, bannerUrl: '' })}
+                                                    style={{ marginTop: '0.5rem', background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.85rem' }}
+                                                >
+                                                    <X size={14} /> Remover banner
+                                                </button>
+                                            </div>
+                                        )}
+                                        <input
+                                            type="file"
+                                            accept="image/png, image/jpeg, image/webp"
+                                            onChange={handleUploadBanner}
+                                            disabled={brandingLoading}
+                                            style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}
+                                        />
+                                        <small style={{ color: 'var(--text-muted)' }}>Imagem horizontal (recomendado: 1400×300px). Aparece no topo do painel do aluno.</small>
+                                    </div>
+
+                                    <button type="submit" className="settings-save-btn" disabled={brandingLoading} style={{ marginTop: '1.5rem', alignSelf: 'flex-start' }}>
+                                        {brandingLoading ? 'Salvando...' : (
+                                            <>
+                                                <Save size={18} /> Salvar Aparência
+                                            </>
+                                        )}
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* TAB: ATTENDANCE */}
+                    {activeTab === 'attendance' && (
+                        <div className="admin-fade-in">
+                            <h2 className="admin-page-title">Controle de Presença</h2>
+
+                            {/* Attendance Config Card */}
+                            <div className="admin-card" style={{ marginBottom: '2rem' }}>
+                                <h3 style={{ marginBottom: '1rem' }}>Configurações de Presença</h3>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem', alignItems: 'flex-end' }}>
+                                    <div>
+                                        <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.3rem' }}>Sistema de Presença</label>
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={attendanceConfig.attendanceEnabled}
+                                                onChange={e => setAttendanceConfig(prev => ({ ...prev, attendanceEnabled: e.target.checked }))}
+                                                style={{ width: '18px', height: '18px' }}
+                                            />
+                                            <span style={{ fontWeight: 600 }}>{attendanceConfig.attendanceEnabled ? 'Ativado' : 'Desativado'}</span>
+                                        </label>
+                                    </div>
+                                    <div>
+                                        <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.3rem' }}>Tempo Mínimo (minutos)</label>
+                                        <input
+                                            type="number"
+                                            min={1}
+                                            max={180}
+                                            value={attendanceConfig.attendanceMinMinutes}
+                                            onChange={e => setAttendanceConfig(prev => ({ ...prev, attendanceMinMinutes: parseInt(e.target.value) || 20 }))}
+                                            className="admin-input"
+                                            style={{ width: '120px' }}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.3rem' }}>Modo</label>
+                                        <select
+                                            value={attendanceConfig.attendanceMode}
+                                            onChange={e => setAttendanceConfig(prev => ({ ...prev, attendanceMode: e.target.value }))}
+                                            className="admin-select"
+                                            style={{ minWidth: '200px' }}
+                                        >
+                                            <option value="DATE_ONLY">Somente na Data do Módulo</option>
+                                            <option value="FREE">Livre (Qualquer Data)</option>
+                                        </select>
+                                    </div>
+                                    <button onClick={handleSaveAttendanceConfig} className="admin-btn-primary">
+                                        <Save size={16} /> Salvar Configuração
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Attendance Filter */}
+                            <div className="admin-card" style={{ marginBottom: '1.5rem' }}>
+                                <h3 style={{ marginBottom: '1rem' }}>Filtrar Presença</h3>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'flex-end' }}>
+                                    <div>
+                                        <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.3rem' }}>Curso</label>
+                                        <select
+                                            value={attendanceFilter.courseId}
+                                            onChange={e => {
+                                                const courseId = e.target.value;
+                                                setAttendanceFilter(prev => ({ ...prev, courseId, moduleId: '' }));
+                                                const course = courses.find(c => c.id === courseId);
+                                                setAttendanceModules(course?.modules || []);
+                                                setAttendanceData([]);
+                                            }}
+                                            className="admin-select"
+                                            style={{ minWidth: '250px' }}
+                                        >
+                                            <option value="">Selecione um curso...</option>
+                                            {courses.map(c => (
+                                                <option key={c.id} value={c.id}>{c.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.3rem' }}>Módulo</label>
+                                        <select
+                                            value={attendanceFilter.moduleId}
+                                            onChange={e => setAttendanceFilter(prev => ({ ...prev, moduleId: e.target.value }))}
+                                            className="admin-select"
+                                            style={{ minWidth: '250px' }}
+                                            disabled={!attendanceFilter.courseId}
+                                        >
+                                            <option value="">Selecione um módulo...</option>
+                                            {attendanceModules.map((m: any) => (
+                                                <option key={m.id} value={m.id}>{m.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.3rem' }}>Data</label>
+                                        <input
+                                            type="date"
+                                            value={attendanceFilter.date}
+                                            onChange={e => setAttendanceFilter(prev => ({ ...prev, date: e.target.value }))}
+                                            className="admin-input"
+                                        />
+                                    </div>
+                                    <button
+                                        onClick={fetchAttendance}
+                                        disabled={!attendanceFilter.moduleId || !attendanceFilter.date}
+                                        className="admin-btn-primary"
+                                    >
+                                        <Eye size={16} /> Buscar
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Attendance List */}
+                            {attendanceData.length > 0 && (
+                                <div className="admin-card">
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                                        <h3>Lista de Presença — {attendanceData.length} aluno(s)</h3>
+                                        <div style={{ display: 'flex', gap: '1rem', fontSize: '0.9rem' }}>
+                                            <span style={{ color: '#22c55e', fontWeight: 600 }}>
+                                                ✓ Presentes: {attendanceData.filter((a: any) => a.status === 'PRESENT').length}
+                                            </span>
+                                            <span style={{ color: '#ef4444', fontWeight: 600 }}>
+                                                ✗ Ausentes: {attendanceData.filter((a: any) => a.status === 'ABSENT').length}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div style={{ overflowX: 'auto' }}>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                            <thead>
+                                                <tr style={{ borderBottom: '2px solid var(--glass-border)', textAlign: 'left' }}>
+                                                    <th style={{ padding: '0.75rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Aluno</th>
+                                                    <th style={{ padding: '0.75rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Email</th>
+                                                    <th style={{ padding: '0.75rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Tempo Assistido</th>
+                                                    <th style={{ padding: '0.75rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Status</th>
+                                                    <th style={{ padding: '0.75rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Detecção</th>
+                                                    <th style={{ padding: '0.75rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Ações</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {attendanceData.map((att: any, idx: number) => (
+                                                    <tr key={att.id || `absent-${att.userId}`} style={{ borderBottom: '1px solid var(--glass-border)', background: idx % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)' }}>
+                                                        <td style={{ padding: '0.75rem', fontWeight: 500 }}>{att.user?.name || 'N/A'}</td>
+                                                        <td style={{ padding: '0.75rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>{att.user?.email || 'N/A'}</td>
+                                                        <td style={{ padding: '0.75rem' }}>
+                                                            {Math.floor((att.watchTimeSeconds || 0) / 60)}min {(att.watchTimeSeconds || 0) % 60}s
+                                                        </td>
+                                                        <td style={{ padding: '0.75rem' }}>
+                                                            <span style={{
+                                                                padding: '0.2rem 0.6rem',
+                                                                borderRadius: '6px',
+                                                                fontSize: '0.8rem',
+                                                                fontWeight: 600,
+                                                                background: att.status === 'PRESENT' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
+                                                                color: att.status === 'PRESENT' ? '#22c55e' : '#ef4444'
+                                                            }}>
+                                                                {att.status === 'PRESENT' ? '✓ Presente' : '✗ Ausente'}
+                                                            </span>
+                                                        </td>
+                                                        <td style={{ padding: '0.75rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                                                            {att.autoDetected ? '🤖 Auto' : att.id ? '✏️ Manual' : '—'}
+                                                        </td>
+                                                        <td style={{ padding: '0.75rem' }}>
+                                                            <button
+                                                                onClick={() => {
+                                                                    setAttendanceEditModal({
+                                                                        id: att.id || '',
+                                                                        userId: att.userId,
+                                                                        moduleId: attendanceFilter.moduleId,
+                                                                        date: attendanceFilter.date,
+                                                                        currentStatus: att.status
+                                                                    });
+                                                                    setAttendanceEditForm({
+                                                                        status: att.status === 'PRESENT' ? 'ABSENT' : 'PRESENT',
+                                                                        justification: ''
+                                                                    });
+                                                                }}
+                                                                className="admin-btn-icon primary"
+                                                                title="Editar presença"
+                                                            >
+                                                                <Edit3 size={14} />
+                                                            </button>
+                                                            {/* Show edit history */}
+                                                            {att.edits && att.edits.length > 0 && (
+                                                                <span title={att.edits.map((ed: any) => `${ed.editedBy?.name}: ${ed.oldStatus}→${ed.newStatus} - ${ed.justification}`).join('\n')} style={{ marginLeft: '0.5rem', cursor: 'help', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                                                    📝 {att.edits.length} edição(ões)
+                                                                </span>
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
+
+                            {attendanceFilter.moduleId && attendanceFilter.date && attendanceData.length === 0 && (
+                                <div className="admin-empty-box">
+                                    Nenhum registro de presença encontrado para este módulo e data.
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Attendance Edit Modal */}
+                    {attendanceEditModal && (
+                        <div className="modal-overlay" onClick={() => setAttendanceEditModal(null)}>
+                            <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+                                <h3 style={{ marginBottom: '1rem' }}>Editar Presença</h3>
+                                <p style={{ color: 'var(--text-muted)', marginBottom: '1rem', fontSize: '0.9rem' }}>
+                                    Status atual: <strong>{attendanceEditModal.currentStatus === 'PRESENT' ? 'Presente' : 'Ausente'}</strong>
+                                </p>
+                                <div style={{ marginBottom: '1rem' }}>
+                                    <label style={{ fontSize: '0.85rem', display: 'block', marginBottom: '0.3rem' }}>Novo Status</label>
+                                    <select
+                                        value={attendanceEditForm.status}
+                                        onChange={e => setAttendanceEditForm(prev => ({ ...prev, status: e.target.value }))}
+                                        className="admin-select"
+                                    >
+                                        <option value="PRESENT">Presente</option>
+                                        <option value="ABSENT">Ausente</option>
+                                    </select>
+                                </div>
+                                <div style={{ marginBottom: '1.5rem' }}>
+                                    <label style={{ fontSize: '0.85rem', display: 'block', marginBottom: '0.3rem' }}>Justificativa *</label>
+                                    <textarea
+                                        value={attendanceEditForm.justification}
+                                        onChange={e => setAttendanceEditForm(prev => ({ ...prev, justification: e.target.value }))}
+                                        className="admin-input"
+                                        rows={3}
+                                        placeholder="Motivo da alteração (obrigatório)..."
+                                        required
+                                        style={{ width: '100%', resize: 'vertical' }}
+                                    />
+                                    <small style={{ color: 'var(--text-muted)' }}>Esta justificativa será registrada no log de auditoria.</small>
+                                </div>
+                                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+                                    <button onClick={() => setAttendanceEditModal(null)} className="admin-btn-danger" style={{ background: 'transparent', border: '1px solid var(--glass-border)', color: 'var(--text-primary)' }}>
+                                        Cancelar
+                                    </button>
+                                    <button onClick={handleAttendanceEdit} disabled={!attendanceEditForm.justification.trim()} className="admin-btn-primary">
+                                        <Save size={16} /> Salvar
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                </main>
+            </div>
+        </div>
+
+        {/* Full-screen Editor Modal */}
+        {editingVideoId && (
+            <div className="editor-modal-overlay" onClick={() => { setEditingVideoId(null); setEditBlocks([]); setEditorModalMode('edit'); }}>
+                <div className="editor-modal" onClick={e => e.stopPropagation()}>
+                    <div className="editor-modal-header">
+                        <h2>Editar Aula</h2>
+                        <div className="editor-modal-actions">
+                            <div className="editor-modal-tabs">
+                                <button className={`editor-modal-tab ${editorModalMode === 'edit' ? 'active' : ''}`} onClick={() => setEditorModalMode('edit')}>
+                                    <Edit3 size={14} /> Editor
+                                </button>
+                                <button className={`editor-modal-tab ${editorModalMode === 'preview' ? 'active' : ''}`} onClick={() => setEditorModalMode('preview')}>
+                                    <Eye size={14} /> Visualizar como Aluno
+                                </button>
+                            </div>
+                            <button className="editor-modal-save" onClick={() => handleEditVideo(editingVideoId)}>
+                                <Save size={14} /> Salvar
+                            </button>
+                            <button className="editor-modal-close" onClick={() => { setEditingVideoId(null); setEditBlocks([]); setEditorModalMode('edit'); }}>
+                                <X size={18} />
+                            </button>
+                        </div>
+                    </div>
+                    <div className="editor-modal-body">
+                        {editorModalMode === 'edit' ? (
+                            <div className="editor-modal-edit">
+                                <div className="editor-modal-fields">
+                                    <input value={editVideoData.title} onChange={e => setEditVideoData({ ...editVideoData, title: e.target.value })} placeholder="Título da aula" className="admin-input" />
+                                    <input value={editVideoData.description} onChange={e => setEditVideoData({ ...editVideoData, description: e.target.value })} placeholder="Descrição" className="admin-input" />
+                                </div>
+                                <BlockEditor blocks={editBlocks} onChange={setEditBlocks} token={token || ''} />
+                            </div>
+                        ) : (
+                            <div className="editor-modal-preview">
+                                <div className="lp-sheet">
+                                    <h1 style={{ fontSize: '1.6rem', fontWeight: 700, color: '#1e293b', marginBottom: '1rem' }}>{editVideoData.title}</h1>
+                                    {editVideoData.description && <p style={{ color: '#64748b', marginBottom: '1.5rem' }}>{editVideoData.description}</p>}
+                                    {editBlocks.length > 0 ? (
+                                        <BlockRenderer blocks={editBlocks} />
+                                    ) : editVideoData.content ? (
+                                        <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(editVideoData.content) }} />
+                                    ) : (
+                                        <p style={{ color: '#94a3b8', fontStyle: 'italic' }}>Nenhum conteúdo adicionado ainda.</p>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* Confirm Modal */}
+        <ConfirmModal
+            open={!!confirmAction}
+            message={confirmAction?.message || ''}
+            onConfirm={() => { confirmAction?.action(); setConfirmAction(null); }}
+            onCancel={() => setConfirmAction(null)}
+        />
+        </>
+    );
+}

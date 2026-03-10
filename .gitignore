@@ -1,0 +1,34 @@
+# ==================================
+# EduVault — Gitignore Raiz
+# ==================================
+
+# Dependências
+node_modules/
+
+# Build outputs
+backend/dist/
+frontend/dist/
+
+# Logs (PM2 e aplicação)
+logs/
+*.log
+
+# Ambiente
+.env
+.env.local
+.env.production
+
+# Uploads (dados do usuário — não versionar)
+backend/uploads/videos/
+backend/uploads/hls/
+backend/uploads/images/
+backend/uploads/pdfs/
+
+# PM2
+.pm2/
+
+# Sistema
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
