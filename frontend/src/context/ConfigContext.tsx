@@ -110,7 +110,7 @@ export const ConfigProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const fetchConfig = async () => {
         try {
             const response = await axios.get(`${API_BASE_URL}/api/config/public`);
-            const data = {
+            const data: PlatformConfig = {
                 platformName: response.data.platformName || defaultConfig.platformName,
                 namePart1: response.data.namePart1 || defaultConfig.namePart1,
                 namePart2: response.data.namePart2 || defaultConfig.namePart2,
@@ -120,7 +120,8 @@ export const ConfigProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                 accentColor: response.data.accentColor || defaultConfig.accentColor,
                 logoUrl: response.data.logoUrl || null,
                 bannerUrl: response.data.bannerUrl || null,
-                forumPunishmentEnabled: response.data.forumPunishmentEnabled ?? false
+                forumPunishmentEnabled: response.data.forumPunishmentEnabled ?? false,
+                attendanceEnabled: response.data.attendanceEnabled ?? false
             };
             setConfig(data);
             applyTheme(data);
