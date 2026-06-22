@@ -58,13 +58,13 @@ Para garantir que a transição entre a sua live e os vídeos gravados seja suav
 
 ---
 
-## Passo 4: Encerrar a Transmissão e Voltar para os Vídeos
+## Passo 4: Encerrar a Transmissão
 
 1. Quando terminar de fazer a sua live, basta clicar no botão **Interromper Transmissão** no OBS.
 2. O site da TV Carlos detectará que a live caiu:
-   - O player alternará de forma automática de volta para a programação gravada em loop (`video1`, `video2`, etc.).
-   - O selo mudará de volta para **PROGRAMAÇÃO** (verde).
-   - A grade de programação voltará ao estado normal.
+   - se existir programação gravada real no servidor, o player voltará automaticamente para ela;
+   - sem conteúdo gravado, o player permanecerá em estado de espera até a próxima transmissão;
+   - nenhum vídeo de demonstração é publicado em produção.
 
 ---
 
