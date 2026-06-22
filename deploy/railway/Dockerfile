@@ -34,6 +34,7 @@ RUN apk add --no-cache \
     && mkdir -p \
       /app/api \
       /app/playlists \
+      /app/deploy/migrations \
       /app/scripts \
       /app/seed-videos \
       /app/site \
@@ -54,10 +55,11 @@ COPY --chown=tvapp:tvapp playlists /app/playlists
 COPY --chown=tvapp:tvapp scripts/gerar-tv.sh /app/scripts/gerar-tv.sh
 COPY --chown=tvapp:tvapp videos /app/seed-videos
 COPY deploy/railway/nginx.conf.template /app/deploy/nginx.conf.template
+COPY deploy/railway/migrations /app/deploy/migrations
 COPY deploy/railway/supervisord.conf /etc/supervisord.conf
 COPY deploy/railway/entrypoint.sh /app/deploy/entrypoint.sh
 
-RUN chmod 0555 /app/deploy/entrypoint.sh /app/scripts/gerar-tv.sh \
+RUN chmod 0555 /app/deploy/entrypoint.sh /app/deploy/migrations/*.sh /app/scripts/gerar-tv.sh \
     && find /app/site -type d -exec chmod 0555 {} \; \
     && find /app/site -type f -exec chmod 0444 {} \;
 

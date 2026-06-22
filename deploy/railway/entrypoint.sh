@@ -32,13 +32,26 @@ mkdir -p \
   /var/lib/nginx/tmp/body \
   /var/lib/nginx/tmp/proxy
 
+migration_state_directory=/data/.deploy-migrations
+mkdir -p "$migration_state_directory"
+for migration in /app/deploy/migrations/*.sh; do
+  [ -f "$migration" ] || continue
+  migration_name=$(basename "$migration")
+  migration_marker="$migration_state_directory/$migration_name"
+  if [ ! -f "$migration_marker" ]; then
+    echo "Executando migração de volume: $migration_name"
+    /bin/sh "$migration"
+    touch "$migration_marker"
+  fi
+done
+
 if [ ! -f /data/.tvcarlos-initialized ]; then
   cp -p /app/seed-videos/* /data/videos/ 2>/dev/null || true
   chown -R tvapp:tvapp /data
   touch /data/.tvcarlos-initialized
   chown tvapp:tvapp /data/.tvcarlos-initialized
 else
-  chown tvapp:tvapp /data /data/images /data/videos
+  chown tvapp:tvapp /data /data/images /data/videos "$migration_state_directory"
 fi
 
 chown -R nginx:nginx /run/nginx /var/cache/nginx /var/lib/nginx
