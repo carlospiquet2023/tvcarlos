@@ -9,7 +9,7 @@ playwright-report/
 test-results/
 api/credentials.json
 data/
-storage/
+/storage/
 *.log
 *.tmp
 .DS_Store
