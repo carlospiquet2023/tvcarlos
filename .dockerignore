@@ -1,0 +1,17 @@
+.env
+.env.*
+!.env.example
+.git
+.github
+.artifacts
+node_modules
+api/node_modules
+api/dist
+api/coverage
+playwright-report
+test-results
+qa
+docs
+*.log
+*.tmp
+.DS_Store

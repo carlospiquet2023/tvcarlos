@@ -1,0 +1,88 @@
+name: Quality gate
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Node.js 22
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            api/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm ci --prefix api
+
+      - name: Static analysis and API tests
+        run: |
+          npm run lint
+          npm run typecheck
+          npm run test:api
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Prepare isolated CI environment
+        run: |
+          cat > .env <<'ENV'
+          NODE_ENV=production
+          APP_ORIGIN=http://localhost:8082
+          PORT=3000
+          DATABASE_URL=postgres://tvcarlos:ci-database-password@database:5432/tvcarlos
+          POSTGRES_DB=tvcarlos
+          POSTGRES_USER=tvcarlos
+          POSTGRES_PASSWORD=ci-database-password
+          SESSION_TTL_MINUTES=120
+          COOKIE_SECURE=false
+          ADMIN_INITIAL_USERNAME=admin
+          ADMIN_INITIAL_PASSWORD=CI-validation-password-2026!
+          IMAGE_STORAGE_DIR=/data/images
+          VIDEO_STORAGE_DIR=/data/videos
+          LOG_LEVEL=warn
+          RTMP_STREAM_KEY=1111111111111111111111111111111111111111111111111111111111111111
+          LOOP_STREAM_KEY=2222222222222222222222222222222222222222222222222222222222222222
+          ENV
+
+      - name: Start the production stack
+        run: |
+          docker compose up --build -d
+          for attempt in $(seq 1 40); do
+            if curl --fail --silent http://localhost:8082/api/health/ready >/dev/null; then
+              exit 0
+            fi
+            sleep 3
+          done
+          docker compose ps
+          exit 1
+
+      - name: Browser regression suite
+        run: npm run test:e2e
+
+      - name: Container diagnostics
+        if: failure()
+        run: docker compose logs --no-color --tail=300
+
+      - name: Stop isolated stack
+        if: always()
+        run: docker compose down --volumes --remove-orphans

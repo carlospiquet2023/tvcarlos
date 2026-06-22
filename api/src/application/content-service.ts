@@ -1,0 +1,144 @@
+import type { AuditRepository, ContentRepository } from './ports.js';
+import { NotFoundError, ValidationError } from './errors.js';
+import type { Branding, HeaderLink, Partner, Program } from '../domain/models.js';
+import type { RequestAuditContext } from './auth-service.js';
+
+type ActorContext = RequestAuditContext & { userId: string };
+
+export class ContentService {
+  constructor(
+    private readonly content: ContentRepository,
+    private readonly audit: AuditRepository,
+  ) {}
+
+  listNews() { return this.content.listNews(); }
+  listPrograms() { return this.content.listPrograms(); }
+  getBranding() { return this.content.getBranding(); }
+  listPartners() { return this.content.listPartners(); }
+  listHeaderLinks() { return this.content.listHeaderLinks(); }
+  listAuditLogs(limit: number) { return this.audit.list(limit); }
+
+  async createNews(text: string, actor: ActorContext) {
+    const item = await this.content.createNews(text);
+    await this.record(actor, 'news.created', 'news', item.id);
+    return item;
+  }
+
+  async updateNews(id: string, text: string, actor: ActorContext) {
+    const item = await this.content.updateNews(id, text);
+    if (!item) throw new NotFoundError('Notícia não encontrada.');
+    await this.record(actor, 'news.updated', 'news', id);
+    return item;
+  }
+
+  async reorderNews(ids: string[], actor: ActorContext) {
+    await this.validateOrder(ids, (await this.content.listNews()).map((item) => item.id));
+    await this.content.reorderNews(ids);
+    await this.record(actor, 'news.reordered', 'news', undefined, { ids });
+  }
+
+  async deleteNews(id: string, actor: ActorContext) {
+    if (!(await this.content.deleteNews(id))) throw new NotFoundError('Notícia não encontrada.');
+    await this.record(actor, 'news.deleted', 'news', id);
+  }
+
+  async createProgram(input: Pick<Program, 'title' | 'description' | 'video'>, actor: ActorContext) {
+    const item = await this.content.createProgram(input);
+    await this.record(actor, 'program.created', 'program', item.id);
+    return item;
+  }
+
+  async updateProgram(id: string, input: Pick<Program, 'title' | 'description' | 'video'>, actor: ActorContext) {
+    const item = await this.content.updateProgram(id, input);
+    if (!item) throw new NotFoundError('Programa não encontrado.');
+    await this.record(actor, 'program.updated', 'program', id);
+    return item;
+  }
+
+  async reorderPrograms(ids: string[], actor: ActorContext) {
+    await this.validateOrder(ids, (await this.content.listPrograms()).map((item) => item.id));
+    await this.content.reorderPrograms(ids);
+    await this.record(actor, 'program.reordered', 'program', undefined, { ids });
+  }
+
+  async deleteProgram(id: string, actor: ActorContext) {
+    if (!(await this.content.deleteProgram(id))) throw new NotFoundError('Programa não encontrado.');
+    await this.record(actor, 'program.deleted', 'program', id);
+  }
+
+  async updateBranding(input: Omit<Branding, 'updatedAt'>, actor: ActorContext) {
+    const branding = await this.content.updateBranding(input);
+    await this.record(actor, 'branding.updated', 'branding', 'default');
+    return branding;
+  }
+
+  async createPartner(input: Pick<Partner, 'name' | 'logoUrl' | 'destinationUrl'>, actor: ActorContext) {
+    const item = await this.content.createPartner(input);
+    await this.record(actor, 'partner.created', 'partner', item.id);
+    return item;
+  }
+
+  async updatePartner(id: string, input: Pick<Partner, 'name' | 'logoUrl' | 'destinationUrl'>, actor: ActorContext) {
+    const item = await this.content.updatePartner(id, input);
+    if (!item) throw new NotFoundError('Parceiro não encontrado.');
+    await this.record(actor, 'partner.updated', 'partner', id);
+    return item;
+  }
+
+  async reorderPartners(ids: string[], actor: ActorContext) {
+    await this.validateOrder(ids, (await this.content.listPartners()).map((item) => item.id));
+    await this.content.reorderPartners(ids);
+    await this.record(actor, 'partner.reordered', 'partner', undefined, { ids });
+  }
+
+  async deletePartner(id: string, actor: ActorContext) {
+    if (!(await this.content.deletePartner(id))) throw new NotFoundError('Parceiro não encontrado.');
+    await this.record(actor, 'partner.deleted', 'partner', id);
+  }
+
+  async createHeaderLink(input: Pick<HeaderLink, 'name' | 'url'>, actor: ActorContext) {
+    if ((await this.content.listHeaderLinks()).length >= 4) {
+      throw new ValidationError('O cabeçalho aceita no máximo quatro botões.');
+    }
+    const item = await this.content.createHeaderLink(input);
+    await this.record(actor, 'header_link.created', 'header_link', item.id);
+    return item;
+  }
+
+  async updateHeaderLink(id: string, input: Pick<HeaderLink, 'name' | 'url'>, actor: ActorContext) {
+    const item = await this.content.updateHeaderLink(id, input);
+    if (!item) throw new NotFoundError('Botão do cabeçalho não encontrado.');
+    await this.record(actor, 'header_link.updated', 'header_link', id);
+    return item;
+  }
+
+  async reorderHeaderLinks(ids: string[], actor: ActorContext) {
+    await this.validateOrder(ids, (await this.content.listHeaderLinks()).map((item) => item.id));
+    await this.content.reorderHeaderLinks(ids);
+    await this.record(actor, 'header_link.reordered', 'header_link', undefined, { ids });
+  }
+
+  async deleteHeaderLink(id: string, actor: ActorContext) {
+    if (!(await this.content.deleteHeaderLink(id))) throw new NotFoundError('Botão do cabeçalho não encontrado.');
+    await this.record(actor, 'header_link.deleted', 'header_link', id);
+  }
+
+  private async validateOrder(ids: string[], existingIds: string[]) {
+    const uniqueIds = new Set(ids);
+    if (ids.length !== existingIds.length || uniqueIds.size !== ids.length || ids.some((id) => !existingIds.includes(id))) {
+      throw new ValidationError('A ordenação deve conter todos os itens atuais exatamente uma vez.');
+    }
+  }
+
+  private record(actor: ActorContext, action: string, targetType: string, targetId?: string, metadata?: Record<string, unknown>) {
+    return this.audit.append({
+      actorUserId: actor.userId,
+      action,
+      targetType,
+      targetId,
+      requestId: actor.requestId,
+      ip: actor.ip,
+      metadata,
+    });
+  }
+}

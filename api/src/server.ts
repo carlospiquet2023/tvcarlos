@@ -1,0 +1,49 @@
+import { sql } from 'kysely';
+import { loadConfig } from './config.js';
+import { createDatabase } from './infrastructure/database/client.js';
+import { migrate } from './infrastructure/database/migrate.js';
+import { PostgresUserRepository } from './infrastructure/repositories/user-repository.js';
+import { PostgresSessionRepository } from './infrastructure/repositories/session-repository.js';
+import { PostgresContentRepository } from './infrastructure/repositories/content-repository.js';
+import { PostgresAuditRepository } from './infrastructure/repositories/audit-repository.js';
+import { LocalMediaStorage } from './infrastructure/storage/local-storage.js';
+import { initializeDatabase } from './bootstrap/initialize.js';
+import { AuthService } from './application/auth-service.js';
+import { ContentService } from './application/content-service.js';
+import { MediaService } from './application/media-service.js';
+import { buildApp } from './http/app.js';
+
+const config = loadConfig();
+const database = createDatabase(config.databaseUrl);
+await migrate(database);
+
+const users = new PostgresUserRepository(database);
+const sessions = new PostgresSessionRepository(database);
+const content = new PostgresContentRepository(database);
+const audit = new PostgresAuditRepository(database);
+await initializeDatabase(config, users, content);
+
+const storage = new LocalMediaStorage(config.imageStorageDir, config.videoStorageDir);
+await storage.initialize();
+const authService = await AuthService.create(users, sessions, audit, config.sessionTtlMinutes);
+const contentService = new ContentService(content, audit);
+const mediaService = new MediaService(storage, content, audit);
+
+const app = await buildApp({
+  config,
+  authService,
+  contentService,
+  mediaService,
+  readiness: async () => { await sql`select 1`.execute(database); },
+});
+
+const shutdown = async (signal: string) => {
+  app.log.info({ signal }, 'Graceful shutdown started');
+  await app.close();
+  await database.destroy();
+  process.exit(0);
+};
+process.once('SIGTERM', () => void shutdown('SIGTERM'));
+process.once('SIGINT', () => void shutdown('SIGINT'));
+
+await app.listen({ host: '::', port: config.port });

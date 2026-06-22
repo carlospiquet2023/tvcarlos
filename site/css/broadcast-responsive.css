@@ -1,0 +1,49 @@
+@media (max-width: 1100px) {
+    .content-grid { grid-template-columns: minmax(0,1fr) 320px; }
+    .signal-caption, .transmission-facts { display: none; }
+    .logo-icon.has-custom-logo { max-width: 22vw; }
+}
+
+@media (max-width: 860px) {
+    .main-header { min-height: 84px; padding: .85rem 1rem; }
+    .logo-kicker, .header-links, .status-container { display: none; }
+    .logo-icon.has-custom-logo { width: 134px; height: 52px; max-width: 35vw; }
+    .logo-text { font-size: 1.15rem; }
+    .menu-toggle { display: flex; margin-left: auto; }
+    .mobile-menu:not(.hidden) { position: absolute; top: calc(100% + 1px); right: .8rem; left: .8rem; z-index: 120; display: grid; gap: .55rem; padding: .75rem; background: rgba(255,255,255,.98); border: 1px solid var(--line); border-radius: 9px; box-shadow: var(--shadow-md); }
+    #mobile-header-links { display: grid; gap: .45rem; }
+    .mobile-nav-link, .mobile-legal-link { min-height: 42px; display: flex; align-items: center; gap: .6rem; padding: .7rem .8rem; color: #244258; background: #f3f9f8; border: 1px solid #d5e5e5; border-radius: 6px; font-size: .8rem; font-weight: 750; text-decoration: none; }
+    .mobile-legal-link { color: var(--primary); background: #e8f5f4; }
+    .content-grid { grid-template-columns: 1fr; gap: 1.25rem; padding: 1rem 1rem 5rem; }
+    .section-rail span:last-child { display: none; }
+    .player-info-card { padding: .95rem 1rem; }
+    .now-playing h1 { white-space: normal; font-size: 1.3rem; }
+    .schedule-section { position: static; height: min(68vh,620px); min-height: 360px; overflow: visible; }
+    .schedule-card { height: 100%; }
+    .partner-showcase:not(.hidden) { position: fixed; right: 0; bottom: var(--ticker-height); left: 0; z-index: 105; height: 82px; display: grid; grid-template-columns: 54px minmax(0,1fr); border-right: 0; border-left: 0; border-radius: 0; box-shadow: 0 -8px 22px rgba(25,50,71,.1); }
+    .partner-carousel-slide { flex-basis: 150px; padding: .45rem .6rem; }
+    .partner-carousel-slide img { max-width: 92px; max-height: 52px; }
+    body.has-partner-showcase .content-grid { padding-bottom: 9rem; }
+    .legal-strip { flex-wrap: wrap; padding-inline: .7rem; }
+    .custom-controls { opacity: 1; }
+}
+
+@media (max-width: 560px) {
+    .player-wrapper { padding: 4px; border-radius: 9px; box-shadow: 0 3px 0 #7198a1, 0 10px 24px rgba(25,50,71,.22), 0 24px 45px rgba(25,50,71,.15); }
+    .player-wrapper::before { inset: 2px; border-radius: 7px; }
+    .player-wrapper::after { inset: 8px; background-size: 18px 2px,2px 18px,18px 2px,2px 18px,18px 2px,2px 18px,18px 2px,2px 18px; }
+    #tv-player { border-radius: 5px; }
+    .youtube-player, .video-protection-overlay { inset: 4px; width: calc(100% - 8px); height: calc(100% - 8px); border-radius: 5px; }
+    .custom-controls { right: 4px; bottom: 4px; left: 4px; }
+    .unmute-banner { width: calc(100% - 2rem); justify-content: center; font-size: .7rem; white-space: normal; }
+    .ticker-label-news { min-width: 88px; padding-inline: .5rem; font-size: .52rem; }
+    .ticker-clock-container { min-width: 142px; padding-inline: .45rem; }
+    #brasilia-clock { gap: .28rem; }
+    .clock-uf, .clock-temp { font-size: .7rem; }
+    .clock-time-val { font-size: .85rem; letter-spacing: 0; }
+}
+
+@media (max-width: 390px) {
+    .partner-showcase:not(.hidden) { grid-template-columns: 46px minmax(0,1fr); }
+    .partner-showcase-label { padding: .25rem; font-size: .47rem; }
+}

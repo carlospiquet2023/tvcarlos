@@ -1,0 +1,151 @@
+include /etc/nginx/modules/*.conf;
+
+user nginx;
+worker_processes auto;
+worker_rlimit_nofile 65535;
+pid /run/nginx/nginx.pid;
+error_log /dev/stderr warn;
+
+events {
+    worker_connections 4096;
+    multi_accept on;
+}
+
+rtmp {
+    access_log off;
+
+    server {
+        listen 1935;
+        chunk_size 4096;
+        ping 30s;
+        ping_timeout 10s;
+        max_message 8M;
+
+        application live {
+            live on;
+            record off;
+            idle_streams off;
+            drop_idle_publisher 10s;
+            notify_method post;
+            on_publish http://127.0.0.1:3000/internal/rtmp/authorize;
+
+            hls on;
+            hls_path /var/cache/nginx/hls;
+            hls_fragment 2s;
+            hls_playlist_length 12s;
+            hls_cleanup on;
+            hls_continuous off;
+            hls_nested off;
+        }
+    }
+}
+
+http {
+    access_log /dev/stdout;
+    server_tokens off;
+    default_type application/octet-stream;
+    include /etc/nginx/mime.types;
+    sendfile on;
+    tcp_nopush on;
+    keepalive_timeout 30;
+    client_max_body_size 501m;
+    client_body_timeout 60s;
+    client_body_temp_path /var/lib/nginx/tmp/body;
+    proxy_temp_path /var/lib/nginx/tmp/proxy;
+
+    limit_req_zone $binary_remote_addr zone=api_limit:10m rate=20r/s;
+    limit_conn_zone $binary_remote_addr zone=per_ip:10m;
+
+    map $http_upgrade $connection_upgrade {
+        default upgrade;
+        '' close;
+    }
+
+    map $http_x_forwarded_proto $upstream_forwarded_proto {
+        default $http_x_forwarded_proto;
+        '' $scheme;
+    }
+
+    server {
+        listen ${PORT} default_server;
+        listen [::]:${PORT} default_server;
+        server_name _;
+        root /app/site;
+        index index.html;
+        charset utf-8;
+
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header X-Frame-Options "DENY" always;
+        add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()" always;
+        add_header Cross-Origin-Opener-Policy "same-origin" always;
+        add_header Cross-Origin-Resource-Policy "same-site" always;
+        add_header Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; frame-src https://www.youtube-nocookie.com; form-action 'self'; script-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: https:; media-src 'self' blob: https:; connect-src 'self' https://api.open-meteo.com; upgrade-insecure-requests" always;
+
+        location ~ /\. {
+            deny all;
+            return 404;
+        }
+
+        location / {
+            try_files $uri $uri/ =404;
+        }
+
+        location /api/ {
+            limit_req zone=api_limit burst=40 nodelay;
+            limit_conn per_ip 20;
+            proxy_pass http://127.0.0.1:3000;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $upstream_forwarded_proto;
+            proxy_set_header X-Request-ID $request_id;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
+            proxy_request_buffering off;
+            proxy_read_timeout 600s;
+            proxy_send_timeout 600s;
+        }
+
+        location = /api/stream/status {
+            access_log off;
+            default_type application/json;
+            add_header Cache-Control "no-store" always;
+            set $live_status false;
+            set $loop_status false;
+            if (-f /var/cache/nginx/hls/stream.m3u8) {
+                set $live_status true;
+            }
+            if (-f /var/cache/nginx/hls/loop.m3u8) {
+                set $loop_status true;
+            }
+            return 200 '{"live":$live_status,"loop":$loop_status}';
+        }
+
+        location /hls/ {
+            alias /var/cache/nginx/hls/;
+            add_header Cache-Control "no-store" always;
+            add_header X-Content-Type-Options "nosniff" always;
+            types {
+                application/vnd.apple.mpegurl m3u8;
+                video/mp2t ts;
+            }
+        }
+
+        location /uploads/ {
+            alias /data/images/;
+            autoindex off;
+            add_header Cache-Control "public, max-age=31536000, immutable" always;
+            add_header X-Content-Type-Options "nosniff" always;
+        }
+
+        location /videos/ {
+            alias /data/videos/;
+            autoindex off;
+            limit_conn per_ip 8;
+            add_header Cache-Control "public, max-age=86400" always;
+            add_header X-Content-Type-Options "nosniff" always;
+        }
+    }
+}

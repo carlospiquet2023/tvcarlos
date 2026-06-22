@@ -1,0 +1,5 @@
+# Playlist da TV Carlos
+# Linhas vazias ou que começam com '#' são ignoradas
+video1.mp4
+video2.mp4
+video3.mp4

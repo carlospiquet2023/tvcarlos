@@ -1,0 +1,16 @@
+.env
+.env.*
+!.env.example
+api/node_modules/
+node_modules/
+api/dist/
+api/coverage/
+playwright-report/
+test-results/
+api/credentials.json
+data/
+storage/
+*.log
+*.tmp
+.DS_Store
+.artifacts/

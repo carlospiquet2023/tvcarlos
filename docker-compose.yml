@@ -1,0 +1,128 @@
+name: tvcarlos
+
+services:
+  media-init:
+    image: alpine:3.22
+    command: >-
+      sh -c "mkdir -p /data/images /data/videos &&
+      cp -n /seed-videos/* /data/videos/ 2>/dev/null || true;
+      chown -R 100:101 /data/images /data/videos"
+    volumes:
+      - ./videos:/seed-videos:ro
+      - image-data:/data/images
+      - video-data:/data/videos
+    restart: "no"
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - backend
+
+  database:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - backend
+
+  admin-api:
+    build:
+      context: ./api
+    env_file:
+      - .env
+    volumes:
+      - image-data:/data/images
+      - video-data:/data/videos
+    tmpfs:
+      - /tmp:size=1g,mode=1777
+    read_only: true
+    depends_on:
+      database:
+        condition: service_healthy
+      media-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - backend
+
+  nginx-rtmp:
+    build:
+      context: ./nginx
+    ports:
+      - "127.0.0.1:1935:1935"
+      - "8082:8080"
+    volumes:
+      - ./site:/usr/share/nginx/html:ro
+      - image-data:/data/images:ro
+      - video-data:/data/videos:ro
+    tmpfs:
+      - /var/cache/nginx/hls:size=512m,mode=1777
+      - /var/lib/nginx/tmp:size=256m,mode=1777
+      - /run/nginx:size=16m,mode=1777
+    read_only: true
+    depends_on:
+      admin-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/api/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - backend
+      - edge
+
+  ffmpeg-loop:
+    build:
+      context: .
+      dockerfile: streamer/Dockerfile
+    environment:
+      LOOP_STREAM_KEY: ${LOOP_STREAM_KEY}
+    volumes:
+      - video-data:/videos:ro
+      - ./playlists:/playlists:ro
+      - ./scripts:/scripts:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    depends_on:
+      nginx-rtmp:
+        condition: service_healthy
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - backend
+
+networks:
+  backend:
+    internal: true
+  edge:
+    internal: false
+
+volumes:
+  postgres-data:
+  image-data:
+  video-data:

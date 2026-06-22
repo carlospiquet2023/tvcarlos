@@ -1,0 +1,61 @@
+:root {
+    color-scheme: light;
+    --surface-page: #eef6f5;
+    --surface-soft: #e4f1f0;
+    --surface-card: rgba(255, 255, 255, .94);
+    --surface-glass: rgba(250, 253, 252, .88);
+    --ink: #193247;
+    --ink-soft: #526d7e;
+    --ink-muted: #748895;
+    --line: #c9dcde;
+    --line-strong: #9fc5ca;
+    --primary: #176b87;
+    --primary-strong: #0d5d75;
+    --primary-soft: #e3f1f3;
+    --teal: #0e8176;
+    --teal-soft: #ddf2ee;
+    --live: #c94e43;
+    --live-soft: #fae8e5;
+    --youtube: #d94343;
+    --shadow-sm: 0 8px 24px rgba(25, 50, 71, .08);
+    --shadow-md: 0 18px 48px rgba(25, 50, 71, .14);
+    --shadow-player: 0 4px 0 #7198a1, 0 14px 34px rgba(25, 50, 71, .24), 0 34px 70px rgba(23, 107, 135, .14);
+    --font-heading: "Segoe UI Variable Display", "Segoe UI", sans-serif;
+    --font-body: "Segoe UI Variable Text", "Segoe UI", sans-serif;
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+    --ticker-height: 52px;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { min-width: 320px; background: var(--surface-page); }
+body { min-height: 100vh; margin: 0; color: var(--ink); font-family: var(--font-body); text-rendering: optimizeLegibility; }
+button, input, textarea, select { color: inherit; font: inherit; }
+button, a { -webkit-tap-highlight-color: transparent; }
+img, video { max-width: 100%; }
+.hidden { display: none !important; }
+
+:focus-visible { outline: 3px solid rgba(23, 107, 135, .28); outline-offset: 2px; }
+
+.client-guard-notice {
+    position: fixed;
+    right: 1rem;
+    bottom: calc(var(--ticker-height) + 1rem);
+    z-index: 1000;
+    padding: .75rem 1rem;
+    color: #fff;
+    background: #193247;
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-md);
+    font-size: .78rem;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity .2s ease, transform .2s ease;
+    pointer-events: none;
+}
+.client-guard-notice.visible { opacity: 1; transform: none; }
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}

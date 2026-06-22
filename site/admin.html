@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#f2f8f7">
+    <title>Central de Operações · TV Carlos</title>
+    <link rel="stylesheet" href="vendor/fontawesome/css/all.min.css">
+    <link rel="stylesheet" href="css/foundation.css">
+    <link rel="stylesheet" href="admin.css">
+</head>
+<body class="auth-loading admin-body">
+    <div class="admin-shell">
+        <aside class="admin-sidebar" aria-label="Navegação administrativa">
+            <a class="admin-brand" href="#overview" aria-label="Central de Operações TV Carlos">
+                <span class="admin-brand-mark"><i class="fa-solid fa-tv"></i></span>
+                <span><strong>TV Carlos</strong><small>Central de Operações</small></span>
+            </a>
+
+            <nav class="admin-nav" id="admin-nav">
+                <a href="#overview" data-view="overview" class="active"><i class="fa-solid fa-gauge-high"></i><span>Visão geral</span></a>
+                <a href="#identity" data-view="identity"><i class="fa-regular fa-image"></i><span>Marca e sinal</span></a>
+                <a href="#navigation" data-view="navigation"><i class="fa-solid fa-bars"></i><span>Menu do site</span><b id="nav-header-link-count">0</b></a>
+                <a href="#programs" data-view="programs"><i class="fa-solid fa-clapperboard"></i><span>Vídeos</span><b id="nav-program-count">0</b></a>
+                <a href="#ticker" data-view="ticker"><i class="fa-regular fa-message"></i><span>Giro de notícias</span><b id="nav-news-count">0</b></a>
+                <a href="#partners" data-view="partners"><i class="fa-solid fa-handshake"></i><span>Parceiros</span><b id="nav-partner-count">0</b></a>
+                <a href="#security" data-view="security"><i class="fa-solid fa-shield-halved"></i><span>Segurança</span></a>
+            </nav>
+
+            <div class="admin-sidebar-footer">
+                <span class="admin-user-avatar"><i class="fa-regular fa-user"></i></span>
+                <span><strong id="sidebar-username">Administrador</strong><small>Sessão protegida</small></span>
+            </div>
+        </aside>
+
+        <main class="admin-main">
+            <header class="admin-topbar">
+                <div>
+                    <p class="admin-eyebrow">PAINEL ADMINISTRATIVO</p>
+                    <h1 id="view-title">Visão geral</h1>
+                </div>
+                <div class="admin-topbar-actions">
+                    <button class="admin-icon-button" id="refresh-admin-btn" type="button" title="Atualizar dados" aria-label="Atualizar dados"><i class="fa-solid fa-rotate"></i></button>
+                    <a class="admin-btn secondary compact" href="index.html" target="_blank" rel="noopener"><i class="fa-solid fa-arrow-up-right-from-square"></i><span>Abrir TV</span></a>
+                    <button class="admin-btn danger compact" id="logout-btn" type="button"><i class="fa-solid fa-power-off"></i><span>Sair</span></button>
+                </div>
+            </header>
+
+            <div class="admin-content">
+                <section class="admin-view active" id="view-overview" data-title="Visão geral">
+                    <div class="view-heading">
+                        <div><span class="section-kicker">OPERAÇÃO EM TEMPO REAL</span><h2>Estado da Web TV</h2><p>Conteúdo, sinal e segurança reunidos em uma única visão.</p></div>
+                        <span class="sync-label" id="last-sync">Atualizando…</span>
+                    </div>
+
+                    <div class="metric-grid">
+                        <article class="metric-card"><span class="metric-icon blue"><i class="fa-solid fa-clapperboard"></i></span><div><strong id="stat-programs">0</strong><span>vídeos cadastrados</span></div></article>
+                        <article class="metric-card"><span class="metric-icon teal"><i class="fa-regular fa-message"></i></span><div><strong id="stat-news">0</strong><span>notícias no giro</span></div></article>
+                        <article class="metric-card"><span class="metric-icon coral"><i class="fa-solid fa-handshake"></i></span><div><strong id="stat-partners">0</strong><span>parceiros comerciais</span></div></article>
+                    </div>
+
+                    <div class="admin-grid two-columns">
+                        <article class="admin-card">
+                            <div class="card-heading"><div><span class="section-kicker">INFRAESTRUTURA</span><h3>Status operacional</h3></div><i class="fa-solid fa-tower-broadcast"></i></div>
+                            <div class="status-list">
+                                <div><span><i class="fa-solid fa-server"></i> API e banco</span><strong class="status-pill checking" id="api-status">Verificando</strong></div>
+                                <div><span><i class="fa-solid fa-satellite-dish"></i> Sinal OBS</span><strong class="status-pill checking" id="stream-status">Verificando</strong></div>
+                                <div><span><i class="fa-solid fa-repeat"></i> Programação 24h</span><strong class="status-pill checking" id="loop-status">Verificando</strong></div>
+                                <div><span><i class="fa-regular fa-clock"></i> Sessão administrativa</span><strong class="status-pill neutral" id="session-status">—</strong></div>
+                            </div>
+                        </article>
+
+                        <article class="admin-card">
+                            <div class="card-heading"><div><span class="section-kicker">ATALHOS</span><h3>Ações frequentes</h3></div><i class="fa-solid fa-bolt"></i></div>
+                            <div class="quick-actions">
+                                <button type="button" data-go="programs"><i class="fa-solid fa-plus"></i><span><strong>Novo vídeo</strong><small>Upload, URL ou YouTube</small></span></button>
+                                <button type="button" data-go="ticker"><i class="fa-regular fa-message"></i><span><strong>Publicar notícia</strong><small>Atualizar o rodapé da TV</small></span></button>
+                                <button type="button" data-go="partners"><i class="fa-solid fa-handshake"></i><span><strong>Novo parceiro</strong><small>Ativar espaço comercial</small></span></button>
+                            </div>
+                        </article>
+                    </div>
+
+                    <article class="admin-card">
+                        <div class="card-heading"><div><span class="section-kicker">RASTREABILIDADE</span><h3>Atividade recente</h3></div><i class="fa-solid fa-clock-rotate-left"></i></div>
+                        <div class="audit-list" id="audit-list"><div class="admin-empty">Carregando histórico…</div></div>
+                    </article>
+                </section>
+
+                <section class="admin-view" id="view-identity" data-title="Marca e sinal">
+                    <div class="view-heading"><div><span class="section-kicker">IDENTIDADE EDITORIAL</span><h2>Marca e textos da TV</h2><p>Tudo o que aparece na tela pública é configurado aqui.</p></div></div>
+                    <form id="branding-form" class="admin-form">
+                        <div class="admin-grid two-columns align-start">
+                            <article class="admin-card">
+                                <div class="card-heading"><div><h3>Identidade da emissora</h3><p>Cabeçalho, marca d’água e logo do player.</p></div></div>
+                                <div class="form-group"><label for="company-name-input">Nome da emissora</label><input type="text" id="company-name-input" class="form-control" maxlength="160" required></div>
+                                <div class="form-group"><label for="tagline-input">Assinatura do cabeçalho</label><input type="text" id="tagline-input" class="form-control" maxlength="160" required><small>Exemplo: SINAL INDEPENDENTE · BRASIL</small></div>
+                                <div class="form-group"><label for="watermark-input">Marca d’água sobre o vídeo</label><input type="text" id="watermark-input" class="form-control" maxlength="300"><small>Use um texto curto; proteção absoluta exige DRM.</small></div>
+                                <div class="form-group"><label for="logo-text-input">Texto alternativo do logo</label><input type="text" id="logo-text-input" class="form-control" maxlength="160"></div>
+                                <div class="form-group">
+                                    <label for="logo-url-input">Imagem principal do logo</label>
+                                    <div class="upload-field"><input type="text" id="logo-url-input" class="form-control" placeholder="URL HTTPS ou imagem enviada"><label class="admin-btn secondary upload-button"><i class="fa-solid fa-upload"></i> Enviar<input type="file" id="logo-file-upload" accept="image/*"></label></div>
+                                    <span class="field-status" id="logo-upload-status"></span>
+                                </div>
+                                <div class="brand-preview"><span>Prévia</span><div><img id="brand-preview-image" alt="Prévia do logo" class="hidden"><strong id="brand-preview-text">TV Carlos</strong></div></div>
+                            </article>
+
+                            <article class="admin-card">
+                                <div class="card-heading"><div><h3>Textos de navegação</h3><p>Títulos estruturais da página pública.</p></div></div>
+                                <div class="form-group"><label for="schedule-title-input">Título da lista lateral</label><input type="text" id="schedule-title-input" class="form-control" maxlength="160" required></div>
+                                <div class="form-grid">
+                                    <div class="form-group"><label for="ticker-label-input">Nome do giro</label><input type="text" id="ticker-label-input" class="form-control" maxlength="80" required></div>
+                                    <div class="form-group"><label for="partner-label-input">Selo comercial</label><input type="text" id="partner-label-input" class="form-control" maxlength="80" required></div>
+                                </div>
+                                <div class="form-divider"><span>Sinal ao vivo via OBS</span></div>
+                                <div class="form-group"><label for="live-title-input">Título ao vivo</label><input type="text" id="live-title-input" class="form-control" maxlength="160" required></div>
+                                <div class="form-group"><label for="live-desc-input">Descrição ao vivo</label><textarea id="live-desc-input" class="form-control" maxlength="300" rows="3"></textarea></div>
+                                <div class="form-divider"><span>Programação automática</span></div>
+                                <div class="form-group"><label for="loop-title-input">Título da programação 24h</label><input type="text" id="loop-title-input" class="form-control" maxlength="160" required></div>
+                                <div class="form-group"><label for="loop-desc-input">Descrição da programação 24h</label><textarea id="loop-desc-input" class="form-control" maxlength="300" rows="3"></textarea></div>
+                            </article>
+                        </div>
+                        <article class="admin-card">
+                            <div class="card-heading"><div><h3>Titularidade e contato legal</h3><p>Identificação oficial exibida nos termos, privacidade e rodapé público.</p></div><i class="fa-solid fa-scale-balanced"></i></div>
+                            <div class="form-grid">
+                                <div class="form-group"><label for="legal-name-input">Titular responsável</label><input type="text" id="legal-name-input" class="form-control" maxlength="180" required></div>
+                                <div class="form-group"><label for="legal-email-input">E-mail de contato</label><input type="email" id="legal-email-input" class="form-control" maxlength="254" required></div>
+                                <div class="form-group"><label for="legal-cnpj-input">CNPJ</label><input type="text" id="legal-cnpj-input" class="form-control" maxlength="18" required></div>
+                                <div class="form-group"><label for="legal-phone-input">Telefone</label><input type="text" id="legal-phone-input" class="form-control" maxlength="30" required></div>
+                            </div>
+                            <div class="form-group"><label for="legal-city-input">Cidade e estado</label><input type="text" id="legal-city-input" class="form-control" maxlength="120" required></div>
+                        </article>
+                        <div class="sticky-form-actions"><span id="branding-save-state">Nenhuma alteração pendente</span><button class="admin-btn primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Salvar marca e sinal</button></div>
+                    </form>
+                </section>
+
+                <section class="admin-view" id="view-navigation" data-title="Menu do site">
+                    <div class="view-heading"><div><span class="section-kicker">NAVEGAÇÃO PÚBLICA</span><h2>Botões do cabeçalho</h2><p>Configure até quatro destinos. No celular, eles aparecem dentro do menu hamburger.</p></div></div>
+                    <div class="admin-grid editor-layout">
+                        <article class="admin-card editor-card">
+                            <div class="card-heading"><div><h3 id="header-link-form-title">Adicionar botão</h3><p>Use uma página interna ou uma URL HTTPS.</p></div></div>
+                            <form id="add-header-link-form" class="admin-form">
+                                <div class="form-group"><label for="header-link-name-input">Nome do botão</label><input type="text" id="header-link-name-input" class="form-control" maxlength="40" required placeholder="Ex.: Notícias"></div>
+                                <div class="form-group"><label for="header-link-url-input">Destino</label><input type="text" id="header-link-url-input" class="form-control" maxlength="2048" required placeholder="noticias.html ou https://site.com.br"></div>
+                                <div class="security-note"><i class="fa-solid fa-mobile-screen-button"></i><div><strong>Responsivo por padrão</strong><p>Em telas grandes será um botão no cabeçalho. No celular ficará dentro do menu indicado pelo ícone de três linhas.</p></div></div>
+                                <div class="form-actions"><button class="admin-btn primary" id="header-link-submit-btn" type="submit"><i class="fa-solid fa-plus"></i> Adicionar botão</button><button class="admin-btn secondary hidden" id="header-link-cancel-btn" type="button">Cancelar edição</button></div>
+                            </form>
+                        </article>
+                        <article class="admin-card list-card">
+                            <div class="card-heading"><div><h3>Menu ativo</h3><p>A ordem abaixo será usada no computador e no celular.</p></div><span class="count-chip" id="header-link-list-count">0 de 4</span></div>
+                            <div class="resource-list" id="active-header-links-list"><div class="admin-empty">Carregando botões…</div></div>
+                        </article>
+                    </div>
+                </section>
+
+                <section class="admin-view" id="view-programs" data-title="Vídeos">
+                    <div class="view-heading"><div><span class="section-kicker">PROGRAMAÇÃO</span><h2>Vídeos da página lateral</h2><p>Crie, edite e defina a ordem exibida ao público.</p></div></div>
+                    <div class="admin-grid editor-layout">
+                        <article class="admin-card editor-card">
+                            <div class="card-heading"><div><h3 id="program-form-title">Adicionar vídeo</h3><p>Arquivo próprio, URL HTTPS ou YouTube.</p></div></div>
+                            <form id="add-program-form" class="admin-form">
+                                <div class="form-group"><label for="program-title">Título</label><input type="text" id="program-title" class="form-control" maxlength="160" required></div>
+                                <div class="form-group"><label for="program-desc">Descrição</label><textarea id="program-desc" class="form-control" maxlength="500" rows="3"></textarea></div>
+                                <div class="form-group">
+                                    <label for="program-video">Fonte do vídeo</label>
+                                    <div class="upload-field"><input type="text" id="program-video" class="form-control" required placeholder="https://youtu.be/... ou arquivo"><label class="admin-btn secondary upload-button"><i class="fa-solid fa-upload"></i> Enviar<input type="file" id="program-video-upload" accept="video/*"></label></div>
+                                    <span class="field-status" id="program-video-upload-status"></span><small class="source-status" id="program-source-status">Aceita vídeo enviado, URL HTTPS e links do YouTube.</small>
+                                </div>
+                                <div class="form-actions"><button class="admin-btn primary" id="program-submit-btn" type="submit"><i class="fa-solid fa-plus"></i> Adicionar vídeo</button><button class="admin-btn secondary hidden" id="program-cancel-btn" type="button">Cancelar edição</button></div>
+                            </form>
+                        </article>
+                        <article class="admin-card list-card">
+                            <div class="card-heading"><div><h3>Ordem de exibição</h3><p>Use as setas para definir a sequência.</p></div><span class="count-chip" id="program-list-count">0 itens</span></div>
+                            <div class="resource-list" id="active-programs-list"><div class="admin-empty">Carregando vídeos…</div></div>
+                        </article>
+                    </div>
+                </section>
+
+                <section class="admin-view" id="view-ticker" data-title="Giro de notícias">
+                    <div class="view-heading"><div><span class="section-kicker">RODAPÉ INFORMATIVO</span><h2>Giro de notícias</h2><p>Mensagens que percorrem a faixa inferior da Web TV.</p></div></div>
+                    <div class="admin-grid editor-layout">
+                        <article class="admin-card editor-card">
+                            <div class="card-heading"><div><h3 id="news-form-title">Publicar notícia</h3><p>Escreva de forma curta e objetiva.</p></div></div>
+                            <form id="add-news-form" class="admin-form">
+                                <div class="form-group"><label for="news-input">Texto da notícia ou aviso</label><textarea id="news-input" class="form-control" maxlength="500" rows="5" required></textarea><div class="character-counter"><span id="news-char-count">0</span>/500</div></div>
+                                <div class="form-actions"><button class="admin-btn primary" id="news-submit-btn" type="submit"><i class="fa-solid fa-paper-plane"></i> Publicar no giro</button><button class="admin-btn secondary hidden" id="news-cancel-btn" type="button">Cancelar edição</button></div>
+                            </form>
+                        </article>
+                        <article class="admin-card list-card">
+                            <div class="card-heading"><div><h3>Notícias ativas</h3><p>A ordem abaixo é a ordem do giro.</p></div><span class="count-chip" id="news-list-count">0 itens</span></div>
+                            <div class="resource-list" id="active-news-list"><div class="admin-empty">Carregando notícias…</div></div>
+                        </article>
+                    </div>
+                </section>
+
+                <section class="admin-view" id="view-partners" data-title="Parceiros">
+                    <div class="view-heading"><div><span class="section-kicker">INVENTÁRIO COMERCIAL</span><h2>Parceiros e patrocinadores</h2><p>Logos exibidos em carrossel automático abaixo da programação lateral.</p></div></div>
+                    <div class="admin-grid editor-layout">
+                        <article class="admin-card editor-card">
+                            <div class="card-heading"><div><h3 id="partner-form-title">Adicionar parceiro</h3><p>O link comercial é opcional e abre em nova guia.</p></div></div>
+                            <form id="add-partner-form" class="admin-form">
+                                <div class="form-group"><label for="partner-name-input">Nome comercial</label><input type="text" id="partner-name-input" class="form-control" maxlength="160" required></div>
+                                <div class="form-group"><label for="partner-destination-input">Site do parceiro</label><input type="url" id="partner-destination-input" class="form-control" placeholder="https://parceiro.com.br"></div>
+                                <div class="form-group">
+                                    <label for="partner-logo-input">Logo</label>
+                                    <div class="upload-field"><input type="text" id="partner-logo-input" class="form-control" required placeholder="URL HTTPS ou imagem enviada"><label class="admin-btn secondary upload-button"><i class="fa-solid fa-upload"></i> Enviar<input type="file" id="partner-logo-upload" accept="image/*"></label></div>
+                                    <span class="field-status" id="partner-logo-upload-status"></span>
+                                </div>
+                                <div class="partner-form-preview"><img id="partner-preview-image" alt="Prévia do parceiro" class="hidden"><span id="partner-preview-placeholder"><i class="fa-regular fa-image"></i> Prévia do logo</span></div>
+                                <div class="form-actions"><button class="admin-btn primary" id="partner-submit-btn" type="submit"><i class="fa-solid fa-plus"></i> Adicionar parceiro</button><button class="admin-btn secondary hidden" id="partner-cancel-btn" type="button">Cancelar edição</button></div>
+                            </form>
+                        </article>
+                        <article class="admin-card list-card">
+                            <div class="card-heading"><div><h3>Parceiros ativos</h3><p>Defina a ordem do carrossel comercial.</p></div><span class="count-chip" id="partner-list-count">0 itens</span></div>
+                            <div class="resource-list" id="active-partners-list"><div class="admin-empty">Carregando parceiros…</div></div>
+                        </article>
+                    </div>
+                </section>
+
+                <section class="admin-view" id="view-security" data-title="Segurança">
+                    <div class="view-heading"><div><span class="section-kicker">ACESSO ADMINISTRATIVO</span><h2>Segurança da conta</h2><p>Altere as credenciais com confirmação da senha atual.</p></div></div>
+                    <div class="admin-grid two-columns align-start">
+                        <article class="admin-card">
+                            <div class="security-note"><i class="fa-solid fa-shield-halved"></i><div><strong>Proteções ativas</strong><p>Sessão HttpOnly, CSRF, Argon2id, limitação de tentativas, auditoria e cabeçalhos de segurança.</p></div></div>
+                            <div class="status-list compact-list"><div><span>Usuário atual</span><strong id="security-current-user">—</strong></div><div><span>Expiração da sessão</span><strong id="security-session-expiry">—</strong></div></div>
+                        </article>
+                        <article class="admin-card">
+                            <div class="card-heading"><div><h3>Alterar usuário e senha</h3><p>A alteração encerra todas as sessões existentes.</p></div></div>
+                            <form id="credentials-form" class="admin-form">
+                                <div class="form-group"><label for="current-password-input">Senha atual</label><input type="password" id="current-password-input" class="form-control" required autocomplete="current-password"></div>
+                                <div class="form-group"><label for="new-username-input">Novo usuário</label><input type="text" id="new-username-input" class="form-control" minlength="3" maxlength="80" required autocomplete="username"></div>
+                                <div class="form-group"><label for="new-password-input">Nova frase-senha</label><div class="password-field"><input type="password" id="new-password-input" class="form-control" minlength="14" maxlength="128" required autocomplete="new-password"><button type="button" id="toggle-new-password" aria-label="Mostrar ou ocultar senha"><i class="fa-regular fa-eye"></i></button></div><span class="password-rule" id="rule-length"><i class="fa-regular fa-circle"></i> Mínimo de 14 caracteres</span></div>
+                                <div class="form-group"><label for="confirm-password-input">Confirmar nova senha</label><div class="password-field"><input type="password" id="confirm-password-input" class="form-control" required autocomplete="new-password"><button type="button" id="toggle-confirm-password" aria-label="Mostrar ou ocultar confirmação"><i class="fa-regular fa-eye"></i></button></div><span class="password-rule" id="rule-match"><i class="fa-regular fa-circle"></i> As senhas devem ser iguais</span></div>
+                                <button class="admin-btn primary full-width" id="save-credentials-btn" type="submit" disabled><i class="fa-solid fa-key"></i> Atualizar credenciais</button>
+                            </form>
+                        </article>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>
+    <dialog class="confirm-dialog" id="confirm-dialog">
+        <form method="dialog">
+            <span class="confirm-icon"><i class="fa-regular fa-trash-can"></i></span>
+            <h2>Confirmar remoção</h2>
+            <p id="confirm-message">Deseja remover este item?</p>
+            <div class="form-actions"><button class="admin-btn secondary" value="cancel">Cancelar</button><button class="admin-btn danger" id="confirm-action-btn" value="confirm">Remover</button></div>
+        </form>
+    </dialog>
+
+    <script type="module" src="admin.js"></script>
+</body>
+</html>
