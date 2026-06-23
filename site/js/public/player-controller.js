@@ -9,7 +9,9 @@ export function createPlayerController({ state, onPlaybackChange }) {
     const wrapper = document.querySelector('.player-wrapper');
     if (!wrapper) throw new Error('Elemento obrigatório ausente: .player-wrapper');
     const youtube = requiredElement('youtube-player');
+    const youtubeTray = requiredElement('youtube-control-tray');
     const youtubeControl = requiredElement('youtube-overlay-control');
+    const youtubeVolumeControl = requiredElement('youtube-volume-control');
     const statusBadge = requiredElement('status-badge');
     const statusText = requiredElement('status-text');
     const progressContainer = requiredElement('progress-container');
@@ -17,12 +19,26 @@ export function createPlayerController({ state, onPlaybackChange }) {
     const modeLabel = requiredElement('player-mode-label');
     let hls = null;
     let youtubePlaying = false;
+    let youtubeMuted = false;
 
     function initialize() {
         bindControls();
-        requiredElement('video-protection-overlay').addEventListener('click', togglePlayback);
+        requiredElement('video-protection-overlay').addEventListener('click', (event) => {
+            if (event.target instanceof Element && event.target.closest('.youtube-control-tray')) return;
+            togglePlayback();
+        });
+        youtubeControl.addEventListener('click', (event) => {
+            event.stopPropagation();
+            togglePlayback();
+        });
+        youtubeVolumeControl.addEventListener('click', (event) => {
+            event.stopPropagation();
+            toggleYouTubeMute();
+        });
         youtube.addEventListener('load', () => {
-            if (state.currentSource === 'youtube' && youtubePlaying) sendYouTubeCommand('playVideo');
+            if (state.currentSource !== 'youtube') return;
+            sendYouTubeCommand(youtubeMuted ? 'mute' : 'unMute');
+            if (youtubePlaying) sendYouTubeCommand('playVideo');
         });
     }
 
@@ -97,8 +113,10 @@ export function createPlayerController({ state, onPlaybackChange }) {
         youtube.classList.remove('hidden');
         wrapper.classList.add('youtube-active');
         youtubePlaying = false;
-        youtubeControl.classList.remove('hidden');
+        youtubeMuted = false;
+        youtubeTray.classList.remove('hidden');
         updateYouTubeControl();
+        updateYouTubeVolumeControl();
         progressContainer.classList.add('hidden');
         updateRail('youtube');
         refreshPresentation();
@@ -203,7 +221,8 @@ export function createPlayerController({ state, onPlaybackChange }) {
         youtube.classList.add('hidden');
         wrapper.classList.remove('youtube-active');
         youtubePlaying = false;
-        youtubeControl.classList.add('hidden');
+        youtubeMuted = false;
+        youtubeTray.classList.add('hidden');
     }
 
     function togglePlayback() {
@@ -216,14 +235,29 @@ export function createPlayerController({ state, onPlaybackChange }) {
         }
     }
 
-    function sendYouTubeCommand(command) {
-        youtube.contentWindow?.postMessage(JSON.stringify({ event: 'command', func: command, args: [] }), 'https://www.youtube-nocookie.com');
+    function toggleYouTubeMute() {
+        if (state.currentSource !== 'youtube') return;
+        youtubeMuted = !youtubeMuted;
+        sendYouTubeCommand(youtubeMuted ? 'mute' : 'unMute');
+        if (!youtubeMuted) sendYouTubeCommand('setVolume', [75]);
+        updateYouTubeVolumeControl();
+    }
+
+    function sendYouTubeCommand(command, args = []) {
+        youtube.contentWindow?.postMessage(JSON.stringify({ event: 'command', func: command, args }), 'https://www.youtube-nocookie.com');
     }
 
     function updateYouTubeControl() {
-        const label = youtubePlaying ? 'Pausar conteúdo' : 'Reproduzir conteúdo';
+        const label = youtubePlaying ? 'Pausar' : 'Reproduzir';
         youtubeControl.setAttribute('aria-label', label);
         youtubeControl.replaceChildren(icon(youtubePlaying ? 'fa-solid fa-pause' : 'fa-solid fa-play'), element('span', { text: label }));
+    }
+
+    function updateYouTubeVolumeControl() {
+        const label = youtubeMuted ? 'Ativar som' : 'Silenciar';
+        youtubeVolumeControl.setAttribute('aria-label', label);
+        youtubeVolumeControl.setAttribute('title', label);
+        youtubeVolumeControl.replaceChildren(icon(youtubeMuted ? 'fa-solid fa-volume-xmark' : 'fa-solid fa-volume-high'), element('span', { text: label }));
     }
 
     function bindControls() {

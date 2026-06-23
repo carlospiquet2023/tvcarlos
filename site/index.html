@@ -63,10 +63,16 @@
 
                     <!-- Camada de Proteção contra Cópia e Download -->
                     <div id="video-protection-overlay" class="video-protection-overlay">
-                        <button id="youtube-overlay-control" class="youtube-overlay-control hidden" type="button" aria-label="Reproduzir vídeo do YouTube">
-                            <i class="fa-solid fa-play" aria-hidden="true"></i>
-                            <span>Reproduzir conteúdo</span>
-                        </button>
+                        <div id="youtube-control-tray" class="youtube-control-tray hidden" aria-label="Controles do vídeo do YouTube">
+                            <button id="youtube-overlay-control" class="youtube-overlay-control" type="button" aria-label="Reproduzir vídeo do YouTube">
+                                <i class="fa-solid fa-play" aria-hidden="true"></i>
+                                <span>Reproduzir</span>
+                            </button>
+                            <button id="youtube-volume-control" class="youtube-overlay-control youtube-volume-control" type="button" aria-label="Controlar som do YouTube" title="Controlar som">
+                                <i class="fa-solid fa-volume-high" aria-hidden="true"></i>
+                                <span>Som</span>
+                            </button>
+                        </div>
                     </div>
 
                     <!-- Marca d'Água Bouncing de Segurança -->

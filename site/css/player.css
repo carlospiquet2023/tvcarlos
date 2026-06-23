@@ -5,7 +5,11 @@
 .youtube-player { position: absolute; inset: 6px; z-index: 4; width: calc(100% - 12px); height: calc(100% - 12px); background: #000; border: 0; border-radius: 7px; }
 .player-wrapper.youtube-active #tv-player, .player-wrapper.youtube-active .player-watermark, .player-wrapper.youtube-active .player-logo-overlay, .player-wrapper.youtube-active .unmute-banner, .player-wrapper.youtube-active .custom-controls { display: none; }
 .video-protection-overlay { position: absolute; inset: 6px; z-index: 16; overflow: hidden; background: linear-gradient(145deg, rgba(255,255,255,.025), transparent 42%); border: 1px solid rgba(255,255,255,.08); border-radius: 7px; cursor: pointer; }
-.youtube-overlay-control { position: absolute; top: 50%; left: 50%; display: inline-flex; align-items: center; gap: .5rem; padding: .75rem 1rem; color: #fff; background: rgba(15, 45, 59, .88); border: 1px solid rgba(255,255,255,.28); border-radius: 6px; box-shadow: 0 12px 30px rgba(0,0,0,.28); transform: translate(-50%, -50%); cursor: pointer; }
+.youtube-control-tray { position: absolute; left: 16px; bottom: 16px; z-index: 3; display: inline-flex; align-items: center; gap: .45rem; }
+.youtube-overlay-control { min-height: 40px; display: inline-flex; align-items: center; gap: .45rem; padding: .65rem .78rem; color: #fff; background: rgba(15, 45, 59, .9); border: 1px solid rgba(255,255,255,.28); border-radius: 6px; box-shadow: 0 12px 30px rgba(0,0,0,.28); cursor: pointer; }
+.youtube-overlay-control:hover { background: rgba(15, 45, 59, .98); }
+.youtube-volume-control { width: 40px; justify-content: center; padding-inline: 0; }
+.youtube-volume-control span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .player-watermark { position: absolute; top: 18%; left: 7%; z-index: 17; color: rgba(255,255,255,.13); font-size: .58rem; font-weight: 850; letter-spacing: .12em; pointer-events: none; animation: watermark-drift 18s ease-in-out infinite alternate; }
 @keyframes watermark-drift { 0% { top: 18%; left: 7%; } 50% { top: 66%; left: 42%; } 100% { top: 28%; left: 68%; } }
 .player-logo-overlay { position: absolute; right: 16px; bottom: 16px; z-index: 18; min-width: 60px; min-height: 34px; display: grid; place-items: center; padding: .35rem .5rem; color: var(--ink); background: rgba(255,255,255,.86); border: 1px solid rgba(255,255,255,.55); border-radius: 4px; box-shadow: 0 8px 20px rgba(0,0,0,.18); pointer-events: none; }
