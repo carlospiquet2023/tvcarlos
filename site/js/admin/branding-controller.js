@@ -8,6 +8,7 @@ const FIELDS = Object.freeze({
     'company-name-input': 'companyName', 'tagline-input': 'tagline', 'watermark-input': 'watermarkText',
     'logo-text-input': 'logoText', 'logo-url-input': 'logoUrl', 'schedule-title-input': 'scheduleTitle',
     'ticker-label-input': 'tickerLabel', 'partner-label-input': 'partnerLabel', 'live-title-input': 'liveTitle',
+    'live-source-input': 'liveSource', 'live-youtube-url-input': 'liveYoutubeUrl',
     'live-desc-input': 'liveDescription', 'loop-title-input': 'loopTitle', 'loop-desc-input': 'loopDescription',
     'legal-name-input': 'legalName', 'legal-email-input': 'legalEmail', 'legal-cnpj-input': 'legalCnpj',
     'legal-city-input': 'legalCity', 'legal-phone-input': 'legalPhone',
@@ -19,7 +20,9 @@ export function createBrandingAdminController({ onMutation }) {
         form.addEventListener('input', () => {
             byId('branding-save-state').textContent = 'Alterações ainda não salvas';
             updatePreview();
+            updateLiveSourceFields();
         });
+        byId('live-source-input').addEventListener('change', updateLiveSourceFields);
         form.addEventListener('submit', save);
         bindUpload({
             fileId: 'logo-file-upload', targetId: 'logo-url-input', statusId: 'logo-upload-status',
@@ -33,6 +36,7 @@ export function createBrandingAdminController({ onMutation }) {
         adminState.branding = await apiJson(ENDPOINTS.branding);
         Object.entries(FIELDS).forEach(([id, key]) => { byId(id).value = adminState.branding[key] || ''; });
         byId('branding-save-state').textContent = 'Nenhuma alteração pendente';
+        updateLiveSourceFields();
         updatePreview();
     }
 
@@ -41,6 +45,7 @@ export function createBrandingAdminController({ onMutation }) {
         const form = event.currentTarget;
         setBusy(form, true);
         const payload = Object.fromEntries(Object.entries(FIELDS).map(([id, key]) => [key, byId(id).value.trim()]));
+        if (payload.liveSource !== 'youtube') payload.liveYoutubeUrl = '';
         try {
             adminState.branding = await apiJson(ENDPOINTS.branding, jsonRequest('PUT', payload));
             byId('branding-save-state').textContent = 'Configurações salvas';
@@ -62,6 +67,16 @@ export function createBrandingAdminController({ onMutation }) {
         text.classList.toggle('hidden', Boolean(url));
         if (url) image.src = url;
         image.onerror = () => { image.classList.add('hidden'); text.classList.remove('hidden'); };
+    }
+
+    function updateLiveSourceFields() {
+        const source = byId('live-source-input').value;
+        const input = byId('live-youtube-url-input');
+        const group = byId('live-youtube-url-group');
+        const usesYouTube = source === 'youtube';
+        input.required = usesYouTube;
+        input.disabled = !usesYouTube;
+        group.style.opacity = usesYouTube ? '1' : '.58';
     }
 
     return { initialize, load };

@@ -165,4 +165,16 @@ export async function migrate(database: Database): Promise<void> {
       await transaction.insertInto('app_migrations').values({ version: 3, applied_at: new Date() }).execute();
     });
   }
+
+  if (!versions.has(4)) {
+    await database.transaction().execute(async (transaction) => {
+      await transaction.schema
+        .alterTable('branding')
+        .addColumn('live_source', 'varchar(20)', (column) => column.notNull().defaultTo('obs'))
+        .addColumn('live_youtube_url', 'varchar(2048)', (column) => column.notNull().defaultTo(''))
+        .execute();
+
+      await transaction.insertInto('app_migrations').values({ version: 4, applied_at: new Date() }).execute();
+    });
+  }
 }

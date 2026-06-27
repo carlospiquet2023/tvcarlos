@@ -35,10 +35,10 @@ async function initialize() {
     navigation.initialize();
     ticker.start();
     player.playHls('loop');
+    await branding.load();
 
     await Promise.allSettled([
         schedule.load(),
-        branding.load(),
         navigation.load(),
         partners.load(),
         player.checkLive(),

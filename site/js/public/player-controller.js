@@ -100,6 +100,33 @@ export function createPlayerController({ state, onPlaybackChange }) {
         onPlaybackChange();
     }
 
+    function playYouTubeLive(embedUrl) {
+        if (state.currentSource === 'youtube-live' && youtube.src === embedUrl) {
+            refreshPresentation();
+            return;
+        }
+        destroyHls();
+        state.currentSource = 'youtube-live';
+        state.activeProgram = null;
+        video.pause();
+        video.removeAttribute('src');
+        video.load();
+        video.loop = false;
+        youtube.src = embedUrl;
+        youtube.title = `YouTube Live — ${state.branding.liveTitle}`;
+        youtube.classList.remove('hidden');
+        wrapper.classList.add('youtube-active');
+        youtubePlaying = false;
+        youtubeMuted = false;
+        youtubeTray.classList.remove('hidden');
+        updateYouTubeControl();
+        updateYouTubeVolumeControl();
+        progressContainer.classList.add('hidden');
+        updateRail('youtube-live');
+        refreshPresentation();
+        onPlaybackChange();
+    }
+
     function playYouTube(program, embedUrl) {
         destroyHls();
         state.currentSource = 'youtube';
@@ -126,6 +153,7 @@ export function createPlayerController({ state, onPlaybackChange }) {
     async function returnToLinear() {
         if (!isOnDemand(state)) {
             if (state.currentSource === 'live' && hls?.liveSyncPosition) video.currentTime = hls.liveSyncPosition;
+            if (state.currentSource === 'loop') await checkLive();
             return;
         }
         deactivateYouTube();
@@ -137,6 +165,14 @@ export function createPlayerController({ state, onPlaybackChange }) {
     }
 
     async function checkLive() {
+        const liveYouTubeUrl = getLiveYouTubeEmbedUrl();
+        if (liveYouTubeUrl) {
+            state.isLiveOnline = true;
+            if (!isOnDemand(state)) playYouTubeLive(liveYouTubeUrl);
+            onPlaybackChange();
+            return true;
+        }
+
         const controller = new AbortController();
         const timeout = window.setTimeout(() => controller.abort(), 4_000);
         let online;
@@ -173,6 +209,10 @@ export function createPlayerController({ state, onPlaybackChange }) {
             statusBadge.className = 'badge badge-youtube';
             statusText.textContent = 'YOUTUBE';
             updateNowPlaying('CONTEÚDO COMPLEMENTAR', state.activeProgram.title, programDescription('Vídeo do YouTube.'));
+        } else if (source === 'youtube-live') {
+            statusBadge.className = 'badge badge-live';
+            statusText.textContent = 'AO VIVO';
+            updateNowPlaying('TRANSMISSÃO AO VIVO', state.branding.liveTitle, state.branding.liveDescription);
         }
     }
 
@@ -190,8 +230,14 @@ export function createPlayerController({ state, onPlaybackChange }) {
         const labels = {
             live: ['SINAL AO VIVO', 'TEMPO REAL'], loop: ['PROGRAMAÇÃO 24H', 'FLUXO CONTÍNUO'],
             vod: ['VÍDEO SELECIONADO', 'SOB DEMANDA'], youtube: ['VÍDEO DO YOUTUBE', 'CONTEÚDO EXTERNO'],
+            'youtube-live': ['SINAL AO VIVO', 'YOUTUBE LIVE'],
         };
         [sourceLabel.textContent, modeLabel.textContent] = labels[sourceType] || labels.loop;
+    }
+
+    function getLiveYouTubeEmbedUrl() {
+        if (state.branding.liveSource !== 'youtube') return null;
+        return buildYouTubeEmbedUrl(state.branding.liveYoutubeUrl);
     }
 
     function synchronizeLiveEdge(sourceType) {
@@ -226,7 +272,7 @@ export function createPlayerController({ state, onPlaybackChange }) {
     }
 
     function togglePlayback() {
-        if (state.currentSource === 'youtube') {
+        if (isYouTubeSource()) {
             youtubePlaying = !youtubePlaying;
             sendYouTubeCommand(youtubePlaying ? 'playVideo' : 'pauseVideo');
             updateYouTubeControl();
@@ -236,7 +282,7 @@ export function createPlayerController({ state, onPlaybackChange }) {
     }
 
     function toggleYouTubeMute() {
-        if (state.currentSource !== 'youtube') return;
+        if (!isYouTubeSource()) return;
         youtubeMuted = !youtubeMuted;
         sendYouTubeCommand(youtubeMuted ? 'mute' : 'unMute');
         if (!youtubeMuted) sendYouTubeCommand('setVolume', [75]);
@@ -245,6 +291,10 @@ export function createPlayerController({ state, onPlaybackChange }) {
 
     function sendYouTubeCommand(command, args = []) {
         youtube.contentWindow?.postMessage(JSON.stringify({ event: 'command', func: command, args }), 'https://www.youtube-nocookie.com');
+    }
+
+    function isYouTubeSource() {
+        return state.currentSource === 'youtube' || state.currentSource === 'youtube-live';
     }
 
     function updateYouTubeControl() {

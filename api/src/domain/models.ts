@@ -41,6 +41,8 @@ export interface Branding {
   scheduleTitle: string;
   tickerLabel: string;
   partnerLabel: string;
+  liveSource: 'obs' | 'youtube';
+  liveYoutubeUrl: string;
   liveTitle: string;
   liveDescription: string;
   loopTitle: string;
@@ -105,6 +107,8 @@ export const DEFAULT_BRANDING: Omit<Branding, 'updatedAt'> = {
   scheduleTitle: 'Próximos vídeos',
   tickerLabel: 'GIRO TVC',
   partnerLabel: 'PARCEIRO',
+  liveSource: 'obs',
+  liveYoutubeUrl: '',
   liveTitle: 'Transmissão Especial Ao Vivo',
   liveDescription: 'Transmissão em tempo real',
   loopTitle: 'Programação Linear 24h',

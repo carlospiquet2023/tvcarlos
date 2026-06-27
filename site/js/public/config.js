@@ -24,6 +24,8 @@ export const DEFAULT_BRANDING = Object.freeze({
     scheduleTitle: 'Próximos vídeos',
     tickerLabel: 'GIRO TVC',
     partnerLabel: 'PARCEIRO',
+    liveSource: 'obs',
+    liveYoutubeUrl: '',
     liveTitle: STREAMS.live.title,
     liveDescription: STREAMS.live.description,
     loopTitle: STREAMS.loop.title,

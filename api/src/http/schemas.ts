@@ -65,6 +65,16 @@ const videoReference = z.string().trim().min(1).max(2048).refine((value) => {
   }
 }, 'Use um vídeo enviado, uma URL HTTPS ou uma URL válida do YouTube.');
 
+const youtubeLiveReference = z.string().trim().max(2048).refine((value) => {
+  if (!value) return true;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && youtubeHosts.has(url.hostname.toLowerCase()) && hasValidYouTubeVideo(url);
+  } catch {
+    return false;
+  }
+}, 'Use uma URL HTTPS válida de live ou vídeo do YouTube.');
+
 export const programSchema = z.strictObject({
   title: z.string().trim().min(1).max(160),
   description: z.string().trim().max(500).default(''),
@@ -80,6 +90,8 @@ export const brandingSchema = z.strictObject({
   scheduleTitle: z.string().trim().min(1).max(160),
   tickerLabel: z.string().trim().min(1).max(80),
   partnerLabel: z.string().trim().min(1).max(80),
+  liveSource: z.enum(['obs', 'youtube']).default('obs'),
+  liveYoutubeUrl: youtubeLiveReference.default(''),
   liveTitle: z.string().trim().min(1).max(160),
   liveDescription: z.string().trim().max(300),
   loopTitle: z.string().trim().min(1).max(160),
@@ -89,6 +101,14 @@ export const brandingSchema = z.strictObject({
   legalCnpj: z.string().trim().regex(/^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/, 'Informe o CNPJ no formato 00.000.000/0000-00.'),
   legalCity: z.string().trim().min(2).max(120),
   legalPhone: z.string().trim().min(8).max(30),
+}).superRefine((value, context) => {
+  if (value.liveSource === 'youtube' && !value.liveYoutubeUrl) {
+    context.addIssue({
+      code: 'custom',
+      path: ['liveYoutubeUrl'],
+      message: 'Informe a URL da live do YouTube quando a fonte do ao vivo for YouTube.',
+    });
+  }
 });
 
 export const headerLinkSchema = z.strictObject({

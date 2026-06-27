@@ -33,6 +33,21 @@ describe('HTTP input schemas', () => {
     }).success).toBe(true);
   });
 
+  it('validates YouTube live source settings in branding', () => {
+    const base = {
+      companyName: 'Canal', watermarkText: 'Canal', logoText: 'Canal', logoUrl: '',
+      tagline: 'Sinal independente', scheduleTitle: 'Próximos vídeos', tickerLabel: 'Giro', partnerLabel: 'Parceiro',
+      liveTitle: 'Ao vivo', liveDescription: '', loopTitle: 'Programação', loopDescription: '',
+      legalName: 'Carlos Antonio de Oliveira Piquet', legalEmail: 'carlos.piquet2016@gmail.com',
+      legalCnpj: '27.658.099/0001-70', legalCity: 'Rio de Janeiro - RJ', legalPhone: '+55 21 97905-4104',
+    };
+
+    expect(brandingSchema.safeParse({ ...base, liveSource: 'obs', liveYoutubeUrl: '' }).success).toBe(true);
+    expect(brandingSchema.safeParse({ ...base, liveSource: 'youtube', liveYoutubeUrl: 'https://youtu.be/dQw4w9WgXcQ' }).success).toBe(true);
+    expect(brandingSchema.safeParse({ ...base, liveSource: 'youtube', liveYoutubeUrl: '' }).success).toBe(false);
+    expect(brandingSchema.safeParse({ ...base, liveSource: 'youtube', liveYoutubeUrl: 'https://example.com/live' }).success).toBe(false);
+  });
+
   it('accepts internal and HTTPS header links while rejecting unsafe schemes', () => {
     expect(headerLinkSchema.safeParse({ name: 'Notícias', url: 'noticias.html' }).success).toBe(true);
     expect(headerLinkSchema.safeParse({ name: 'Parceiro', url: 'https://example.com' }).success).toBe(true);

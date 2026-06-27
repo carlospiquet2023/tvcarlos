@@ -29,9 +29,13 @@ export function createOperationsController() {
     }
 
     async function checkStatus() {
-        const [api, streams] = await Promise.all([probe('/api/health/ready'), streamStatus()]);
+        const [api, streams, branding] = await Promise.all([probe('/api/health/ready'), streamStatus(), liveBranding()]);
         setStatus('api-status', api ? 'Saudável' : 'Indisponível', api ? 'online' : 'offline');
-        setStatus('stream-status', streams.live ? 'Ao vivo' : 'Em espera', streams.live ? 'online' : 'neutral');
+        if (branding?.liveSource === 'youtube' && branding.liveYoutubeUrl) {
+            setStatus('stream-status', 'YouTube Live', 'online');
+        } else {
+            setStatus('stream-status', streams.live ? 'OBS ao vivo' : 'OBS em espera', streams.live ? 'online' : 'neutral');
+        }
         setStatus('loop-status', streams.loop ? 'Operacional' : 'Indisponível', streams.loop ? 'online' : 'offline');
     }
 
@@ -47,6 +51,11 @@ export function createOperationsController() {
         } catch {
             return { live: false, loop: false };
         }
+    }
+
+    async function liveBranding() {
+        try { return await apiJson(ENDPOINTS.branding); }
+        catch { return null; }
     }
 
     function setStatus(id, label, mode) {
