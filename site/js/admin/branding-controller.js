@@ -6,7 +6,8 @@ import { setBusy, showToast } from './ui.js';
 
 const FIELDS = Object.freeze({
     'company-name-input': 'companyName', 'tagline-input': 'tagline', 'watermark-input': 'watermarkText',
-    'logo-text-input': 'logoText', 'logo-url-input': 'logoUrl', 'schedule-title-input': 'scheduleTitle',
+    'logo-text-input': 'logoText', 'logo-url-input': 'logoUrl', 'background-url-input': 'backgroundUrl',
+    'schedule-title-input': 'scheduleTitle',
     'ticker-label-input': 'tickerLabel', 'partner-label-input': 'partnerLabel', 'live-title-input': 'liveTitle',
     'live-source-input': 'liveSource', 'live-youtube-url-input': 'liveYoutubeUrl',
     'live-desc-input': 'liveDescription', 'loop-title-input': 'loopTitle', 'loop-desc-input': 'loopDescription',
@@ -29,6 +30,12 @@ export function createBrandingAdminController({ onMutation }) {
             endpoint: '/api/upload/image', valueKey: 'url',
             onComplete: (file) => showToast('Logo enviado', file.name),
             onError: (error) => showToast('Falha no upload', error.message, 'error'),
+        });
+        bindUpload({
+            fileId: 'background-file-upload', targetId: 'background-url-input', statusId: 'background-upload-status',
+            endpoint: '/api/upload/image', valueKey: 'url',
+            onComplete: (file) => showToast('Fundo enviado', file.name),
+            onError: (error) => showToast('Falha no upload do fundo', error.message, 'error'),
         });
     }
 

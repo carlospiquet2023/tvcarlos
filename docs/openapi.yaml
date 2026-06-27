@@ -282,6 +282,7 @@ components:
         watermarkText: { type: string, maxLength: 300 }
         logoText: { type: string, maxLength: 160 }
         logoUrl: { type: string, maxLength: 2048 }
+        backgroundUrl: { type: string, maxLength: 2048, description: "Imagem de fundo do site; URL HTTPS, upload interno ou string vazia para usar o fundo padrão." }
         scheduleTitle: { type: string, maxLength: 160 }
         tickerLabel: { type: string, maxLength: 80 }
         partnerLabel: { type: string, maxLength: 80 }

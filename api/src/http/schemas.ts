@@ -87,6 +87,7 @@ export const brandingSchema = z.strictObject({
   watermarkText: z.string().trim().max(300),
   logoText: z.string().trim().max(160),
   logoUrl: secureAssetUrl,
+  backgroundUrl: secureAssetUrl.default(''),
   scheduleTitle: z.string().trim().min(1).max(160),
   tickerLabel: z.string().trim().min(1).max(80),
   partnerLabel: z.string().trim().min(1).max(80),

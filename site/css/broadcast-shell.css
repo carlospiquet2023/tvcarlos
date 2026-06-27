@@ -1,8 +1,10 @@
 .broadcast-page {
     overflow-x: hidden;
     background:
-        radial-gradient(circle at 92% 12%, rgba(59, 176, 168, .13), transparent 27rem),
-        radial-gradient(circle at 5% 85%, rgba(106, 169, 202, .12), transparent 30rem),
+        linear-gradient(145deg, rgba(248, 251, 250, .9), rgba(238, 246, 245, .82) 54%, rgba(246, 250, 251, .9)),
+        radial-gradient(circle at 92% 12%, rgba(59, 176, 168, .16), transparent 27rem),
+        radial-gradient(circle at 5% 85%, rgba(106, 169, 202, .14), transparent 30rem),
+        var(--site-background-image, url("../assets/fundo-site.png")) center / cover fixed no-repeat,
         linear-gradient(145deg, #f8fbfa, var(--surface-page) 58%, #f6fafb);
 }
 .broadcast-page::before {

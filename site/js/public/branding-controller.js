@@ -23,6 +23,7 @@ export function createBrandingController({ state, onBrandingChange }) {
         setText('partner-showcase-label', branding.partnerLabel);
         setText('legal-owner-name', branding.legalName);
         setText('player-watermark', branding.watermarkText);
+        renderBackground(branding.backgroundUrl);
         renderHeaderLogo(branding);
         renderPlayerLogo(branding);
     }
@@ -66,6 +67,15 @@ export function createBrandingController({ state, onBrandingChange }) {
             text.textContent = branding.logoText;
             text.classList.remove('hidden');
         }
+    }
+
+    function renderBackground(backgroundUrl) {
+        const value = backgroundUrl?.trim();
+        if (!value) {
+            document.body.style.removeProperty('--site-background-image');
+            return;
+        }
+        document.body.style.setProperty('--site-background-image', `url("${value.replace(/["\\]/g, '\\$&')}")`);
     }
 
     function setText(id, value) {

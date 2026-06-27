@@ -21,6 +21,7 @@ export const DEFAULT_BRANDING = Object.freeze({
     watermarkText: 'TV CARLOS • CONTEÚDO EXCLUSIVO',
     logoText: 'TV Carlos',
     logoUrl: '',
+    backgroundUrl: '',
     scheduleTitle: 'Próximos vídeos',
     tickerLabel: 'GIRO TVC',
     partnerLabel: 'PARCEIRO',

@@ -25,7 +25,7 @@ describe('HTTP input schemas', () => {
 
   it('accepts a complete safe branding payload', () => {
     expect(brandingSchema.safeParse({
-      companyName: 'Canal', watermarkText: 'Canal', logoText: 'Canal', logoUrl: '',
+      companyName: 'Canal', watermarkText: 'Canal', logoText: 'Canal', logoUrl: '', backgroundUrl: '',
       tagline: 'Sinal independente', scheduleTitle: 'Próximos vídeos', tickerLabel: 'Giro', partnerLabel: 'Parceiro',
       liveTitle: 'Ao vivo', liveDescription: '', loopTitle: 'Programação', loopDescription: '',
       legalName: 'Carlos Antonio de Oliveira Piquet', legalEmail: 'carlos.piquet2016@gmail.com',
@@ -35,7 +35,7 @@ describe('HTTP input schemas', () => {
 
   it('validates YouTube live source settings in branding', () => {
     const base = {
-      companyName: 'Canal', watermarkText: 'Canal', logoText: 'Canal', logoUrl: '',
+      companyName: 'Canal', watermarkText: 'Canal', logoText: 'Canal', logoUrl: '', backgroundUrl: '',
       tagline: 'Sinal independente', scheduleTitle: 'Próximos vídeos', tickerLabel: 'Giro', partnerLabel: 'Parceiro',
       liveTitle: 'Ao vivo', liveDescription: '', loopTitle: 'Programação', loopDescription: '',
       legalName: 'Carlos Antonio de Oliveira Piquet', legalEmail: 'carlos.piquet2016@gmail.com',

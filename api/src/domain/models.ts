@@ -38,6 +38,7 @@ export interface Branding {
   watermarkText: string;
   logoText: string;
   logoUrl: string;
+  backgroundUrl: string;
   scheduleTitle: string;
   tickerLabel: string;
   partnerLabel: string;
@@ -104,6 +105,7 @@ export const DEFAULT_BRANDING: Omit<Branding, 'updatedAt'> = {
   watermarkText: 'TV CARLOS • CONTEÚDO EXCLUSIVO',
   logoText: 'TV CARLOS',
   logoUrl: '',
+  backgroundUrl: '',
   scheduleTitle: 'Próximos vídeos',
   tickerLabel: 'GIRO TVC',
   partnerLabel: 'PARCEIRO',

@@ -43,6 +43,7 @@ export interface BrandingTable {
   watermark_text: string;
   logo_text: string;
   logo_url: string;
+  background_url: string;
   schedule_title: string;
   ticker_label: string;
   partner_label: string;
