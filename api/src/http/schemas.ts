@@ -101,14 +101,6 @@ export const brandingSchema = z.strictObject({
   legalCnpj: z.string().trim().regex(/^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/, 'Informe o CNPJ no formato 00.000.000/0000-00.'),
   legalCity: z.string().trim().min(2).max(120),
   legalPhone: z.string().trim().min(8).max(30),
-}).superRefine((value, context) => {
-  if (value.liveSource === 'youtube' && !value.liveYoutubeUrl) {
-    context.addIssue({
-      code: 'custom',
-      path: ['liveYoutubeUrl'],
-      message: 'Informe a URL da live do YouTube quando a fonte do ao vivo for YouTube.',
-    });
-  }
 });
 
 export const headerLinkSchema = z.strictObject({

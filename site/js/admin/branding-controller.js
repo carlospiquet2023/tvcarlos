@@ -74,7 +74,7 @@ export function createBrandingAdminController({ onMutation }) {
         const input = byId('live-youtube-url-input');
         const group = byId('live-youtube-url-group');
         const usesYouTube = source === 'youtube';
-        input.required = usesYouTube;
+        input.required = false;
         input.disabled = !usesYouTube;
         group.style.opacity = usesYouTube ? '1' : '.58';
     }

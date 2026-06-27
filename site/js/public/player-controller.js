@@ -20,6 +20,7 @@ export function createPlayerController({ state, onPlaybackChange }) {
     let hls = null;
     let youtubePlaying = false;
     let youtubeMuted = false;
+    let unavailableYouTubeLiveUrl = '';
 
     function initialize() {
         bindControls();
@@ -36,10 +37,11 @@ export function createPlayerController({ state, onPlaybackChange }) {
             toggleYouTubeMute();
         });
         youtube.addEventListener('load', () => {
-            if (state.currentSource !== 'youtube') return;
+            if (!isYouTubeSource()) return;
             sendYouTubeCommand(youtubeMuted ? 'mute' : 'unMute');
             if (youtubePlaying) sendYouTubeCommand('playVideo');
         });
+        window.addEventListener('message', handleYouTubeMessage);
     }
 
     function playHls(sourceType, { force = false } = {}) {
@@ -166,6 +168,13 @@ export function createPlayerController({ state, onPlaybackChange }) {
 
     async function checkLive() {
         const liveYouTubeUrl = getLiveYouTubeEmbedUrl();
+        if (state.branding.liveSource === 'youtube' && !liveYouTubeUrl) {
+            state.isLiveOnline = false;
+            if (!isOnDemand(state)) playHls('loop');
+            onPlaybackChange();
+            return false;
+        }
+
         if (liveYouTubeUrl) {
             state.isLiveOnline = true;
             if (!isOnDemand(state)) playYouTubeLive(liveYouTubeUrl);
@@ -237,7 +246,32 @@ export function createPlayerController({ state, onPlaybackChange }) {
 
     function getLiveYouTubeEmbedUrl() {
         if (state.branding.liveSource !== 'youtube') return null;
-        return buildYouTubeEmbedUrl(state.branding.liveYoutubeUrl);
+        const liveUrl = state.branding.liveYoutubeUrl?.trim() || '';
+        if (!liveUrl || liveUrl === unavailableYouTubeLiveUrl) return null;
+        return buildYouTubeEmbedUrl(liveUrl);
+    }
+
+    function handleYouTubeMessage(event) {
+        if (!['https://www.youtube-nocookie.com', 'https://www.youtube.com'].includes(event.origin)) return;
+        const data = parseYouTubeMessage(event.data);
+        if (!data || state.currentSource !== 'youtube-live') return;
+        if (data.event === 'onError' || (data.event === 'onStateChange' && Number(data.info) === 0)) {
+            markYouTubeLiveUnavailable();
+        }
+    }
+
+    function parseYouTubeMessage(data) {
+        if (typeof data === 'object' && data !== null) return data;
+        if (typeof data !== 'string' || !data.startsWith('{')) return null;
+        try { return JSON.parse(data); } catch { return null; }
+    }
+
+    function markYouTubeLiveUnavailable() {
+        unavailableYouTubeLiveUrl = state.branding.liveYoutubeUrl?.trim() || '';
+        state.isLiveOnline = false;
+        deactivateYouTube();
+        playHls('loop', { force: true });
+        onPlaybackChange();
     }
 
     function synchronizeLiveEdge(sourceType) {
@@ -364,6 +398,7 @@ export function createPlayerController({ state, onPlaybackChange }) {
     }
 
     function destroy() {
+        window.removeEventListener('message', handleYouTubeMessage);
         destroyHls();
         deactivateYouTube();
     }

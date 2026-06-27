@@ -32,7 +32,9 @@ export function createOperationsController() {
         const [api, streams, branding] = await Promise.all([probe('/api/health/ready'), streamStatus(), liveBranding()]);
         setStatus('api-status', api ? 'Saudável' : 'Indisponível', api ? 'online' : 'offline');
         if (branding?.liveSource === 'youtube' && branding.liveYoutubeUrl) {
-            setStatus('stream-status', 'YouTube Live', 'online');
+            setStatus('stream-status', 'YouTube configurado', 'neutral');
+        } else if (branding?.liveSource === 'youtube') {
+            setStatus('stream-status', 'YouTube sem URL', 'neutral');
         } else {
             setStatus('stream-status', streams.live ? 'OBS ao vivo' : 'OBS em espera', streams.live ? 'online' : 'neutral');
         }

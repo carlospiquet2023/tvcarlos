@@ -44,7 +44,7 @@ describe('HTTP input schemas', () => {
 
     expect(brandingSchema.safeParse({ ...base, liveSource: 'obs', liveYoutubeUrl: '' }).success).toBe(true);
     expect(brandingSchema.safeParse({ ...base, liveSource: 'youtube', liveYoutubeUrl: 'https://youtu.be/dQw4w9WgXcQ' }).success).toBe(true);
-    expect(brandingSchema.safeParse({ ...base, liveSource: 'youtube', liveYoutubeUrl: '' }).success).toBe(false);
+    expect(brandingSchema.safeParse({ ...base, liveSource: 'youtube', liveYoutubeUrl: '' }).success).toBe(true);
     expect(brandingSchema.safeParse({ ...base, liveSource: 'youtube', liveYoutubeUrl: 'https://example.com/live' }).success).toBe(false);
   });
 
