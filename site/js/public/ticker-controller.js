@@ -37,7 +37,7 @@ export function createTickerController() {
         }
         
         if (rssNews.status === 'fulfilled' && rssNews.value?.items) {
-            const fetchedItems = rssNews.value.items.slice(0, 5).map(item => `[Plantão] ${item.title}`);
+            const fetchedItems = rssNews.value.items.map(item => `[Plantão] ${item.title}`);
             items.push(...fetchedItems);
         }
 
