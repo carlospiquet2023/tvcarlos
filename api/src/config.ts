@@ -28,6 +28,11 @@ const environmentSchema = z.object({
   RTMP_STREAM_KEY: z.string().min(32).max(256),
   LOOP_STREAM_KEY: z.string().min(32).max(256),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
+  R2_ACCOUNT_ID: optionalNonEmpty,
+  R2_ACCESS_KEY_ID: optionalNonEmpty,
+  R2_SECRET_ACCESS_KEY: optionalNonEmpty,
+  R2_BUCKET: optionalNonEmpty,
+  R2_PUBLIC_URL: optionalNonEmpty,
 });
 
 export type AppConfig = ReturnType<typeof loadConfig>;
@@ -54,5 +59,10 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env) {
     rtmpStreamKey: parsed.data.RTMP_STREAM_KEY,
     loopStreamKey: parsed.data.LOOP_STREAM_KEY,
     logLevel: parsed.data.LOG_LEVEL,
+    r2AccountId: parsed.data.R2_ACCOUNT_ID,
+    r2AccessKeyId: parsed.data.R2_ACCESS_KEY_ID,
+    r2SecretAccessKey: parsed.data.R2_SECRET_ACCESS_KEY,
+    r2Bucket: parsed.data.R2_BUCKET,
+    r2PublicUrl: parsed.data.R2_PUBLIC_URL?.replace(/\/$/, ''),
   } as const;
 }

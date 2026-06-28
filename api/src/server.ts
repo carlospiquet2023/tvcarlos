@@ -7,6 +7,8 @@ import { PostgresSessionRepository } from './infrastructure/repositories/session
 import { PostgresContentRepository } from './infrastructure/repositories/content-repository.js';
 import { PostgresAuditRepository } from './infrastructure/repositories/audit-repository.js';
 import { LocalMediaStorage } from './infrastructure/storage/local-storage.js';
+import { R2MediaStorage } from './infrastructure/storage/r2-storage.js';
+import type { MediaStorage } from './application/ports.js';
 import { initializeDatabase } from './bootstrap/initialize.js';
 import { AuthService } from './application/auth-service.js';
 import { ContentService } from './application/content-service.js';
@@ -23,8 +25,14 @@ const content = new PostgresContentRepository(database);
 const audit = new PostgresAuditRepository(database);
 await initializeDatabase(config, users, content);
 
-const storage = new LocalMediaStorage(config.imageStorageDir, config.videoStorageDir);
+let storage: MediaStorage;
+if (config.r2AccountId && config.r2AccessKeyId && config.r2SecretAccessKey && config.r2Bucket && config.r2PublicUrl) {
+  storage = new R2MediaStorage(config.r2AccountId, config.r2AccessKeyId, config.r2SecretAccessKey, config.r2Bucket, config.r2PublicUrl);
+} else {
+  storage = new LocalMediaStorage(config.imageStorageDir, config.videoStorageDir);
+}
 await storage.initialize();
+
 const authService = await AuthService.create(users, sessions, audit, config.sessionTtlMinutes);
 const contentService = new ContentService(content, audit);
 const mediaService = new MediaService(storage, content, audit);
