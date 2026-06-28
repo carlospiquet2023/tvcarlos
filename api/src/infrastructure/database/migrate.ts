@@ -232,4 +232,14 @@ export async function migrate(database: Database): Promise<void> {
       await transaction.insertInto('app_migrations').values({ version: 7, applied_at: new Date() }).execute();
     });
   }
+  if (!versions.has(8)) {
+    await database.transaction().execute(async (transaction) => {
+      await transaction.schema
+        .alterTable('programs')
+        .addColumn('category', 'varchar(100)')
+        .execute();
+
+      await transaction.insertInto('app_migrations').values({ version: 8, applied_at: new Date() }).execute();
+    });
+  }
 }

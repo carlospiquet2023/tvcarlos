@@ -54,31 +54,69 @@ export class PostgresContentRepository implements ContentRepository {
     return Number(result.numDeletedRows) > 0;
   }
 
-  async listPrograms(): Promise<Program[]> {
-    const rows = await this.database.selectFrom('programs').selectAll().orderBy('position').orderBy('created_at').execute();
-    return rows.map((row) => ({
-      id: row.id,
-      title: row.title,
-      description: row.description,
-      video: row.video,
-      position: row.position,
-      createdAt: row.created_at,
-    }));
+  async listPrograms(params?: { search?: string; category?: string; page?: number; limit?: number }): Promise<{ items: Program[]; total: number }> {
+    let query = this.database.selectFrom('programs');
+    if (params?.search) {
+      const searchPattern = `%${params.search}%`;
+      query = query.where((eb) => eb.or([
+        eb('title', 'ilike', searchPattern),
+        eb('description', 'ilike', searchPattern)
+      ]));
+    }
+    if (params?.category) {
+      query = query.where('category', '=', params.category);
+    }
+
+    const { count } = await query.select((eb) => eb.fn.count<number>('id').as('count')).executeTakeFirstOrThrow();
+    
+    let selectQuery = query.selectAll().orderBy('position').orderBy('created_at');
+    if (params?.limit) {
+      selectQuery = selectQuery.limit(params.limit);
+      if (params.page) {
+        selectQuery = selectQuery.offset((params.page - 1) * params.limit);
+      }
+    }
+
+    const rows = await selectQuery.execute();
+    return {
+      items: rows.map((row) => ({
+        id: row.id,
+        title: row.title,
+        description: row.description,
+        video: row.video,
+        category: row.category,
+        position: row.position,
+        createdAt: row.created_at,
+      })),
+      total: Number(count),
+    };
   }
 
-  async createProgram(input: Pick<Program, 'title' | 'description' | 'video'>): Promise<Program> {
+  async listProgramCategories(): Promise<string[]> {
+    const rows = await this.database
+      .selectFrom('programs')
+      .select('category')
+      .where('category', 'is not', null)
+      .where('category', '!=', '')
+      .distinct()
+      .orderBy('category')
+      .execute();
+    return rows.map((r) => r.category as string);
+  }
+
+  async createProgram(input: Pick<Program, 'title' | 'description' | 'video' | 'category'>): Promise<Program> {
     const position = await this.nextPosition('programs');
     const row = await this.database
       .insertInto('programs')
       .values({ id: randomUUID(), ...input, position, created_at: new Date() })
       .returningAll()
       .executeTakeFirstOrThrow();
-    return { id: row.id, title: row.title, description: row.description, video: row.video, position: row.position, createdAt: row.created_at };
+    return { id: row.id, title: row.title, description: row.description, video: row.video, category: row.category, position: row.position, createdAt: row.created_at };
   }
 
-  async updateProgram(id: string, input: Pick<Program, 'title' | 'description' | 'video'>): Promise<Program | undefined> {
+  async updateProgram(id: string, input: Pick<Program, 'title' | 'description' | 'video' | 'category'>): Promise<Program | undefined> {
     const row = await this.database.updateTable('programs').set(input).where('id', '=', id).returningAll().executeTakeFirst();
-    return row ? { id: row.id, title: row.title, description: row.description, video: row.video, position: row.position, createdAt: row.created_at } : undefined;
+    return row ? { id: row.id, title: row.title, description: row.description, video: row.video, category: row.category, position: row.position, createdAt: row.created_at } : undefined;
   }
 
   async reorderPrograms(ids: string[]): Promise<void> {

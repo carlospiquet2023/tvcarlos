@@ -15,7 +15,10 @@ export class ContentService {
   ) {}
 
   listNews() { return this.content.listNews(); }
-  listPrograms() { return this.content.listPrograms(); }
+  listPrograms(params?: { search?: string; category?: string; page?: number; limit?: number }) { 
+    return this.content.listPrograms(params); 
+  }
+  listProgramCategories() { return this.content.listProgramCategories(); }
   listPrivateRooms() { return this.content.listPrivateRooms(); }
   getBranding() { return this.content.getBranding(); }
   listPartners() { return this.content.listPartners(); }
@@ -46,13 +49,13 @@ export class ContentService {
     await this.record(actor, 'news.deleted', 'news', id);
   }
 
-  async createProgram(input: Pick<Program, 'title' | 'description' | 'video'>, actor: ActorContext) {
+  async createProgram(input: Pick<Program, 'title' | 'description' | 'video' | 'category'>, actor: ActorContext) {
     const item = await this.content.createProgram(input);
     await this.record(actor, 'program.created', 'program', item.id);
     return item;
   }
 
-  async updateProgram(id: string, input: Pick<Program, 'title' | 'description' | 'video'>, actor: ActorContext) {
+  async updateProgram(id: string, input: Pick<Program, 'title' | 'description' | 'video' | 'category'>, actor: ActorContext) {
     const item = await this.content.updateProgram(id, input);
     if (!item) throw new NotFoundError('Programa não encontrado.');
     await this.record(actor, 'program.updated', 'program', id);

@@ -33,6 +33,7 @@ export interface ProgramsTable {
   title: string;
   description: string;
   video: string;
+  category: string | null;
   position: number;
   created_at: Timestamp;
 }

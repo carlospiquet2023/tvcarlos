@@ -42,9 +42,10 @@ export interface ContentRepository {
   updateNews(id: string, text: string): Promise<NewsItem | undefined>;
   reorderNews(ids: string[]): Promise<void>;
   deleteNews(id: string): Promise<boolean>;
-  listPrograms(): Promise<Program[]>;
-  createProgram(input: Pick<Program, 'title' | 'description' | 'video'>): Promise<Program>;
-  updateProgram(id: string, input: Pick<Program, 'title' | 'description' | 'video'>): Promise<Program | undefined>;
+  listPrograms(params?: { search?: string; category?: string; page?: number; limit?: number }): Promise<{ items: Program[]; total: number }>;
+  listProgramCategories(): Promise<string[]>;
+  createProgram(input: Pick<Program, 'title' | 'description' | 'video' | 'category'>): Promise<Program>;
+  updateProgram(id: string, input: Pick<Program, 'title' | 'description' | 'video' | 'category'>): Promise<Program | undefined>;
   reorderPrograms(ids: string[]): Promise<void>;
   deleteProgram(id: string): Promise<boolean>;
   listPrivateRooms(): Promise<PrivateRoom[]>;

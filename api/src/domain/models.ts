@@ -28,6 +28,7 @@ export interface Program {
   title: string;
   description: string;
   video: string;
+  category: string | null;
   position: number;
   createdAt: Date;
 }

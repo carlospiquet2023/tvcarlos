@@ -11,6 +11,7 @@ import {
   newsSchema,
   parseInput,
   orderSchema,
+  gradeQuerySchema,
   partnerSchema,
   privateRoomAccessSchema,
   privateRoomSchema,
@@ -44,14 +45,32 @@ export function registerContentRoutes(app: FastifyInstance, config: AppConfig, c
     return reply.code(204).send();
   });
 
-  app.get('/api/grade', async () => {
-    const programs = await content.listPrograms();
-    return programs.map((program) => ({ ...program, desc: program.description }));
+  app.get('/api/grade', async (request) => {
+    const query = parseInput(gradeQuerySchema, request.query);
+    
+    // If no pagination/search is requested (e.g. from the admin panel which just wants everything),
+    // we can either return all (if we didn't require pagination) or we return paginated.
+    // To not break admin which expects an array, let's check if they sent queries or return standard format.
+    // Actually, let's just always return an array of programs for backward compatibility with the admin panel,
+    // OR we change the frontend. Let's return the `{ items, total }` if it's paginated, but wait, 
+    // `resource-controller.js` expects an array. Let's see how `admin.html` uses `/api/grade`.
+    // Let's modify the endpoint to return `{ items, total }` and we will fix `resource-controller.js`.
+    
+    const { items, total } = await content.listPrograms(query);
+    return { 
+      items: items.map((program) => ({ ...program, desc: program.description })),
+      total 
+    };
   });
+
+  app.get('/api/categories', async () => {
+    return content.listProgramCategories();
+  });
+
   app.post('/api/grade', { preHandler: [auth.requireAuth, auth.requireCsrf] }, async (request, reply) => {
     const raw = request.body as Record<string, unknown> | undefined;
     const input = parseInput(programSchema, raw && 'desc' in raw
-      ? { title: raw.title, description: raw.desc, video: raw.video }
+      ? { title: raw.title, description: raw.desc, video: raw.video, category: raw.category }
       : raw);
     const item = await content.createProgram(input, actor(request, auth));
     return reply.code(201).send({ ...item, desc: item.description });

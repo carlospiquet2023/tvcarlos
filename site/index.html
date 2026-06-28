@@ -143,6 +143,12 @@
                         <h2 id="schedule-title">Próximos vídeos</h2>
                         <span class="schedule-count" id="schedule-count" aria-live="polite">0 vídeos</span>
                     </div>
+                    <div class="schedule-filters">
+                        <input type="text" id="schedule-search" placeholder="Pesquisar vídeos..." aria-label="Pesquisar vídeos">
+                        <select id="schedule-category" aria-label="Filtrar por categoria">
+                            <option value="">Todas as categorias</option>
+                        </select>
+                    </div>
                     <div class="schedule-list" id="schedule-list" role="region" aria-label="Grade de programação" tabindex="0">
                         <!-- Itens da programação injetados via JS -->
                         <div class="schedule-item active">

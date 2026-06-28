@@ -7,24 +7,118 @@ export function createScheduleController({ state, onSelectLinear, onSelectProgra
     const list = requiredElement('schedule-list');
     const count = requiredElement('schedule-count');
 
-    async function load() {
+    let currentPage = 1;
+    let hasMore = false;
+    let currentSearch = '';
+    let currentCategory = '';
+    let isFetching = false;
+
+    const searchInput = document.getElementById('schedule-search');
+    const categorySelect = document.getElementById('schedule-category');
+
+    async function loadCategories() {
         try {
-            const programs = await fetchJson('/api/grade');
-            state.programs = Array.isArray(programs) ? programs : [];
-        } catch (error) {
+            const categories = await fetchJson('/api/categories');
+            if (categories && categories.length > 0) {
+                const currentVal = categorySelect.value;
+                categorySelect.innerHTML = '<option value="">Todas as categorias</option>';
+                categories.forEach(cat => {
+                    const option = document.createElement('option');
+                    option.value = cat;
+                    option.textContent = cat;
+                    categorySelect.append(option);
+                });
+                categorySelect.value = currentVal;
+            }
+        } catch (e) {
+            console.warn('Falha ao carregar categorias', e);
+        }
+    }
+
+    async function load(reset = true) {
+        if (isFetching) return;
+        isFetching = true;
+        if (reset) {
+            currentPage = 1;
             state.programs = [];
+        }
+        try {
+            const query = new URLSearchParams();
+            query.set('page', currentPage.toString());
+            query.set('limit', '50');
+            if (currentSearch) query.set('search', currentSearch);
+            if (currentCategory) query.set('category', currentCategory);
+
+            const result = await fetchJson(`/api/grade?${query.toString()}`);
+            if (result && Array.isArray(result.items)) {
+                if (reset) state.programs = result.items;
+                else state.programs.push(...result.items);
+                hasMore = state.programs.length < result.total;
+            } else if (Array.isArray(result)) {
+                // Backward compatibility
+                state.programs = result;
+                hasMore = false;
+            } else {
+                state.programs = [];
+                hasMore = false;
+            }
+        } catch (error) {
+            if (reset) state.programs = [];
             console.warn('Grade indisponível; o sinal linear permanece ativo.', error);
+        } finally {
+            isFetching = false;
         }
         render();
+        if (reset) loadCategories();
+    }
+
+    if (searchInput) {
+        let debounceTimer;
+        searchInput.addEventListener('input', (e) => {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+                currentSearch = e.target.value.trim();
+                load(true);
+            }, 300);
+        });
+    }
+
+    if (categorySelect) {
+        categorySelect.addEventListener('change', (e) => {
+            currentCategory = e.target.value;
+            load(true);
+        });
     }
 
     function render() {
         clear(list);
+        
+        // Count represents what is currently shown. Alternatively we could use the total from API.
         count.textContent = `${state.programs.length} ${state.programs.length === 1 ? 'vídeo' : 'vídeos'}`;
         count.classList.toggle('is-empty', state.programs.length === 0);
-        list.append(createLinearItem());
+        
+        if (!currentSearch && !currentCategory) {
+            list.append(createLinearItem());
+        }
+        
         state.programs.forEach((program) => list.append(createProgramItem(program)));
-        if (state.programs.length === 0) list.append(createEmptyState());
+        
+        if (state.programs.length === 0) {
+            list.append(createEmptyState());
+        } else if (hasMore) {
+            const loadMoreBtn = element('button', {
+                className: 'schedule-item',
+                attributes: { type: 'button' },
+            });
+            const details = element('span', { className: 'schedule-details', style: 'text-align: center; width: 100%' });
+            details.append(element('strong', { text: 'Carregar mais vídeos' }));
+            loadMoreBtn.append(details);
+            loadMoreBtn.addEventListener('click', () => {
+                currentPage++;
+                load(false);
+            });
+            list.append(loadMoreBtn);
+        }
     }
 
     function createLinearItem() {

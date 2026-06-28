@@ -89,6 +89,14 @@ export const programSchema = z.strictObject({
   title: z.string().trim().min(1).max(160),
   description: z.string().trim().max(500).default(''),
   video: videoReference,
+  category: z.string().trim().max(100).optional().nullable(),
+});
+
+export const gradeQuerySchema = z.strictObject({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  search: z.string().trim().max(100).optional(),
+  category: z.string().trim().max(100).optional(),
 });
 
 export const privateRoomSchema = z.strictObject({

@@ -26,7 +26,8 @@ export function createResourceController({ navigate, onMutation }) {
     }
 
     async function load(type) {
-        adminState[type] = await apiJson(ENDPOINTS[type]);
+        const result = await apiJson(ENDPOINTS[type]);
+        adminState[type] = type === 'programs' ? result.items : result;
         renderers[type]();
         updateCounters();
     }
@@ -144,6 +145,7 @@ export function createResourceController({ navigate, onMutation }) {
         adminState.editing[type] = item.id;
         if (type === 'programs') {
             byId('program-title').value = item.title;
+            byId('program-category').value = item.category || '';
             byId('program-desc').value = item.description || '';
             byId('program-video').value = item.video;
             configureEditForm('program', 'Editar vídeo', 'Salvar alterações');
@@ -211,7 +213,7 @@ export function createResourceController({ navigate, onMutation }) {
     }
 
     function bindForms() {
-        bindForm('programs', 'add-program-form', () => ({ title: byId('program-title').value.trim(), description: byId('program-desc').value.trim(), video: byId('program-video').value.trim() }), ['Vídeo adicionado', 'Vídeo atualizado']);
+        bindForm('programs', 'add-program-form', () => ({ title: byId('program-title').value.trim(), category: byId('program-category').value.trim() || null, description: byId('program-desc').value.trim(), video: byId('program-video').value.trim() }), ['Vídeo adicionado', 'Vídeo atualizado']);
         bindForm('news', 'add-news-form', () => ({ text: byId('news-input').value.trim() }), ['Notícia publicada', 'Notícia atualizada']);
         bindForm('partners', 'add-partner-form', () => ({ name: byId('partner-name-input').value.trim(), logoUrl: byId('partner-logo-input').value.trim(), destinationUrl: byId('partner-destination-input').value.trim() }), ['Parceiro adicionado', 'Parceiro atualizado']);
         bindForm('headerLinks', 'add-header-link-form', () => ({ name: byId('header-link-name-input').value.trim(), url: byId('header-link-url-input').value.trim() }), ['Botão adicionado', 'Botão atualizado']);
