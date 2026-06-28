@@ -25,10 +25,11 @@ export class R2MediaStorage implements MediaStorage {
         secretAccessKey: this.secretAccessKey,
       },
     });
+    this.cleanPublicUrl = this.publicUrl.replace(/\/$/, '');
   }
 
   async initialize(): Promise<void> {
-    // R2 não requer criação de pastas locais
+    // Pode ser usado no futuro para verificar acesso ao bucket
   }
 
   async store(kind: MediaKind, sourcePath: string, extension: string) {

@@ -106,6 +106,7 @@ export interface StoredFile {
 }
 
 export interface MediaStorage {
+  initialize(): Promise<void>;
   store(kind: MediaKind, sourcePath: string, extension: string): Promise<StoredFile>;
   remove(kind: MediaKind, key: string): Promise<void>;
 }
