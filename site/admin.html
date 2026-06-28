@@ -261,13 +261,13 @@
                                 <small>Guarde essa senha agora. Depois ela não será exibida novamente; gere uma nova se necessário.</small>
                             </div>
                         </article>
-                        <article class="admin-card list-card">
-                            <div class="card-heading"><div><h3>Salas criadas</h3><p>Gerencie status, fonte e senha de acesso.</p></div><span class="count-chip" id="private-room-list-count">0 salas</span></div>
-                            <div class="resource-list" id="active-private-rooms-list"><div class="admin-empty">Carregando salas privadas…</div></div>
-                        </article>
-                    </div>
+                        <div class="admin-grid-stack" style="display: flex; flex-direction: column; gap: .9rem;">
+                            <article class="admin-card list-card">
+                                <div class="card-heading"><div><h3>Salas criadas</h3><p>Gerencie status, fonte e senha de acesso.</p></div><span class="count-chip" id="private-room-list-count">0 salas</span></div>
+                                <div class="resource-list" id="active-private-rooms-list"><div class="admin-empty">Carregando salas privadas…</div></div>
+                            </article>
 
-                    <article class="admin-card private-room-interaction-panel">
+                            <article class="admin-card private-room-interaction-panel">
                         <div class="card-heading">
                             <div><span class="section-kicker">INTERAÇÃO DA SALA</span><h3>Perguntas e comentários moderados</h3><p>Aprove, responda, oculte e destaque mensagens dentro da sala privada.</p></div>
                             <span class="count-chip" id="private-room-interaction-pending-count">0 pendentes</span>
@@ -329,9 +329,11 @@
                             </div>
                         </div>
                     </article>
-                </section>
+                </div>
+                </div>
+            </section>
 
-                <section class="admin-view" id="view-teachers" data-title="Professores">
+            <section class="admin-view" id="view-teachers" data-title="Professores">
                     <div class="view-heading"><div><span class="section-kicker">ACESSO LIMITADO</span><h2>Professores convidados</h2><p>Crie credenciais para professores operarem somente as salas privadas autorizadas.</p></div></div>
                     <div class="admin-grid editor-layout">
                         <article class="admin-card editor-card">
