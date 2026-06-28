@@ -221,4 +221,15 @@ export async function migrate(database: Database): Promise<void> {
       await transaction.insertInto('app_migrations').values({ version: 6, applied_at: new Date() }).execute();
     });
   }
+
+  if (!versions.has(7)) {
+    await database.transaction().execute(async (transaction) => {
+      await transaction.schema
+        .alterTable('branding')
+        .addColumn('rss_news_url', 'varchar(2048)', (column) => column.notNull().defaultTo('https://api.rss2json.com/v1/api.json?rss_url=https://g1.globo.com/rss/g1/'))
+        .execute();
+
+      await transaction.insertInto('app_migrations').values({ version: 7, applied_at: new Date() }).execute();
+    });
+  }
 }

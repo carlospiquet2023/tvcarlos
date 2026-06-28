@@ -1,8 +1,8 @@
 import { clear, element, requiredElement } from '../dom.js';
-import { CAPITALS, INTERVALS, WEATHER_ENDPOINT, RSS_NEWS_ENDPOINT } from './config.js';
+import { CAPITALS, INTERVALS, WEATHER_ENDPOINT } from './config.js';
 import { fetchJson } from './request.js';
 
-export function createTickerController() {
+export function createTickerController({ state }) {
     const ticker = requiredElement('news-ticker');
     const clock = requiredElement('brasilia-clock');
     const capitals = CAPITALS.map((capital) => ({ ...capital }));
@@ -18,11 +18,17 @@ export function createTickerController() {
     }
 
     async function refresh() {
-        const [weather, manualNews, rssNews] = await Promise.allSettled([
+        const promises = [
             fetchJson(WEATHER_ENDPOINT),
-            fetchJson('/api/news'),
-            fetchJson(RSS_NEWS_ENDPOINT)
-        ]);
+            fetchJson('/api/news')
+        ];
+        
+        if (state.branding.rssNewsUrl) {
+            promises.push(fetchJson(state.branding.rssNewsUrl));
+        }
+
+        const results = await Promise.allSettled(promises);
+        const [weather, manualNews, rssNews] = results;
 
         if (weather.status === 'fulfilled' && Array.isArray(weather.value)) {
             weather.value.forEach((item, index) => {
@@ -36,7 +42,7 @@ export function createTickerController() {
             items.push(...manualNews.value);
         }
         
-        if (rssNews.status === 'fulfilled' && rssNews.value?.items) {
+        if (rssNews && rssNews.status === 'fulfilled' && rssNews.value?.items) {
             const fetchedItems = rssNews.value.items.map(item => `[Plantão] ${item.title}`);
             items.push(...fetchedItems);
         }

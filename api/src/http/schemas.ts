@@ -129,6 +129,10 @@ export const brandingSchema = z.strictObject({
   backgroundUrl: secureAssetUrl.default(''),
   scheduleTitle: z.string().trim().min(1).max(160),
   tickerLabel: z.string().trim().min(1).max(80),
+  rssNewsUrl: z.string().trim().max(2048).refine((value) => {
+    if (!value) return true;
+    try { return new URL(value).protocol === 'https:'; } catch { return false; }
+  }, 'Use uma URL HTTPS válida para o RSS.'),
   partnerLabel: z.string().trim().min(1).max(80),
   liveSource: z.enum(['obs', 'youtube']).default('obs'),
   liveYoutubeUrl: youtubeLiveReference.default(''),

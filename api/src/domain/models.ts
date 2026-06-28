@@ -64,6 +64,7 @@ export interface Branding {
   backgroundUrl: string;
   scheduleTitle: string;
   tickerLabel: string;
+  rssNewsUrl: string;
   partnerLabel: string;
   liveSource: 'obs' | 'youtube';
   liveYoutubeUrl: string;
@@ -131,6 +132,7 @@ export const DEFAULT_BRANDING: Omit<Branding, 'updatedAt'> = {
   backgroundUrl: '',
   scheduleTitle: 'Próximos vídeos',
   tickerLabel: 'GIRO TVC',
+  rssNewsUrl: 'https://api.rss2json.com/v1/api.json?rss_url=https://g1.globo.com/rss/g1/',
   partnerLabel: 'PARCEIRO',
   liveSource: 'obs',
   liveYoutubeUrl: '',

@@ -20,6 +20,7 @@ export function createResourceController({ navigate, onMutation }) {
 
     function initialize() {
         bindForms();
+        bindRssForm();
         bindPreviews();
         bindUploads();
     }
@@ -236,6 +237,25 @@ export function createResourceController({ navigate, onMutation }) {
             } finally {
                 setBusy(form, false);
                 updateCounters();
+            }
+        });
+    }
+
+    function bindRssForm() {
+        const form = byId('rss-news-form');
+        if (!form) return;
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            setBusy(form, true);
+            try {
+                const payload = { ...adminState.branding, rssNewsUrl: byId('rss-news-url-input').value.trim() };
+                adminState.branding = await apiJson(ENDPOINTS.branding, jsonRequest('PUT', payload));
+                await onMutation();
+                showToast('URL do RSS salva', 'A fonte de notícias foi atualizada na TV pública.');
+            } catch (error) {
+                showToast('Não foi possível salvar', error.message, 'error');
+            } finally {
+                setBusy(form, false);
             }
         });
     }

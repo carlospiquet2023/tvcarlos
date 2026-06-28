@@ -69,6 +69,7 @@ export interface BrandingTable {
   background_url: string;
   schedule_title: string;
   ticker_label: string;
+  rss_news_url: string;
   partner_label: string;
   live_source: 'obs' | 'youtube';
   live_youtube_url: string;

@@ -33,7 +33,7 @@ describe('HTTP input schemas', () => {
   it('accepts a complete safe branding payload', () => {
     expect(brandingSchema.safeParse({
       companyName: 'Canal', watermarkText: 'Canal', logoText: 'Canal', logoUrl: '', backgroundUrl: '',
-      tagline: 'Sinal independente', scheduleTitle: 'Próximos vídeos', tickerLabel: 'Giro', partnerLabel: 'Parceiro',
+      tagline: 'Sinal independente', scheduleTitle: 'Próximos vídeos', tickerLabel: 'Giro', rssNewsUrl: '', partnerLabel: 'Parceiro',
       liveTitle: 'Ao vivo', liveDescription: '', loopTitle: 'Programação', loopDescription: '',
       legalName: 'Carlos Antonio de Oliveira Piquet', legalEmail: 'carlos.piquet2016@gmail.com',
       legalCnpj: '27.658.099/0001-70', legalCity: 'Rio de Janeiro - RJ', legalPhone: '+55 21 97905-4104',
@@ -43,7 +43,7 @@ describe('HTTP input schemas', () => {
   it('validates YouTube live source settings in branding', () => {
     const base = {
       companyName: 'Canal', watermarkText: 'Canal', logoText: 'Canal', logoUrl: '', backgroundUrl: '',
-      tagline: 'Sinal independente', scheduleTitle: 'Próximos vídeos', tickerLabel: 'Giro', partnerLabel: 'Parceiro',
+      tagline: 'Sinal independente', scheduleTitle: 'Próximos vídeos', tickerLabel: 'Giro', rssNewsUrl: 'https://api.rss2json.com/v1/api.json?rss_url=https://g1.globo.com/rss/g1/', partnerLabel: 'Parceiro',
       liveTitle: 'Ao vivo', liveDescription: '', loopTitle: 'Programação', loopDescription: '',
       legalName: 'Carlos Antonio de Oliveira Piquet', legalEmail: 'carlos.piquet2016@gmail.com',
       legalCnpj: '27.658.099/0001-70', legalCity: 'Rio de Janeiro - RJ', legalPhone: '+55 21 97905-4104',

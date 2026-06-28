@@ -9,6 +9,7 @@ const FIELDS = Object.freeze({
     'logo-text-input': 'logoText', 'logo-url-input': 'logoUrl', 'background-url-input': 'backgroundUrl',
     'schedule-title-input': 'scheduleTitle',
     'ticker-label-input': 'tickerLabel', 'partner-label-input': 'partnerLabel', 'live-title-input': 'liveTitle',
+    'rss-news-url-input': 'rssNewsUrl',
     'live-source-input': 'liveSource', 'live-youtube-url-input': 'liveYoutubeUrl',
     'live-desc-input': 'liveDescription', 'loop-title-input': 'loopTitle', 'loop-desc-input': 'loopDescription',
     'legal-name-input': 'legalName', 'legal-email-input': 'legalEmail', 'legal-cnpj-input': 'legalCnpj',

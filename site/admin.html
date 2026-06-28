@@ -253,6 +253,13 @@
                                 <div class="form-actions"><button class="admin-btn primary" id="news-submit-btn" type="submit"><i class="fa-solid fa-paper-plane"></i> Publicar no giro</button><button class="admin-btn secondary hidden" id="news-cancel-btn" type="button">Cancelar edição</button></div>
                             </form>
                         </article>
+                        <article class="admin-card editor-card">
+                            <div class="card-heading"><div><h3>Notícias Automáticas (RSS)</h3><p>API para buscar notícias externas automaticamente (ex: G1).</p></div></div>
+                            <form id="rss-news-form" class="admin-form">
+                                <div class="form-group"><label for="rss-news-url-input">URL do Feed RSS</label><input type="url" id="rss-news-url-input" class="form-control" placeholder="https://api.rss2json.com/..."><span class="form-help">Deixe em branco para usar apenas notícias manuais.</span></div>
+                                <div class="form-actions"><button class="admin-btn primary" id="rss-news-submit-btn" type="submit"><i class="fa-solid fa-save"></i> Salvar URL</button></div>
+                            </form>
+                        </article>
                         <article class="admin-card list-card">
                             <div class="card-heading"><div><h3>Notícias ativas</h3><p>A ordem abaixo é a ordem do giro.</p></div><span class="count-chip" id="news-list-count">0 itens</span></div>
                             <div class="resource-list" id="active-news-list"><div class="admin-empty">Carregando notícias…</div></div>

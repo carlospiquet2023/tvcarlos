@@ -369,7 +369,7 @@ components:
     BrandingInput:
       type: object
       additionalProperties: false
-      required: [companyName, tagline, watermarkText, logoText, logoUrl, scheduleTitle, tickerLabel, partnerLabel, liveSource, liveYoutubeUrl, liveTitle, liveDescription, loopTitle, loopDescription, legalName, legalEmail, legalCnpj, legalCity, legalPhone]
+      required: [companyName, tagline, watermarkText, logoText, logoUrl, scheduleTitle, tickerLabel, rssNewsUrl, partnerLabel, liveSource, liveYoutubeUrl, liveTitle, liveDescription, loopTitle, loopDescription, legalName, legalEmail, legalCnpj, legalCity, legalPhone]
       properties:
         companyName: { type: string, maxLength: 160 }
         tagline: { type: string, maxLength: 160 }
@@ -379,6 +379,7 @@ components:
         backgroundUrl: { type: string, maxLength: 2048, description: "Imagem de fundo do site; URL HTTPS, upload interno ou string vazia para usar o fundo padrão." }
         scheduleTitle: { type: string, maxLength: 160 }
         tickerLabel: { type: string, maxLength: 80 }
+        rssNewsUrl: { type: string, maxLength: 2048, description: "URL HTTPS de feed RSS." }
         partnerLabel: { type: string, maxLength: 80 }
         liveSource: { type: string, enum: [obs, youtube], description: "Fonte do sinal principal ao vivo." }
         liveYoutubeUrl: { type: string, maxLength: 2048, description: "URL HTTPS da live do YouTube; use string vazia quando liveSource for obs." }

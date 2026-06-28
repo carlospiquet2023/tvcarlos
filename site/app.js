@@ -29,7 +29,7 @@ const branding = createBrandingController({
 const navigation = createNavigationController();
 const partners = createPartnerController();
 const privateRoom = createPrivateRoomController();
-const ticker = createTickerController();
+const ticker = createTickerController({ state });
 let liveTimer;
 
 async function initialize() {
