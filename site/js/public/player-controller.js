@@ -36,6 +36,13 @@ export function createPlayerController({ state, onPlaybackChange }) {
             event.stopPropagation();
             toggleYouTubeMute();
         });
+        const youtubeFullscreenControl = document.getElementById('youtube-fullscreen-control');
+        if (youtubeFullscreenControl) {
+            youtubeFullscreenControl.addEventListener('click', (event) => {
+                event.stopPropagation();
+                document.fullscreenElement ? document.exitFullscreen() : wrapper.requestFullscreen();
+            });
+        }
         youtube.addEventListener('load', () => {
             if (!isYouTubeSource()) return;
             sendYouTubeCommand(youtubeMuted ? 'mute' : 'unMute');
