@@ -1,6 +1,6 @@
 @media (max-width: 1100px) {
     .content-grid { grid-template-columns: minmax(0,1fr) 320px; }
-    .signal-caption, .transmission-facts { display: none; }
+    .transmission-facts { display: none; }
     .logo-icon.has-custom-logo { max-width: 22vw; }
 }
 
