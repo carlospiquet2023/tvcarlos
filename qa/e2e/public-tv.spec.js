@@ -63,6 +63,20 @@ test.describe('Web TV pública', () => {
         expect(errors).toEqual([]);
     });
 
+    test('abre o acesso da sala privada no desktop e no celular', async ({ page }, testInfo) => {
+        const errors = capturePageErrors(page);
+        await page.goto('/');
+        if (testInfo.project.name.startsWith('mobile')) {
+            await page.locator('#menu-toggle').click();
+            await page.locator('#mobile-private-room-open').click();
+        } else {
+            await page.locator('#private-room-open').click();
+        }
+        await expect(page.locator('#private-room-dialog')).toBeVisible();
+        await expect(page.getByLabel('ID da sala')).toBeFocused();
+        expect(errors).toEqual([]);
+    });
+
     test('expõe páginas institucionais sem erro de execução', async ({ page }) => {
         const errors = capturePageErrors(page);
         await page.goto('/noticias.html');

@@ -175,7 +175,7 @@ export function createPrivateRoomAdminController({ navigate, onMutation }) {
     function updateSourceMode() {
         const sourceType = byId('private-room-source-type-input').value;
         const sourceInput = byId('private-room-source-url-input');
-        const uploadField = byId('private-room-source-upload-wrapper');
+        const uploadButton = byId('private-room-source-upload-button');
         const hint = byId('private-room-source-hint');
         const [, description] = SOURCE_LABELS[sourceType] || SOURCE_LABELS.youtube;
         sourceInput.disabled = sourceType === 'live';
@@ -187,7 +187,7 @@ export function createPrivateRoomAdminController({ navigate, onMutation }) {
                 : sourceType === 'video'
                     ? 'arquivo.mp4 ou https://cdn.site.com/video.mp4'
                     : 'Usa o sinal ao vivo principal';
-        uploadField.classList.toggle('hidden', sourceType !== 'video');
+        uploadButton.classList.toggle('hidden', sourceType !== 'video');
         hint.textContent = description;
         if (sourceType === 'live') sourceInput.value = '';
     }
