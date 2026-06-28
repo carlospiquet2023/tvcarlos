@@ -93,7 +93,7 @@ export function createPlayerController({ state, onPlaybackChange }) {
         state.currentSource = 'vod';
         state.activeProgram = program;
         video.loop = true;
-        video.src = /^https:\/\//i.test(program.video) ? program.video : `/videos/${program.video}`;
+        video.src = /^(https?:\/\/|\/?videos\/)/i.test(program.video) ? program.video : `/videos/${program.video}`;
         video.load();
         safePlay();
         progressContainer.classList.remove('hidden');

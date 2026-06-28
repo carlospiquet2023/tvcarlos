@@ -21,7 +21,7 @@ export function registerMediaRoutes(app: FastifyInstance, media: MediaService, a
 
   app.post('/api/upload/video', { preHandler: [auth.requireAuth, auth.requireCsrf] }, async (request, reply) => {
     const result = await receiveAndStore(request, 'video', 500 * 1024 * 1024, media, auth);
-    return reply.code(201).send({ ...result, filename: result.key });
+    return reply.code(201).send({ ...result, filename: result.publicUrl });
   });
 }
 
