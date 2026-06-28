@@ -6,6 +6,9 @@ import type {
   MediaKind,
   NewsItem,
   Partner,
+  PrivateRoom,
+  PrivateRoomAccessSession,
+  PrivateRoomSourceType,
   Program,
   Session,
   User,
@@ -44,6 +47,31 @@ export interface ContentRepository {
   updateProgram(id: string, input: Pick<Program, 'title' | 'description' | 'video'>): Promise<Program | undefined>;
   reorderPrograms(ids: string[]): Promise<void>;
   deleteProgram(id: string): Promise<boolean>;
+  listPrivateRooms(): Promise<PrivateRoom[]>;
+  findPrivateRoomByCode(roomCode: string): Promise<(PrivateRoom & { accessPasswordHash: string }) | undefined>;
+  createPrivateRoom(input: {
+    roomCode: string;
+    title: string;
+    description: string;
+    sourceType: PrivateRoomSourceType;
+    sourceUrl: string;
+    accessPasswordHash: string;
+    isActive: boolean;
+    expiresAt?: Date | null;
+  }): Promise<PrivateRoom>;
+  updatePrivateRoom(id: string, input: {
+    title: string;
+    description: string;
+    sourceType: PrivateRoomSourceType;
+    sourceUrl: string;
+    isActive: boolean;
+    expiresAt?: Date | null;
+  }): Promise<PrivateRoom | undefined>;
+  updatePrivateRoomPassword(id: string, accessPasswordHash: string): Promise<PrivateRoom | undefined>;
+  deletePrivateRoom(id: string): Promise<boolean>;
+  createPrivateRoomAccessSession(session: PrivateRoomAccessSession): Promise<void>;
+  findPrivateRoomByAccessToken(tokenHash: string, roomCode: string, now: Date): Promise<PrivateRoom | undefined>;
+  deleteExpiredPrivateRoomAccessSessions(now: Date): Promise<void>;
   getBranding(): Promise<Branding>;
   updateBranding(branding: Omit<Branding, 'updatedAt'>): Promise<Branding>;
   listPartners(): Promise<Partner[]>;

@@ -188,4 +188,37 @@ export async function migrate(database: Database): Promise<void> {
       await transaction.insertInto('app_migrations').values({ version: 5, applied_at: new Date() }).execute();
     });
   }
+
+  if (!versions.has(6)) {
+    await database.transaction().execute(async (transaction) => {
+      await transaction.schema
+        .createTable('private_rooms')
+        .addColumn('id', 'uuid', (column) => column.primaryKey())
+        .addColumn('room_code', 'varchar(24)', (column) => column.notNull().unique())
+        .addColumn('title', 'varchar(160)', (column) => column.notNull())
+        .addColumn('description', 'varchar(500)', (column) => column.notNull())
+        .addColumn('source_type', 'varchar(20)', (column) => column.notNull())
+        .addColumn('source_url', 'varchar(2048)', (column) => column.notNull().defaultTo(''))
+        .addColumn('access_password_hash', 'varchar(512)', (column) => column.notNull())
+        .addColumn('is_active', 'boolean', (column) => column.notNull().defaultTo(true))
+        .addColumn('expires_at', 'timestamptz')
+        .addColumn('created_at', 'timestamptz', (column) => column.notNull())
+        .addColumn('updated_at', 'timestamptz', (column) => column.notNull())
+        .execute();
+      await transaction.schema.createIndex('private_rooms_code_idx').on('private_rooms').column('room_code').execute();
+      await transaction.schema.createIndex('private_rooms_active_idx').on('private_rooms').column('is_active').execute();
+
+      await transaction.schema
+        .createTable('private_room_access_sessions')
+        .addColumn('id', 'uuid', (column) => column.primaryKey())
+        .addColumn('room_id', 'uuid', (column) => column.notNull().references('private_rooms.id').onDelete('cascade'))
+        .addColumn('token_hash', 'varchar(64)', (column) => column.notNull().unique())
+        .addColumn('expires_at', 'timestamptz', (column) => column.notNull())
+        .addColumn('created_at', 'timestamptz', (column) => column.notNull())
+        .execute();
+      await transaction.schema.createIndex('private_room_sessions_expiry_idx').on('private_room_access_sessions').column('expires_at').execute();
+
+      await transaction.insertInto('app_migrations').values({ version: 6, applied_at: new Date() }).execute();
+    });
+  }
 }

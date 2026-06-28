@@ -26,6 +26,11 @@
 
             <nav class="header-links" id="header-links" aria-label="Navegação principal"></nav>
 
+            <button class="private-room-trigger" id="private-room-open" type="button">
+                <i class="fa-solid fa-lock"></i>
+                <span>Sala Privada</span>
+            </button>
+
             <div class="status-container">
                 <span class="signal-caption">SINAL DIGITAL</span>
                 <span id="status-badge" class="badge badge-recorded">
@@ -38,6 +43,7 @@
             </button>
             <div class="mobile-menu hidden" id="mobile-menu">
                 <nav id="mobile-header-links" aria-label="Navegação móvel"></nav>
+                <button class="mobile-private-room-link" id="mobile-private-room-open" type="button"><i class="fa-solid fa-lock"></i> Sala Privada</button>
                 <a class="mobile-legal-link" href="legal.html"><i class="fa-solid fa-scale-balanced"></i> Termos e privacidade</a>
             </div>
         </header>
@@ -176,6 +182,21 @@
             </div>
         </footer>
     </div>
+
+    <dialog class="private-room-dialog" id="private-room-dialog">
+        <form id="private-room-access-form" class="private-room-access-form" method="dialog">
+            <button class="dialog-close" id="private-room-close" type="button" aria-label="Fechar"><i class="fa-solid fa-xmark"></i></button>
+            <span class="private-room-dialog-icon"><i class="fa-solid fa-lock"></i></span>
+            <h2>Acessar Sala Privada</h2>
+            <p>Informe o ID e a senha fornecidos pela TV Carlos para assistir ao conteúdo exclusivo.</p>
+            <label for="private-room-code-input">ID da sala</label>
+            <input type="text" id="private-room-code-input" name="roomCode" maxlength="24" autocomplete="off" required placeholder="Ex.: 123456">
+            <label for="private-room-password-input">Senha</label>
+            <input type="password" id="private-room-password-input" name="password" maxlength="128" autocomplete="current-password" required>
+            <span class="private-room-access-error" id="private-room-access-error" role="alert"></span>
+            <button class="private-room-submit" id="private-room-submit" type="submit"><i class="fa-solid fa-arrow-right-to-bracket"></i> Entrar na sala</button>
+        </form>
+    </dialog>
 
     <script type="module" src="app.js"></script>
 </body>

@@ -4,6 +4,7 @@ import './js/client-guard.js';
 import { createBrandingAdminController } from './js/admin/branding-controller.js';
 import { adminState } from './js/admin/core.js';
 import { createOperationsController } from './js/admin/operations-controller.js';
+import { createPrivateRoomAdminController } from './js/admin/private-room-controller.js';
 import { createResourceController } from './js/admin/resource-controller.js';
 import { createSecurityController } from './js/admin/security-controller.js';
 import { initializeNavigation, showToast } from './js/admin/ui.js';
@@ -12,6 +13,7 @@ const operations = createOperationsController();
 const navigate = initializeNavigation();
 const resources = createResourceController({ navigate, onMutation: operations.loadAudit });
 const branding = createBrandingAdminController({ onMutation: operations.loadAudit });
+const privateRooms = createPrivateRoomAdminController({ navigate, onMutation: operations.loadAudit });
 const security = createSecurityController();
 let statusTimer;
 
@@ -19,7 +21,7 @@ async function refreshAll(showFeedback = false) {
     const buttonIcon = byId('refresh-admin-btn').querySelector('i');
     buttonIcon.classList.add('fa-spin');
     try {
-        await Promise.all([resources.loadAll(), branding.load(), operations.loadAudit(), operations.checkStatus()]);
+        await Promise.all([resources.loadAll(), branding.load(), privateRooms.load(), operations.loadAudit(), operations.checkStatus()]);
         byId('last-sync').textContent = `Atualizado às ${new Intl.DateTimeFormat('pt-BR', { timeStyle: 'short' }).format(new Date())}`;
         if (showFeedback) showToast('Painel atualizado', 'Dados sincronizados com a TV pública.');
     } catch (error) {
@@ -34,6 +36,7 @@ async function initialize() {
         adminState.session = await apiJson('/api/auth/session');
         resources.initialize();
         branding.initialize();
+        privateRooms.initialize();
         security.initialize();
         security.renderSession();
         bindSessionActions();

@@ -32,6 +32,29 @@ export interface Program {
   createdAt: Date;
 }
 
+export type PrivateRoomSourceType = 'live' | 'youtube' | 'video' | 'external';
+
+export interface PrivateRoom {
+  id: string;
+  roomCode: string;
+  title: string;
+  description: string;
+  sourceType: PrivateRoomSourceType;
+  sourceUrl: string;
+  isActive: boolean;
+  expiresAt?: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface PrivateRoomAccessSession {
+  id: string;
+  roomId: string;
+  tokenHash: string;
+  expiresAt: Date;
+  createdAt: Date;
+}
+
 export interface Branding {
   companyName: string;
   tagline: string;

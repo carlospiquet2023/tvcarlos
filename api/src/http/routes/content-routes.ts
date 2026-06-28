@@ -1,4 +1,5 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { AppConfig } from '../../config.js';
 import type { ContentService } from '../../application/content-service.js';
 import type { createAuthContext } from '../auth-context.js';
 import { requestAuditContext } from '../auth-context.js';
@@ -11,12 +12,16 @@ import {
   parseInput,
   orderSchema,
   partnerSchema,
+  privateRoomAccessSchema,
+  privateRoomSchema,
   programSchema,
 } from '../schemas.js';
 
 type AuthContext = ReturnType<typeof createAuthContext>;
 
-export function registerContentRoutes(app: FastifyInstance, content: ContentService, auth: AuthContext) {
+const PRIVATE_ROOM_COOKIE = 'tv_private_room_session';
+
+export function registerContentRoutes(app: FastifyInstance, config: AppConfig, content: ContentService, auth: AuthContext) {
   app.get('/api/news', async () => content.listNews());
   app.post('/api/news', { preHandler: [auth.requireAuth, auth.requireCsrf] }, async (request, reply) => {
     const input = parseInput(newsSchema, request.body);
@@ -74,6 +79,47 @@ export function registerContentRoutes(app: FastifyInstance, content: ContentServ
     return content.updateBranding(input, actor(request, auth));
   });
 
+  app.get('/api/private-rooms', { preHandler: auth.requireAuth }, async () => content.listPrivateRooms());
+  app.post('/api/private-rooms', { preHandler: [auth.requireAuth, auth.requireCsrf] }, async (request, reply) => {
+    const input = parseInput(privateRoomSchema, request.body);
+    const item = await content.createPrivateRoom(input, actor(request, auth));
+    return reply.code(201).send(item);
+  });
+  app.put('/api/private-rooms/:id', { preHandler: [auth.requireAuth, auth.requireCsrf] }, async (request) => {
+    const id = parseInput(idSchema, (request.params as { id?: unknown }).id);
+    const input = parseInput(privateRoomSchema, request.body);
+    return content.updatePrivateRoom(id, input, actor(request, auth));
+  });
+  app.post('/api/private-rooms/:id/rotate-password', { preHandler: [auth.requireAuth, auth.requireCsrf] }, async (request) => {
+    const id = parseInput(idSchema, (request.params as { id?: unknown }).id);
+    return content.rotatePrivateRoomPassword(id, actor(request, auth));
+  });
+  app.delete('/api/private-rooms/:id', { preHandler: [auth.requireAuth, auth.requireCsrf] }, async (request, reply) => {
+    const id = parseInput(idSchema, (request.params as { id?: unknown }).id);
+    await content.deletePrivateRoom(id, actor(request, auth));
+    return reply.code(204).send();
+  });
+
+  app.post('/api/private-room-access', {
+    config: { rateLimit: { max: 8, timeWindow: '15 minutes' } },
+  }, async (request, reply) => {
+    const input = parseInput(privateRoomAccessSchema, request.body);
+    const access = await content.grantPrivateRoomAccess(input.roomCode, input.password, requestAuditContext(request));
+    setPrivateRoomCookie(reply, config, access.token, access.expiresAt);
+    return reply.send({ room: access.room, url: `/sala-privada.html?room=${encodeURIComponent(access.room.roomCode)}` });
+  });
+
+  app.post('/api/private-room-access/logout', async (_request, reply) => {
+    clearPrivateRoomCookie(reply, config);
+    return reply.code(204).send();
+  });
+
+  app.get('/api/private-room-access/:roomCode', async (request) => {
+    const params = request.params as { roomCode?: unknown };
+    const roomCode = parseInput(privateRoomAccessSchema.shape.roomCode, params.roomCode);
+    return content.getPrivateRoomForAccess(roomCode, request.cookies[PRIVATE_ROOM_COOKIE]);
+  });
+
   app.get('/api/partners', async () => content.listPartners());
   app.post('/api/partners', { preHandler: [auth.requireAuth, auth.requireCsrf] }, async (request, reply) => {
     const input = parseInput(partnerSchema, request.body);
@@ -126,4 +172,23 @@ export function registerContentRoutes(app: FastifyInstance, content: ContentServ
 function actor(request: FastifyRequest, auth: AuthContext) {
   const session = auth.getSession(request);
   return { userId: session.user.id, ...requestAuditContext(request) };
+}
+
+function setPrivateRoomCookie(reply: FastifyReply, config: AppConfig, token: string, expiresAt: Date) {
+  reply.setCookie(PRIVATE_ROOM_COOKIE, token, {
+    path: '/',
+    httpOnly: true,
+    secure: config.cookieSecure,
+    sameSite: 'strict',
+    expires: expiresAt,
+  });
+}
+
+function clearPrivateRoomCookie(reply: FastifyReply, config: AppConfig) {
+  reply.clearCookie(PRIVATE_ROOM_COOKIE, {
+    path: '/',
+    httpOnly: true,
+    secure: config.cookieSecure,
+    sameSite: 'strict',
+  });
 }

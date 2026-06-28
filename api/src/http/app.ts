@@ -75,7 +75,7 @@ export async function buildApp(dependencies: AppDependencies) {
   registerStreamRoutes(app, config);
 
   const authContext = registerAuthRoutes(app, config, dependencies.authService);
-  registerContentRoutes(app, dependencies.contentService, authContext);
+  registerContentRoutes(app, config, dependencies.contentService, authContext);
   registerMediaRoutes(app, dependencies.mediaService, authContext);
 
   app.setNotFoundHandler(async (_request, reply) => {

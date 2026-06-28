@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { brandingSchema, headerLinkSchema, partnerSchema, programSchema } from '../../src/http/schemas.js';
+import {
+  brandingSchema,
+  headerLinkSchema,
+  partnerSchema,
+  privateRoomAccessSchema,
+  privateRoomSchema,
+  programSchema,
+} from '../../src/http/schemas.js';
 
 describe('HTTP input schemas', () => {
   it('rejects script and insecure asset URLs', () => {
@@ -53,5 +60,16 @@ describe('HTTP input schemas', () => {
     expect(headerLinkSchema.safeParse({ name: 'Parceiro', url: 'https://example.com' }).success).toBe(true);
     expect(headerLinkSchema.safeParse({ name: 'Ataque', url: 'javascript:alert(1)' }).success).toBe(false);
     expect(headerLinkSchema.safeParse({ name: 'Travessia', url: '../admin.html' }).success).toBe(false);
+  });
+
+  it('validates private room content sources and access payloads', () => {
+    const base = { title: 'Sala VIP', description: '', isActive: true, expiresAt: null };
+    expect(privateRoomSchema.safeParse({ ...base, sourceType: 'live', sourceUrl: '' }).success).toBe(true);
+    expect(privateRoomSchema.safeParse({ ...base, sourceType: 'youtube', sourceUrl: 'https://youtu.be/dQw4w9WgXcQ' }).success).toBe(true);
+    expect(privateRoomSchema.safeParse({ ...base, sourceType: 'external', sourceUrl: 'https://cliente.example.com/sala' }).success).toBe(true);
+    expect(privateRoomSchema.safeParse({ ...base, sourceType: 'external', sourceUrl: 'http://cliente.example.com/sala' }).success).toBe(false);
+    expect(privateRoomSchema.safeParse({ ...base, sourceType: 'youtube', sourceUrl: 'https://example.com/video' }).success).toBe(false);
+    expect(privateRoomAccessSchema.safeParse({ roomCode: '123456', password: 'abc123' }).success).toBe(true);
+    expect(privateRoomAccessSchema.safeParse({ roomCode: '../secret', password: 'abc123' }).success).toBe(false);
   });
 });

@@ -21,6 +21,7 @@
                 <a href="#overview" data-view="overview" class="active"><i class="fa-solid fa-gauge-high"></i><span>Visão geral</span></a>
                 <a href="#identity" data-view="identity"><i class="fa-regular fa-image"></i><span>Marca e sinal</span></a>
                 <a href="#navigation" data-view="navigation"><i class="fa-solid fa-bars"></i><span>Menu do site</span><b id="nav-header-link-count">0</b></a>
+                <a href="#private-rooms" data-view="private-rooms"><i class="fa-solid fa-lock"></i><span>Sala Privada</span><b id="nav-private-room-count">0</b></a>
                 <a href="#programs" data-view="programs"><i class="fa-solid fa-clapperboard"></i><span>Vídeos</span><b id="nav-program-count">0</b></a>
                 <a href="#ticker" data-view="ticker"><i class="fa-regular fa-message"></i><span>Giro de notícias</span><b id="nav-news-count">0</b></a>
                 <a href="#partners" data-view="partners"><i class="fa-solid fa-handshake"></i><span>Parceiros</span><b id="nav-partner-count">0</b></a>
@@ -57,6 +58,7 @@
                         <article class="metric-card"><span class="metric-icon blue"><i class="fa-solid fa-clapperboard"></i></span><div><strong id="stat-programs">0</strong><span>vídeos cadastrados</span></div></article>
                         <article class="metric-card"><span class="metric-icon teal"><i class="fa-regular fa-message"></i></span><div><strong id="stat-news">0</strong><span>notícias no giro</span></div></article>
                         <article class="metric-card"><span class="metric-icon coral"><i class="fa-solid fa-handshake"></i></span><div><strong id="stat-partners">0</strong><span>parceiros comerciais</span></div></article>
+                        <article class="metric-card"><span class="metric-icon purple"><i class="fa-solid fa-lock"></i></span><div><strong id="stat-private-rooms">0</strong><span>salas privadas</span></div></article>
                     </div>
 
                     <div class="admin-grid two-columns">
@@ -74,6 +76,7 @@
                             <div class="card-heading"><div><span class="section-kicker">ATALHOS</span><h3>Ações frequentes</h3></div><i class="fa-solid fa-bolt"></i></div>
                             <div class="quick-actions">
                                 <button type="button" data-go="programs"><i class="fa-solid fa-plus"></i><span><strong>Novo vídeo</strong><small>Upload, URL ou YouTube</small></span></button>
+                                <button type="button" data-go="private-rooms"><i class="fa-solid fa-lock"></i><span><strong>Nova sala privada</strong><small>Conteúdo por ID e senha</small></span></button>
                                 <button type="button" data-go="ticker"><i class="fa-regular fa-message"></i><span><strong>Publicar notícia</strong><small>Atualizar o rodapé da TV</small></span></button>
                                 <button type="button" data-go="partners"><i class="fa-solid fa-handshake"></i><span><strong>Novo parceiro</strong><small>Ativar espaço comercial</small></span></button>
                             </div>
@@ -167,6 +170,52 @@
                         <article class="admin-card list-card">
                             <div class="card-heading"><div><h3>Menu ativo</h3><p>A ordem abaixo será usada no computador e no celular.</p></div><span class="count-chip" id="header-link-list-count">0 de 4</span></div>
                             <div class="resource-list" id="active-header-links-list"><div class="admin-empty">Carregando botões…</div></div>
+                        </article>
+                    </div>
+                </section>
+
+                <section class="admin-view" id="view-private-rooms" data-title="Sala Privada">
+                    <div class="view-heading"><div><span class="section-kicker">ACESSO RESTRITO</span><h2>Salas privadas</h2><p>Crie áreas protegidas por ID e senha para clientes, patrocinadores ou conteúdos exclusivos.</p></div></div>
+                    <div class="admin-grid editor-layout">
+                        <article class="admin-card editor-card">
+                            <div class="card-heading"><div><h3 id="private-room-form-title">Criar sala privada</h3><p>A senha é gerada pelo sistema e armazenada com hash seguro.</p></div><i class="fa-solid fa-user-lock"></i></div>
+                            <form id="add-private-room-form" class="admin-form">
+                                <div class="form-group"><label for="private-room-title-input">Nome da sala</label><input type="text" id="private-room-title-input" class="form-control" maxlength="160" required placeholder="Ex.: Sala VIP Cliente A"></div>
+                                <div class="form-group"><label for="private-room-description-input">Descrição</label><textarea id="private-room-description-input" class="form-control" maxlength="500" rows="3" placeholder="Texto exibido dentro da sala privada"></textarea></div>
+                                <div class="form-grid">
+                                    <div class="form-group">
+                                        <label for="private-room-source-type-input">Tipo de conteúdo</label>
+                                        <select id="private-room-source-type-input" class="form-control" required>
+                                            <option value="youtube">YouTube / YouTube Live</option>
+                                            <option value="video">Vídeo enviado ou URL HTTPS</option>
+                                            <option value="live">Sinal ao vivo da TV</option>
+                                            <option value="external">Link externo seguro</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group"><label for="private-room-expires-at-input">Expiração opcional</label><input type="datetime-local" id="private-room-expires-at-input" class="form-control"><small>Vazio mantém a sala sem data de expiração.</small></div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="private-room-source-url-input">Fonte do conteúdo</label>
+                                    <div class="upload-field" id="private-room-source-upload-wrapper"><input type="text" id="private-room-source-url-input" class="form-control" maxlength="2048" required placeholder="https://youtu.be/..."><label class="admin-btn secondary upload-button"><i class="fa-solid fa-upload"></i> Enviar vídeo<input type="file" id="private-room-source-upload" accept="video/*"></label></div>
+                                    <span class="field-status" id="private-room-source-upload-status"></span>
+                                    <small id="private-room-source-hint">Cole o link de compartilhamento do vídeo ou da live.</small>
+                                </div>
+                                <label class="toggle-field"><input type="checkbox" id="private-room-active-input" checked><span><strong>Sala ativa</strong><small>Desative para bloquear o acesso sem apagar a configuração.</small></span></label>
+                                <div class="security-note"><i class="fa-solid fa-shield-halved"></i><div><strong>Controle correto de acesso</strong><p>O visitante só entra com ID e senha válidos. A sessão privada usa cookie HttpOnly e expira automaticamente.</p></div></div>
+                                <div class="form-actions"><button class="admin-btn primary" id="private-room-submit-btn" type="submit"><i class="fa-solid fa-plus"></i> Criar sala e gerar senha</button><button class="admin-btn secondary hidden" id="private-room-cancel-btn" type="button">Cancelar edição</button></div>
+                            </form>
+
+                            <div class="credential-card hidden" id="private-room-credentials">
+                                <div><span>ID da sala</span><strong id="private-room-credential-id">—</strong></div>
+                                <div><span>Senha</span><strong id="private-room-credential-password">—</strong></div>
+                                <div><span>Link direto</span><strong id="private-room-credential-link">—</strong></div>
+                                <button class="admin-btn primary full-width" id="private-room-copy-credentials-btn" type="button"><i class="fa-regular fa-copy"></i> Copiar credenciais</button>
+                                <small>Guarde essa senha agora. Depois ela não será exibida novamente; gere uma nova se necessário.</small>
+                            </div>
+                        </article>
+                        <article class="admin-card list-card">
+                            <div class="card-heading"><div><h3>Salas criadas</h3><p>Gerencie status, fonte e senha de acesso.</p></div><span class="count-chip" id="private-room-list-count">0 salas</span></div>
+                            <div class="resource-list" id="active-private-rooms-list"><div class="admin-empty">Carregando salas privadas…</div></div>
                         </article>
                     </div>
                 </section>

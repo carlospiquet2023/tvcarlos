@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sala Privada · TV Carlos</title>
+    <meta name="theme-color" content="#f2f8f7">
+    <meta name="robots" content="noindex,nofollow">
+    <link rel="stylesheet" href="vendor/fontawesome/css/all.min.css">
+    <script src="vendor/hls/hls.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="broadcast-page private-room-page">
+    <div class="app-container">
+        <header class="main-header">
+            <a class="logo-area" href="index.html" aria-label="Voltar para TV Carlos">
+                <div class="logo-icon" id="header-logo-icon">
+                    <i class="fa-solid fa-tv"></i>
+                </div>
+                <div class="logo-copy">
+                    <span class="logo-kicker" id="header-tagline">SINAL INDEPENDENTE · BRASIL</span>
+                    <span class="logo-text" id="header-logo-text">TV <span>Carlos</span></span>
+                </div>
+            </a>
+            <div class="private-room-actions">
+                <a class="private-room-action" href="index.html"><i class="fa-solid fa-tv"></i> TV aberta</a>
+                <button class="private-room-action" id="private-room-logout" type="button"><i class="fa-solid fa-door-open"></i> Sair da sala</button>
+            </div>
+        </header>
+
+        <main class="private-room-main">
+            <section class="private-room-hero">
+                <div>
+                    <span class="section-kicker">CONTEÚDO EXCLUSIVO</span>
+                    <h1 id="private-room-title">Sala Privada</h1>
+                    <p id="private-room-description">Validando credenciais da sala…</p>
+                </div>
+                <span class="private-room-badge"><i class="fa-solid fa-lock"></i> Acesso restrito</span>
+            </section>
+
+            <section class="private-room-player" id="private-room-player" aria-live="polite">
+                <div class="private-room-frame private-room-error">Carregando sala privada…</div>
+            </section>
+
+            <div class="private-room-actions" id="private-room-controls">
+                <button class="private-room-action" id="private-room-play" type="button"><i class="fa-solid fa-play"></i> Reproduzir</button>
+                <button class="private-room-action" id="private-room-volume" type="button"><i class="fa-solid fa-volume-xmark"></i> Ativar som</button>
+                <a class="private-room-action hidden" id="private-room-external-link" href="#" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-arrow-up-right-from-square"></i> Abrir conteúdo</a>
+            </div>
+
+            <p class="legal-strip">© 2026 <span id="legal-owner-name">Carlos Antonio de Oliveira Piquet</span> · Acesso individual e rastreável.</p>
+        </main>
+    </div>
+
+    <script type="module" src="private-room.js"></script>
+</body>
+</html>

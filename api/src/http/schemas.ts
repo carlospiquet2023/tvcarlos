@@ -75,10 +75,49 @@ const youtubeLiveReference = z.string().trim().max(2048).refine((value) => {
   }
 }, 'Use uma URL HTTPS válida de live ou vídeo do YouTube.');
 
+const privateRoomExpiresAt = z.union([z.string().trim().max(40), z.null(), z.undefined()]).transform((value, context) => {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    context.addIssue({ code: 'custom', message: 'Informe uma data de expiração válida.' });
+    return z.NEVER;
+  }
+  return date;
+});
+
 export const programSchema = z.strictObject({
   title: z.string().trim().min(1).max(160),
   description: z.string().trim().max(500).default(''),
   video: videoReference,
+});
+
+export const privateRoomSchema = z.strictObject({
+  title: z.string().trim().min(1).max(160),
+  description: z.string().trim().max(500).default(''),
+  sourceType: z.enum(['live', 'youtube', 'video', 'external']).default('youtube'),
+  sourceUrl: z.string().trim().max(2048).default(''),
+  isActive: z.boolean().default(true),
+  expiresAt: privateRoomExpiresAt,
+}).superRefine((value, context) => {
+  if (value.sourceType === 'live') return;
+  if (!value.sourceUrl) {
+    context.addIssue({ code: 'custom', path: ['sourceUrl'], message: 'Informe a fonte da sala privada.' });
+    return;
+  }
+  if (value.sourceType === 'youtube' && !youtubeLiveReference.safeParse(value.sourceUrl).success) {
+    context.addIssue({ code: 'custom', path: ['sourceUrl'], message: 'Informe uma URL válida do YouTube.' });
+  }
+  if (value.sourceType === 'video' && !videoReference.safeParse(value.sourceUrl).success) {
+    context.addIssue({ code: 'custom', path: ['sourceUrl'], message: 'Informe um vídeo enviado, URL HTTPS ou YouTube válido.' });
+  }
+  if (value.sourceType === 'external' && !secureDestinationUrl.refine(Boolean).safeParse(value.sourceUrl).success) {
+    context.addIssue({ code: 'custom', path: ['sourceUrl'], message: 'Informe uma URL HTTPS válida para a sala externa.' });
+  }
+});
+
+export const privateRoomAccessSchema = z.strictObject({
+  roomCode: z.string().trim().regex(/^[a-zA-Z0-9-]{4,24}$/, 'Informe um ID de sala válido.'),
+  password: z.string().min(1).max(128),
 });
 
 export const brandingSchema = z.strictObject({

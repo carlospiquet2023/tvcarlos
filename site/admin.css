@@ -125,12 +125,13 @@ button { -webkit-tap-highlight-color: transparent; }
 .view-heading p { max-width: 660px; margin: .4rem 0 0; color: #627889; font-size: .83rem; line-height: 1.55; }
 .sync-label { flex: 0 0 auto; color: #718797; font-size: .68rem; }
 
-.metric-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .9rem; margin-bottom: .9rem; }
+.metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .9rem; margin-bottom: .9rem; }
 .metric-card { min-width: 0; display: flex; align-items: center; gap: .85rem; padding: 1rem 1.1rem; background: rgba(255,255,255,.91); border: 1px solid #d2e1e1; border-radius: 12px; box-shadow: 0 9px 30px rgba(25,50,71,.06); }
 .metric-icon { width: 42px; height: 42px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 10px; }
 .metric-icon.blue { color: #176b87; background: #e4f1f5; }
 .metric-icon.teal { color: #147c72; background: #e4f4f0; }
 .metric-icon.coral { color: #b9584f; background: #f9ece8; }
+.metric-icon.purple { color: #6651a8; background: #eeeafd; }
 .metric-card strong, .metric-card span { display: block; }
 .metric-card strong { color: #15334c; font: 800 1.45rem/1 var(--font-heading); }
 .metric-card div > span { margin-top: .25rem; color: #718494; font-size: .68rem; }
@@ -205,6 +206,24 @@ textarea.form-control { resize: vertical; line-height: 1.5; }
 .upload-button input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .field-status, .source-status { display: block; min-height: 1em; margin-top: .34rem; color: #6f8491; font-size: .62rem; line-height: 1.45; }
 
+.toggle-field {
+    display: flex;
+    align-items: center;
+    gap: .65rem;
+    margin: .2rem 0 .9rem;
+    padding: .75rem;
+    color: #285064;
+    background: #f5f9f8;
+    border: 1px solid #d7e6e6;
+    border-radius: 9px;
+    cursor: pointer;
+}
+.toggle-field input { width: 18px; height: 18px; accent-color: #178678; }
+.toggle-field strong,
+.toggle-field small { display: block; }
+.toggle-field strong { font-size: .72rem; }
+.toggle-field small { margin-top: .14rem; color: #718693; font-size: .61rem; line-height: 1.35; }
+
 .brand-preview { margin-top: .4rem; padding: .65rem; background: #edf6f5; border: 1px dashed #bfd8d9; border-radius: 9px; }
 .brand-preview > span { display: block; margin-bottom: .45rem; color: #6e8490; font-size: .58rem; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; }
 .brand-preview > div { min-height: 62px; display: flex; align-items: center; justify-content: center; background: #fff; border-radius: 7px; overflow: hidden; }
@@ -229,6 +248,46 @@ textarea.form-control { resize: vertical; line-height: 1.5; }
 .resource-thumbnail { width: 34px; height: 34px; display: grid; place-items: center; overflow: hidden; color: #23798c; background: #e8f3f3; border-radius: 7px; }
 .resource-thumbnail img { width: 100%; height: 100%; object-fit: contain; background: #fff; }
 .resource-type { display: inline-flex; align-items: center; gap: .25rem; color: #257d90; }
+.private-room-status.active { color: #08766c; background: #e1f4f1; }
+.private-room-status.inactive { color: #a64d44; background: #fae9e6; }
+
+.credential-card {
+    display: grid;
+    gap: .55rem;
+    margin-top: .9rem;
+    padding: .85rem;
+    color: #1f4056;
+    background: linear-gradient(135deg, #e8f7f5, #f8fbfb);
+    border: 1px solid #b8dada;
+    border-radius: 10px;
+    box-shadow: inset 4px 0 #159083;
+}
+.credential-card div {
+    min-width: 0;
+    display: grid;
+    gap: .18rem;
+    padding: .48rem .55rem;
+    background: rgba(255,255,255,.72);
+    border: 1px solid #d6e9e9;
+    border-radius: 8px;
+}
+.credential-card span {
+    color: #66808c;
+    font-size: .56rem;
+    font-weight: 900;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+}
+.credential-card strong {
+    overflow-wrap: anywhere;
+    color: #17364d;
+    font: 800 .82rem/1.35 var(--font-heading);
+}
+.credential-card small {
+    color: #6f8490;
+    font-size: .61rem;
+    line-height: 1.45;
+}
 
 .partner-form-preview { min-height: 76px; display: grid; place-items: center; margin-bottom: .8rem; background: #f5f9f8; border: 1px dashed #bfd7d8; border-radius: 9px; color: #82949e; font-size: .65rem; }
 .partner-form-preview img { max-width: 220px; max-height: 64px; object-fit: contain; }
@@ -267,6 +326,7 @@ textarea.form-control { resize: vertical; line-height: 1.5; }
 @media (max-width: 1050px) {
     .admin-shell { grid-template-columns: 210px minmax(0, 1fr); }
     .editor-layout { grid-template-columns: minmax(270px, .8fr) minmax(340px, 1.2fr); }
+    .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .admin-nav a { padding-inline: .55rem; }
 }
 

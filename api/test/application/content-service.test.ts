@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ContentService } from '../../src/application/content-service.js';
-import { NotFoundError, ValidationError } from '../../src/application/errors.js';
+import { NotFoundError, UnauthorizedError, ValidationError } from '../../src/application/errors.js';
 import type { AuditRepository, ContentRepository } from '../../src/application/ports.js';
-import { DEFAULT_BRANDING, type HeaderLink, type NewsItem, type Partner, type Program } from '../../src/domain/models.js';
+import { DEFAULT_BRANDING, type HeaderLink, type NewsItem, type Partner, type PrivateRoom, type Program } from '../../src/domain/models.js';
+import { hashPassword } from '../../src/infrastructure/security/password.js';
 
 const now = new Date('2026-01-01T00:00:00Z');
 const actor = { userId: 'user-1', requestId: 'request-1', ip: '127.0.0.1' };
@@ -10,6 +11,18 @@ const news = (id: string): NewsItem => ({ id, text: `Notícia ${id}`, position: 
 const program = (id: string): Program => ({ id, title: `Programa ${id}`, description: 'Descrição', video: 'video.mp4', position: 0, createdAt: now });
 const partner = (id: string): Partner => ({ id, name: `Parceiro ${id}`, logoUrl: 'https://example.com/logo.png', destinationUrl: '', position: 0, createdAt: now });
 const link = (id: string): HeaderLink => ({ id, name: `Link ${id}`, url: 'https://example.com', position: 0, createdAt: now });
+const privateRoom = (id: string): PrivateRoom => ({
+  id,
+  roomCode: '123456',
+  title: `Sala ${id}`,
+  description: 'Conteúdo restrito',
+  sourceType: 'youtube',
+  sourceUrl: 'https://youtu.be/dQw4w9WgXcQ',
+  isActive: true,
+  expiresAt: null,
+  createdAt: now,
+  updatedAt: now,
+});
 
 function repositoryMock() {
   return {
@@ -24,6 +37,15 @@ function repositoryMock() {
     updateProgram: vi.fn(async (id: string, input: Pick<Program, 'title' | 'description' | 'video'>) => ({ ...program(id), ...input })),
     reorderPrograms: vi.fn(async () => undefined),
     deleteProgram: vi.fn(async () => true),
+    listPrivateRooms: vi.fn(async () => [privateRoom('vip1')]),
+    findPrivateRoomByCode: vi.fn(async () => undefined),
+    createPrivateRoom: vi.fn(async (input) => ({ ...privateRoom('vip3'), ...input })),
+    updatePrivateRoom: vi.fn(async (id: string, input) => ({ ...privateRoom(id), ...input })),
+    updatePrivateRoomPassword: vi.fn(async (id: string) => privateRoom(id)),
+    deletePrivateRoom: vi.fn(async () => true),
+    createPrivateRoomAccessSession: vi.fn(async () => undefined),
+    findPrivateRoomByAccessToken: vi.fn(async () => privateRoom('vip1')),
+    deleteExpiredPrivateRoomAccessSessions: vi.fn(async () => undefined),
     getBranding: vi.fn(async () => ({ ...DEFAULT_BRANDING, updatedAt: now })),
     updateBranding: vi.fn(async (input) => ({ ...input, updatedAt: now })),
     listPartners: vi.fn(async () => [partner('r1'), partner('r2')]),
@@ -56,6 +78,7 @@ describe('ContentService', () => {
     await expect(service.listPrograms()).resolves.toHaveLength(2);
     await expect(service.listPartners()).resolves.toHaveLength(2);
     await expect(service.listHeaderLinks()).resolves.toHaveLength(2);
+    await expect(service.listPrivateRooms()).resolves.toHaveLength(1);
     await expect(service.getBranding()).resolves.toMatchObject({ companyName: 'TV Carlos' });
     await expect(service.listAuditLogs(30)).resolves.toEqual([]);
     expect(audit.list).toHaveBeenCalledWith(30);
@@ -73,6 +96,12 @@ describe('ContentService', () => {
     await service.reorderPrograms(['p2', 'p1'], actor);
     await service.deleteProgram('p1', actor);
 
+    const roomInput = { title: 'Sala VIP', description: 'Cliente A', sourceType: 'youtube' as const, sourceUrl: 'https://youtu.be/dQw4w9WgXcQ', isActive: true, expiresAt: null };
+    const createdRoom = await service.createPrivateRoom(roomInput, actor);
+    await service.updatePrivateRoom('vip1', roomInput, actor);
+    await service.rotatePrivateRoomPassword('vip1', actor);
+    await service.deletePrivateRoom('vip1', actor);
+
     const partnerInput = { name: 'Marca', logoUrl: 'https://example.com/marca.png', destinationUrl: 'https://example.com' };
     await service.createPartner(partnerInput, actor);
     await service.updatePartner('r1', partnerInput, actor);
@@ -86,7 +115,12 @@ describe('ContentService', () => {
     await service.deleteHeaderLink('h1', actor);
     await service.updateBranding(DEFAULT_BRANDING, actor);
 
-    expect(audit.append).toHaveBeenCalledTimes(17);
+    expect(createdRoom.accessPassword).toHaveLength(10);
+    expect(content.createPrivateRoom).toHaveBeenCalledWith(expect.objectContaining({
+      accessPasswordHash: expect.stringContaining('$argon2id$'),
+      roomCode: expect.stringMatching(/^\d{6}$/),
+    }));
+    expect(audit.append).toHaveBeenCalledTimes(21);
     expect(audit.append).toHaveBeenCalledWith(expect.objectContaining({
       actorUserId: actor.userId,
       action: 'header_link.reordered',
@@ -113,10 +147,14 @@ describe('ContentService', () => {
     content.updateProgram.mockResolvedValue(undefined);
     content.updatePartner.mockResolvedValue(undefined);
     content.updateHeaderLink.mockResolvedValue(undefined);
+    content.updatePrivateRoom.mockResolvedValue(undefined);
+    content.updatePrivateRoomPassword.mockResolvedValue(undefined);
     await expect(service.updateNews('x', 'texto', actor)).rejects.toBeInstanceOf(NotFoundError);
     await expect(service.updateProgram('x', { title: 'x', description: '', video: 'x.mp4' }, actor)).rejects.toBeInstanceOf(NotFoundError);
     await expect(service.updatePartner('x', { name: 'x', logoUrl: 'https://example.com/x.png', destinationUrl: '' }, actor)).rejects.toBeInstanceOf(NotFoundError);
     await expect(service.updateHeaderLink('x', { name: 'x', url: 'x.html' }, actor)).rejects.toBeInstanceOf(NotFoundError);
+    await expect(service.updatePrivateRoom('x', { title: 'x', description: '', sourceType: 'live', sourceUrl: '', isActive: true, expiresAt: null }, actor)).rejects.toBeInstanceOf(NotFoundError);
+    await expect(service.rotatePrivateRoomPassword('x', actor)).rejects.toBeInstanceOf(NotFoundError);
   });
 
   it('translates missing deletes into domain-level not-found errors', async () => {
@@ -124,9 +162,50 @@ describe('ContentService', () => {
     content.deleteProgram.mockResolvedValue(false);
     content.deletePartner.mockResolvedValue(false);
     content.deleteHeaderLink.mockResolvedValue(false);
+    content.deletePrivateRoom.mockResolvedValue(false);
     await expect(service.deleteNews('x', actor)).rejects.toBeInstanceOf(NotFoundError);
     await expect(service.deleteProgram('x', actor)).rejects.toBeInstanceOf(NotFoundError);
     await expect(service.deletePartner('x', actor)).rejects.toBeInstanceOf(NotFoundError);
     await expect(service.deleteHeaderLink('x', actor)).rejects.toBeInstanceOf(NotFoundError);
+    await expect(service.deletePrivateRoom('x', actor)).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it('grants private room access with hashed password and creates a short-lived session', async () => {
+    content.findPrivateRoomByCode.mockResolvedValue({ ...privateRoom('vip1'), roomCode: '123456', accessPasswordHash: await hashPassword('segredo-forte') });
+
+    const access = await service.grantPrivateRoomAccess(' 123456 ', 'segredo-forte', actor);
+    expect(access.room).toMatchObject({ roomCode: '123456', title: 'Sala vip1' });
+    expect(access.token).toHaveLength(43);
+    expect(content.createPrivateRoomAccessSession).toHaveBeenCalledWith(expect.objectContaining({
+      roomId: 'vip1',
+      tokenHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+      expiresAt: expect.any(Date),
+    }));
+    expect(audit.append).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'private_room.access_granted',
+      targetId: 'vip1',
+      metadata: { roomCode: '123456' },
+    }));
+
+    await expect(service.getPrivateRoomForAccess('123456', access.token)).resolves.toMatchObject({ id: 'vip1' });
+    expect(content.findPrivateRoomByAccessToken).toHaveBeenCalledWith(expect.stringMatching(/^[a-f0-9]{64}$/), '123456', expect.any(Date));
+  });
+
+  it('rejects invalid, inactive or expired private room access', async () => {
+    content.findPrivateRoomByCode.mockResolvedValue(undefined);
+    await expect(service.grantPrivateRoomAccess('123456', 'senha', actor)).rejects.toBeInstanceOf(UnauthorizedError);
+
+    content.findPrivateRoomByCode.mockResolvedValue({ ...privateRoom('vip1'), isActive: false, accessPasswordHash: await hashPassword('senha') });
+    await expect(service.grantPrivateRoomAccess('123456', 'senha', actor)).rejects.toBeInstanceOf(UnauthorizedError);
+
+    content.findPrivateRoomByCode.mockResolvedValue({ ...privateRoom('vip1'), expiresAt: new Date('2020-01-01T00:00:00Z'), accessPasswordHash: await hashPassword('senha') });
+    await expect(service.grantPrivateRoomAccess('123456', 'senha', actor)).rejects.toBeInstanceOf(UnauthorizedError);
+
+    content.findPrivateRoomByCode.mockResolvedValue({ ...privateRoom('vip1'), accessPasswordHash: await hashPassword('senha-correta') });
+    await expect(service.grantPrivateRoomAccess('123456', 'errada', actor)).rejects.toBeInstanceOf(UnauthorizedError);
+
+    await expect(service.getPrivateRoomForAccess('123456', undefined)).rejects.toBeInstanceOf(UnauthorizedError);
+    content.findPrivateRoomByAccessToken.mockResolvedValue(undefined);
+    await expect(service.getPrivateRoomForAccess('123456', 'token')).rejects.toBeInstanceOf(UnauthorizedError);
   });
 });

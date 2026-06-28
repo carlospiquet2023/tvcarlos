@@ -4,6 +4,7 @@ import { INTERVALS } from './js/public/config.js';
 import { createNavigationController } from './js/public/navigation-controller.js';
 import { createPartnerController } from './js/public/partner-controller.js';
 import { createPlayerController } from './js/public/player-controller.js';
+import { createPrivateRoomController } from './js/public/private-room-controller.js';
 import { createScheduleController } from './js/public/schedule-controller.js';
 import { createBroadcastState } from './js/public/state.js';
 import { createTickerController } from './js/public/ticker-controller.js';
@@ -27,12 +28,14 @@ const branding = createBrandingController({
 });
 const navigation = createNavigationController();
 const partners = createPartnerController();
+const privateRoom = createPrivateRoomController();
 const ticker = createTickerController();
 let liveTimer;
 
 async function initialize() {
     player.initialize();
     navigation.initialize();
+    privateRoom.initialize();
     ticker.start();
     player.playHls('loop');
     await branding.load();

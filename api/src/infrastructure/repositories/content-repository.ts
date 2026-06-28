@@ -1,6 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import type { ContentRepository } from '../../application/ports.js';
-import { DEFAULT_BRANDING, type Branding, type HeaderLink, type MediaAsset, type NewsItem, type Partner, type Program } from '../../domain/models.js';
+import {
+  DEFAULT_BRANDING,
+  type Branding,
+  type HeaderLink,
+  type MediaAsset,
+  type NewsItem,
+  type Partner,
+  type PrivateRoom,
+  type PrivateRoomAccessSession,
+  type Program,
+} from '../../domain/models.js';
 import type { Database } from '../database/schema.js';
 
 export class PostgresContentRepository implements ContentRepository {
@@ -82,6 +92,117 @@ export class PostgresContentRepository implements ContentRepository {
   async deleteProgram(id: string): Promise<boolean> {
     const result = await this.database.deleteFrom('programs').where('id', '=', id).executeTakeFirst();
     return Number(result.numDeletedRows) > 0;
+  }
+
+  async listPrivateRooms(): Promise<PrivateRoom[]> {
+    const rows = await this.database.selectFrom('private_rooms').selectAll().orderBy('created_at', 'desc').execute();
+    return rows.map((row) => this.privateRoomFromRow(row));
+  }
+
+  async findPrivateRoomByCode(roomCode: string): Promise<(PrivateRoom & { accessPasswordHash: string }) | undefined> {
+    const row = await this.database.selectFrom('private_rooms').selectAll().where('room_code', '=', roomCode).executeTakeFirst();
+    return row ? { ...this.privateRoomFromRow(row), accessPasswordHash: row.access_password_hash } : undefined;
+  }
+
+  async createPrivateRoom(input: {
+    roomCode: string;
+    title: string;
+    description: string;
+    sourceType: PrivateRoom['sourceType'];
+    sourceUrl: string;
+    accessPasswordHash: string;
+    isActive: boolean;
+    expiresAt?: Date | null;
+  }): Promise<PrivateRoom> {
+    const now = new Date();
+    const row = await this.database
+      .insertInto('private_rooms')
+      .values({
+        id: randomUUID(),
+        room_code: input.roomCode,
+        title: input.title,
+        description: input.description,
+        source_type: input.sourceType,
+        source_url: input.sourceUrl,
+        access_password_hash: input.accessPasswordHash,
+        is_active: input.isActive,
+        expires_at: input.expiresAt ?? null,
+        created_at: now,
+        updated_at: now,
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    return this.privateRoomFromRow(row);
+  }
+
+  async updatePrivateRoom(id: string, input: {
+    title: string;
+    description: string;
+    sourceType: PrivateRoom['sourceType'];
+    sourceUrl: string;
+    isActive: boolean;
+    expiresAt?: Date | null;
+  }): Promise<PrivateRoom | undefined> {
+    const row = await this.database
+      .updateTable('private_rooms')
+      .set({
+        title: input.title,
+        description: input.description,
+        source_type: input.sourceType,
+        source_url: input.sourceUrl,
+        is_active: input.isActive,
+        expires_at: input.expiresAt ?? null,
+        updated_at: new Date(),
+      })
+      .where('id', '=', id)
+      .returningAll()
+      .executeTakeFirst();
+    return row ? this.privateRoomFromRow(row) : undefined;
+  }
+
+  async updatePrivateRoomPassword(id: string, accessPasswordHash: string): Promise<PrivateRoom | undefined> {
+    const row = await this.database
+      .updateTable('private_rooms')
+      .set({ access_password_hash: accessPasswordHash, updated_at: new Date() })
+      .where('id', '=', id)
+      .returningAll()
+      .executeTakeFirst();
+    return row ? this.privateRoomFromRow(row) : undefined;
+  }
+
+  async deletePrivateRoom(id: string): Promise<boolean> {
+    const result = await this.database.deleteFrom('private_rooms').where('id', '=', id).executeTakeFirst();
+    return Number(result.numDeletedRows) > 0;
+  }
+
+  async createPrivateRoomAccessSession(session: PrivateRoomAccessSession): Promise<void> {
+    await this.deleteExpiredPrivateRoomAccessSessions(new Date());
+    await this.database
+      .insertInto('private_room_access_sessions')
+      .values({
+        id: session.id,
+        room_id: session.roomId,
+        token_hash: session.tokenHash,
+        expires_at: session.expiresAt,
+        created_at: session.createdAt,
+      })
+      .executeTakeFirstOrThrow();
+  }
+
+  async findPrivateRoomByAccessToken(tokenHash: string, roomCode: string, now: Date): Promise<PrivateRoom | undefined> {
+    const row = await this.database
+      .selectFrom('private_room_access_sessions')
+      .innerJoin('private_rooms', 'private_rooms.id', 'private_room_access_sessions.room_id')
+      .selectAll('private_rooms')
+      .where('private_room_access_sessions.token_hash', '=', tokenHash)
+      .where('private_room_access_sessions.expires_at', '>', now)
+      .where('private_rooms.room_code', '=', roomCode)
+      .executeTakeFirst();
+    return row ? this.privateRoomFromRow(row) : undefined;
+  }
+
+  async deleteExpiredPrivateRoomAccessSessions(now: Date): Promise<void> {
+    await this.database.deleteFrom('private_room_access_sessions').where('expires_at', '<=', now).execute();
   }
 
   async getBranding(): Promise<Branding> {
@@ -237,5 +358,31 @@ export class PostgresContentRepository implements ContentRepository {
       .select((expression) => expression.fn.max<number>('position').as('position'))
       .executeTakeFirst();
     return Number(result?.position ?? -1) + 1;
+  }
+
+  private privateRoomFromRow(row: {
+    id: string;
+    room_code: string;
+    title: string;
+    description: string;
+    source_type: PrivateRoom['sourceType'];
+    source_url: string;
+    is_active: boolean;
+    expires_at: Date | null;
+    created_at: Date;
+    updated_at: Date;
+  }): PrivateRoom {
+    return {
+      id: row.id,
+      roomCode: row.room_code,
+      title: row.title,
+      description: row.description,
+      sourceType: row.source_type,
+      sourceUrl: row.source_url,
+      isActive: row.is_active,
+      expiresAt: row.expires_at,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
   }
 }

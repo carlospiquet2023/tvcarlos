@@ -1,6 +1,7 @@
 import type { ColumnType, Kysely } from 'kysely';
 
 type Timestamp = ColumnType<Date, Date | string, Date | string>;
+type NullableTimestamp = ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
 
 export interface UsersTable {
   id: string;
@@ -33,6 +34,28 @@ export interface ProgramsTable {
   description: string;
   video: string;
   position: number;
+  created_at: Timestamp;
+}
+
+export interface PrivateRoomsTable {
+  id: string;
+  room_code: string;
+  title: string;
+  description: string;
+  source_type: 'live' | 'youtube' | 'video' | 'external';
+  source_url: string;
+  access_password_hash: string;
+  is_active: boolean;
+  expires_at: NullableTimestamp;
+  created_at: Timestamp;
+  updated_at: Timestamp;
+}
+
+export interface PrivateRoomAccessSessionsTable {
+  id: string;
+  room_id: string;
+  token_hash: string;
+  expires_at: Timestamp;
   created_at: Timestamp;
 }
 
@@ -112,6 +135,8 @@ export interface DatabaseSchema {
   sessions: SessionsTable;
   news: NewsTable;
   programs: ProgramsTable;
+  private_rooms: PrivateRoomsTable;
+  private_room_access_sessions: PrivateRoomAccessSessionsTable;
   branding: BrandingTable;
   partners: PartnersTable;
   header_links: HeaderLinksTable;
