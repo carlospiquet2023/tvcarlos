@@ -5,19 +5,19 @@
     justify-content: center;
     gap: .48rem;
     flex: 0 0 auto;
-    padding: .58rem .9rem;
-    color: #fff;
-    background: linear-gradient(135deg, #176b87, #0e8176);
-    border: 1px solid rgba(14,129,118,.28);
-    border-radius: 7px;
-    box-shadow: 0 10px 24px rgba(23,107,135,.16);
+    padding: .58rem 1.1rem;
+    color: var(--primary);
+    background: rgba(8, 17, 28, 0.8);
+    border: 1px solid var(--primary);
+    border-radius: 20px;
+    box-shadow: 0 4px 15px rgba(0, 196, 181, 0.2);
     font-size: .74rem;
     font-weight: 850;
     cursor: pointer;
     white-space: nowrap;
-    transition: transform .18s ease, box-shadow .18s ease;
+    transition: all .2s ease;
 }
-.private-room-trigger:hover { transform: translateY(-1px); box-shadow: 0 14px 30px rgba(23,107,135,.22); }
+.private-room-trigger:hover { background: var(--primary-soft); box-shadow: 0 6px 20px rgba(0, 196, 181, 0.4); transform: translateY(-1px); }
 .private-room-trigger i { font-size: .72rem; }
 
 .mobile-private-room-link {
