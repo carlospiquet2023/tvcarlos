@@ -8,7 +8,7 @@ import { hashPassword } from '../../src/infrastructure/security/password.js';
 const now = new Date('2026-01-01T00:00:00Z');
 const actor = { userId: 'user-1', requestId: 'request-1', ip: '127.0.0.1' };
 const news = (id: string): NewsItem => ({ id, text: `Notícia ${id}`, position: 0, createdAt: now });
-const program = (id: string): Program => ({ id, title: `Programa ${id}`, description: 'Descrição', video: 'video.mp4', position: 0, createdAt: now });
+const program = (id: string): Program => ({ id, title: `Programa ${id}`, description: 'Descrição', video: 'video.mp4', category: null, position: 0, createdAt: now });
 const partner = (id: string): Partner => ({ id, name: `Parceiro ${id}`, logoUrl: 'https://example.com/logo.png', destinationUrl: '', position: 0, createdAt: now });
 const link = (id: string): HeaderLink => ({ id, name: `Link ${id}`, url: 'https://example.com', position: 0, createdAt: now });
 const privateRoom = (id: string): PrivateRoom => ({
@@ -32,9 +32,10 @@ function repositoryMock() {
     updateNews: vi.fn(async (id: string, text: string) => ({ ...news(id), text })),
     reorderNews: vi.fn(async () => undefined),
     deleteNews: vi.fn(async () => true),
-    listPrograms: vi.fn(async () => [program('p1'), program('p2')]),
-    createProgram: vi.fn(async (input: Pick<Program, 'title' | 'description' | 'video'>) => ({ ...program('p3'), ...input })),
-    updateProgram: vi.fn(async (id: string, input: Pick<Program, 'title' | 'description' | 'video'>) => ({ ...program(id), ...input })),
+    listPrograms: vi.fn(async () => ({ items: [program('p1'), program('p2')], total: 2 })),
+    listProgramCategories: vi.fn(async () => []),
+    createProgram: vi.fn(async (input: Pick<Program, 'title' | 'description' | 'video' | 'category'>) => ({ ...program('p3'), ...input })),
+    updateProgram: vi.fn(async (id: string, input: Pick<Program, 'title' | 'description' | 'video' | 'category'>) => ({ ...program(id), ...input })),
     reorderPrograms: vi.fn(async () => undefined),
     deleteProgram: vi.fn(async () => true),
     listPrivateRooms: vi.fn(async () => [privateRoom('vip1')]),
@@ -75,7 +76,8 @@ describe('ContentService', () => {
 
   it('delegates public reads without exposing persistence details', async () => {
     await expect(service.listNews()).resolves.toHaveLength(2);
-    await expect(service.listPrograms()).resolves.toHaveLength(2);
+    const programs = await service.listPrograms();
+    expect(programs.items).toHaveLength(2);
     await expect(service.listPartners()).resolves.toHaveLength(2);
     await expect(service.listHeaderLinks()).resolves.toHaveLength(2);
     await expect(service.listPrivateRooms()).resolves.toHaveLength(1);

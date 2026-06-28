@@ -15,7 +15,7 @@ export class ContentService {
   ) {}
 
   listNews() { return this.content.listNews(); }
-  listPrograms(params?: { search?: string; category?: string; page?: number; limit?: number }) { 
+  listPrograms(params?: { search?: string | undefined; category?: string | undefined; page?: number | undefined; limit?: number | undefined }) { 
     return this.content.listPrograms(params); 
   }
   listProgramCategories() { return this.content.listProgramCategories(); }
@@ -63,7 +63,7 @@ export class ContentService {
   }
 
   async reorderPrograms(ids: string[], actor: ActorContext) {
-    await this.validateOrder(ids, (await this.content.listPrograms()).map((item) => item.id));
+    await this.validateOrder(ids, (await this.content.listPrograms()).items.map((item) => item.id));
     await this.content.reorderPrograms(ids);
     await this.record(actor, 'program.reordered', 'program', undefined, { ids });
   }

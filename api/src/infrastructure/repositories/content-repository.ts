@@ -54,7 +54,7 @@ export class PostgresContentRepository implements ContentRepository {
     return Number(result.numDeletedRows) > 0;
   }
 
-  async listPrograms(params?: { search?: string; category?: string; page?: number; limit?: number }): Promise<{ items: Program[]; total: number }> {
+  async listPrograms(params?: { search?: string | undefined; category?: string | undefined; page?: number | undefined; limit?: number | undefined }): Promise<{ items: Program[]; total: number }> {
     let query = this.database.selectFrom('programs');
     if (params?.search) {
       const searchPattern = `%${params.search}%`;

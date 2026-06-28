@@ -72,7 +72,7 @@ export function registerContentRoutes(app: FastifyInstance, config: AppConfig, c
     const input = parseInput(programSchema, raw && 'desc' in raw
       ? { title: raw.title, description: raw.desc, video: raw.video, category: raw.category }
       : raw);
-    const item = await content.createProgram(input, actor(request, auth));
+    const item = await content.createProgram({ ...input, category: input.category ?? null }, actor(request, auth));
     return reply.code(201).send({ ...item, desc: item.description });
   });
   app.put('/api/grade/order', { preHandler: [auth.requireAuth, auth.requireCsrf] }, async (request, reply) => {
@@ -83,7 +83,7 @@ export function registerContentRoutes(app: FastifyInstance, config: AppConfig, c
   app.put('/api/grade/:id', { preHandler: [auth.requireAuth, auth.requireCsrf] }, async (request) => {
     const id = parseInput(idSchema, (request.params as { id?: unknown }).id);
     const input = parseInput(programSchema, request.body);
-    const item = await content.updateProgram(id, input, actor(request, auth));
+    const item = await content.updateProgram(id, { ...input, category: input.category ?? null }, actor(request, auth));
     return { ...item, desc: item.description };
   });
   app.delete('/api/grade/:id', { preHandler: [auth.requireAuth, auth.requireCsrf] }, async (request, reply) => {
