@@ -155,7 +155,7 @@ export function createPlayerController({ state, onPlaybackChange }) {
     async function returnToLinear() {
         if (!isOnDemand(state)) {
             if (state.currentSource === 'live' && hls?.liveSyncPosition) video.currentTime = hls.liveSyncPosition;
-            if (state.currentSource === 'loop') await checkLive();
+            if (state.currentSource === 'loop' || state.currentSource === 'offline') await checkLive();
             return;
         }
         deactivateYouTube();
@@ -168,12 +168,6 @@ export function createPlayerController({ state, onPlaybackChange }) {
 
     async function checkLive() {
         const liveYouTubeUrl = getLiveYouTubeEmbedUrl();
-        if (state.branding.liveSource === 'youtube' && !liveYouTubeUrl) {
-            state.isLiveOnline = false;
-            if (!isOnDemand(state)) playHls('loop');
-            onPlaybackChange();
-            return false;
-        }
 
         if (liveYouTubeUrl) {
             state.isLiveOnline = true;
@@ -182,19 +176,14 @@ export function createPlayerController({ state, onPlaybackChange }) {
             return true;
         }
 
-        const controller = new AbortController();
-        const timeout = window.setTimeout(() => controller.abort(), 4_000);
-        let online;
-        try {
-            const response = await fetch(withCacheBuster('/api/stream/status'), { cache: 'no-store', signal: controller.signal });
-            online = response.ok && Boolean((await response.json()).live);
-        } catch {
-            online = false;
-        } finally {
-            window.clearTimeout(timeout);
-        }
+        const streamStatus = await probeStreamStatus();
+        const online = state.branding.liveSource === 'obs' && streamStatus.live;
         state.isLiveOnline = online;
-        if (!isOnDemand(state)) playHls(online ? 'live' : 'loop');
+        if (!isOnDemand(state)) {
+            if (online) playHls('live');
+            else if (streamStatus.loop) playHls('loop');
+            else showOfflineSignal();
+        }
         onPlaybackChange();
         return online;
     }
@@ -222,6 +211,10 @@ export function createPlayerController({ state, onPlaybackChange }) {
             statusBadge.className = 'badge badge-live';
             statusText.textContent = 'AO VIVO';
             updateNowPlaying('TRANSMISSÃO AO VIVO', state.branding.liveTitle, state.branding.liveDescription);
+        } else if (source === 'offline') {
+            statusBadge.className = 'badge badge-recorded';
+            statusText.textContent = 'SEM SINAL';
+            updateNowPlaying('SINAL INDISPONÍVEL', 'Nenhum sinal disponível', 'A transmissão será retomada assim que o sinal ao vivo ou a programação 24h estiverem disponíveis.');
         }
     }
 
@@ -239,9 +232,37 @@ export function createPlayerController({ state, onPlaybackChange }) {
         const labels = {
             live: ['SINAL AO VIVO', 'TEMPO REAL'], loop: ['PROGRAMAÇÃO 24H', 'FLUXO CONTÍNUO'],
             vod: ['VÍDEO SELECIONADO', 'SOB DEMANDA'], youtube: ['VÍDEO DO YOUTUBE', 'CONTEÚDO EXTERNO'],
-            'youtube-live': ['SINAL AO VIVO', 'YOUTUBE LIVE'],
+            'youtube-live': ['SINAL AO VIVO', 'YOUTUBE LIVE'], offline: ['SINAL INDISPONÍVEL', 'AGUARDANDO FONTE'],
         };
         [sourceLabel.textContent, modeLabel.textContent] = labels[sourceType] || labels.loop;
+    }
+
+    async function probeStreamStatus() {
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), 4_000);
+        try {
+            const response = await fetch(withCacheBuster('/api/stream/status'), { cache: 'no-store', signal: controller.signal });
+            const payload = response.ok ? await response.json() : {};
+            return { live: Boolean(payload.live), loop: Boolean(payload.loop) };
+        } catch {
+            return { live: false, loop: false };
+        } finally {
+            window.clearTimeout(timeout);
+        }
+    }
+
+    function showOfflineSignal() {
+        destroyHls();
+        deactivateYouTube();
+        state.currentSource = 'offline';
+        state.activeProgram = null;
+        video.pause();
+        video.removeAttribute('src');
+        video.load();
+        video.loop = false;
+        progressContainer.classList.add('hidden');
+        updateRail('offline');
+        refreshPresentation();
     }
 
     function getLiveYouTubeEmbedUrl() {

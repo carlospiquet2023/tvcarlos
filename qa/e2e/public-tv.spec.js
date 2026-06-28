@@ -45,7 +45,9 @@ test.describe('Web TV pública', () => {
         await expect(page.locator('#partner-showcase')).toBeVisible();
         await page.locator('#menu-toggle').click();
         await expect(page.locator('#mobile-menu')).toBeVisible();
-        await expect(page.locator('#mobile-menu a')).toHaveCount(2);
+        await expect.poll(() => page.locator('#mobile-header-links a').count()).toBeGreaterThan(0);
+        await expect(page.locator('#mobile-private-room-open')).toBeVisible();
+        await expect(page.locator('.mobile-legal-link')).toBeVisible();
 
         const geometry = await page.evaluate(() => {
             const partners = document.querySelector('#partner-showcase').getBoundingClientRect();

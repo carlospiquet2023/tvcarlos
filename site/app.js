@@ -37,7 +37,6 @@ async function initialize() {
     navigation.initialize();
     privateRoom.initialize();
     ticker.start();
-    player.playHls('loop');
     await branding.load();
 
     await Promise.allSettled([
