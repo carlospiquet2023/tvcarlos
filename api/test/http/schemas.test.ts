@@ -4,6 +4,9 @@ import {
   headerLinkSchema,
   partnerSchema,
   privateRoomAccessSchema,
+  privateRoomInteractionSettingsSchema,
+  privateRoomMessageModerationSchema,
+  privateRoomMessageSubmitSchema,
   privateRoomSchema,
   programSchema,
 } from '../../src/http/schemas.js';
@@ -67,9 +70,33 @@ describe('HTTP input schemas', () => {
     expect(privateRoomSchema.safeParse({ ...base, sourceType: 'live', sourceUrl: '' }).success).toBe(true);
     expect(privateRoomSchema.safeParse({ ...base, sourceType: 'youtube', sourceUrl: 'https://youtu.be/dQw4w9WgXcQ' }).success).toBe(true);
     expect(privateRoomSchema.safeParse({ ...base, sourceType: 'external', sourceUrl: 'https://cliente.example.com/sala' }).success).toBe(true);
+    expect(privateRoomSchema.safeParse({ ...base, sourceType: 'youtube', sourceUrl: 'https://youtu.be/dQw4w9WgXcQ', supportMaterialEnabled: true, supportMaterialType: 'pdf', supportMaterialUrl: '/documents/aula.pdf' }).success).toBe(true);
+    expect(privateRoomSchema.safeParse({ ...base, sourceType: 'youtube', sourceUrl: 'https://youtu.be/dQw4w9WgXcQ', supportMaterialEnabled: true, supportMaterialType: 'pdf', supportMaterialUrl: '/documents/aula.pdf', supportMaterialCurrentPage: 12 }).success).toBe(true);
+    expect(privateRoomSchema.safeParse({ ...base, sourceType: 'youtube', sourceUrl: 'https://youtu.be/dQw4w9WgXcQ', supportMaterialEnabled: true, supportMaterialType: 'pdf', supportMaterialUrl: '/documents/aula.pdf', supportMaterialCurrentPage: 0 }).success).toBe(false);
+    expect(privateRoomSchema.safeParse({ ...base, sourceType: 'youtube', sourceUrl: 'https://youtu.be/dQw4w9WgXcQ', supportMaterialEnabled: true, supportMaterialType: 'image', supportMaterialUrl: '/uploads/slide.webp' }).success).toBe(true);
+    expect(privateRoomSchema.safeParse({ ...base, sourceType: 'youtube', sourceUrl: 'https://youtu.be/dQw4w9WgXcQ', supportMaterialEnabled: true, supportMaterialType: 'url', supportMaterialUrl: 'https://docs.google.com/presentation/d/example' }).success).toBe(true);
+    expect(privateRoomSchema.safeParse({ ...base, sourceType: 'youtube', sourceUrl: 'https://youtu.be/dQw4w9WgXcQ', supportMaterialEnabled: true, supportMaterialType: 'pdf', supportMaterialUrl: '' }).success).toBe(false);
     expect(privateRoomSchema.safeParse({ ...base, sourceType: 'external', sourceUrl: 'http://cliente.example.com/sala' }).success).toBe(false);
     expect(privateRoomSchema.safeParse({ ...base, sourceType: 'youtube', sourceUrl: 'https://example.com/video' }).success).toBe(false);
     expect(privateRoomAccessSchema.safeParse({ roomCode: '123456', password: 'abc123' }).success).toBe(true);
     expect(privateRoomAccessSchema.safeParse({ roomCode: '../secret', password: 'abc123' }).success).toBe(false);
+  });
+
+  it('validates private room interaction payloads', () => {
+    expect(privateRoomInteractionSettingsSchema.safeParse({
+      enabled: true,
+      mode: 'questions_only',
+      requireName: false,
+      allowAnonymous: true,
+      collectContact: true,
+      moderationRequired: true,
+      allowPublicReplies: false,
+      noticeText: 'Perguntas da aula',
+    }).success).toBe(true);
+    expect(privateRoomInteractionSettingsSchema.safeParse({ enabled: true, mode: 'forum' }).success).toBe(false);
+    expect(privateRoomMessageSubmitSchema.safeParse({ participantName: 'Cliente', body: 'Pergunta?' }).success).toBe(true);
+    expect(privateRoomMessageSubmitSchema.safeParse({ participantName: 'Cliente', body: '' }).success).toBe(false);
+    expect(privateRoomMessageModerationSchema.safeParse({ status: 'answered', adminReply: 'Respondido', isHighlighted: true }).success).toBe(true);
+    expect(privateRoomMessageModerationSchema.safeParse({ status: 'deleted' }).success).toBe(false);
   });
 });

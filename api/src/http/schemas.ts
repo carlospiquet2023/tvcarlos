@@ -12,6 +12,15 @@ export const credentialsSchema = z.strictObject({
   newPassword: z.string().min(14).max(128),
 });
 
+export const teacherCreateSchema = z.strictObject({
+  username: z.string().trim().min(3).max(80),
+  roomIds: z.array(z.uuid()).max(100).default([]),
+});
+
+export const teacherUpdateSchema = z.strictObject({
+  roomIds: z.array(z.uuid()).max(100).default([]),
+});
+
 export const newsSchema = z.strictObject({ text: z.string().trim().min(1).max(500) });
 
 const secureAssetUrl = z.string().trim().max(2048).refine((value) => {
@@ -19,6 +28,13 @@ const secureAssetUrl = z.string().trim().max(2048).refine((value) => {
   if (/^\/uploads\/[a-zA-Z0-9._-]+$/.test(value)) return true;
   try { return new URL(value).protocol === 'https:'; } catch { return false; }
 }, 'Use uma URL HTTPS ou um arquivo enviado pelo painel.');
+
+const privateRoomSupportMaterialUrl = z.string().trim().max(2048).refine((value) => {
+  if (!value) return true;
+  if (/^\/uploads\/[a-zA-Z0-9._-]+$/.test(value)) return true;
+  if (/^\/documents\/[a-zA-Z0-9._-]+\.pdf$/i.test(value)) return true;
+  try { return new URL(value).protocol === 'https:'; } catch { return false; }
+}, 'Use uma URL HTTPS ou um PDF/imagem enviado pelo painel.');
 
 const secureDestinationUrl = z.string().trim().max(2048).refine((value) => {
   if (!value) return true;
@@ -104,6 +120,11 @@ export const privateRoomSchema = z.strictObject({
   description: z.string().trim().max(500).default(''),
   sourceType: z.enum(['live', 'youtube', 'video', 'external']).default('youtube'),
   sourceUrl: z.string().trim().max(2048).default(''),
+  supportMaterialEnabled: z.boolean().default(false),
+  supportMaterialTitle: z.string().trim().max(160).default('Material de apoio'),
+  supportMaterialType: z.enum(['url', 'image', 'pdf']).default('url'),
+  supportMaterialUrl: privateRoomSupportMaterialUrl.default(''),
+  supportMaterialCurrentPage: z.coerce.number().int().min(1).max(9999).default(1),
   isActive: z.boolean().default(true),
   expiresAt: privateRoomExpiresAt,
 }).superRefine((value, context) => {
@@ -121,11 +142,55 @@ export const privateRoomSchema = z.strictObject({
   if (value.sourceType === 'external' && !secureDestinationUrl.refine(Boolean).safeParse(value.sourceUrl).success) {
     context.addIssue({ code: 'custom', path: ['sourceUrl'], message: 'Informe uma URL HTTPS válida para a sala externa.' });
   }
+  if (value.supportMaterialEnabled && !value.supportMaterialUrl) {
+    context.addIssue({ code: 'custom', path: ['supportMaterialUrl'], message: 'Informe o material de apoio da sala.' });
+  }
+  if (value.supportMaterialType === 'image' && value.supportMaterialUrl && !secureAssetUrl.safeParse(value.supportMaterialUrl).success) {
+    context.addIssue({ code: 'custom', path: ['supportMaterialUrl'], message: 'Informe uma imagem enviada ou URL HTTPS.' });
+  }
+  if (value.supportMaterialType === 'pdf' && value.supportMaterialUrl && !(/^\/documents\/[a-zA-Z0-9._-]+\.pdf$/i.test(value.supportMaterialUrl) || /^https:\/\//i.test(value.supportMaterialUrl))) {
+    context.addIssue({ code: 'custom', path: ['supportMaterialUrl'], message: 'Informe um PDF enviado ou URL HTTPS.' });
+  }
 });
 
 export const privateRoomAccessSchema = z.strictObject({
   roomCode: z.string().trim().regex(/^[a-zA-Z0-9-]{4,24}$/, 'Informe um ID de sala válido.'),
   password: z.string().min(1).max(128),
+});
+
+export const privateRoomInteractionSettingsSchema = z.strictObject({
+  enabled: z.boolean().default(true),
+  mode: z.enum(['questions_comments', 'questions_only', 'comments_only']).default('questions_comments'),
+  requireName: z.boolean().default(true),
+  allowAnonymous: z.boolean().default(false),
+  collectContact: z.boolean().default(false),
+  moderationRequired: z.boolean().default(true),
+  allowPublicReplies: z.boolean().default(true),
+  noticeText: z.string().trim().max(300).default(''),
+});
+
+export const privateRoomMessageSubmitSchema = z.strictObject({
+  participantName: z.string().trim().max(120).optional().default(''),
+  participantContact: z.string().trim().max(180).optional().default(''),
+  body: z.string().trim().min(1).max(1000),
+});
+
+export const privateRoomMessageModerationSchema = z.strictObject({
+  status: z.enum(['pending', 'approved', 'hidden', 'answered', 'archived']).optional(),
+  adminReply: z.string().trim().max(1000).optional(),
+  isHighlighted: z.boolean().optional(),
+});
+
+export const privateRoomSupportMaterialSchema = z.strictObject({
+  supportMaterialEnabled: z.boolean().default(false),
+  supportMaterialTitle: z.string().trim().max(160).default('Material de apoio'),
+  supportMaterialType: z.enum(['url', 'image', 'pdf']).default('url'),
+  supportMaterialUrl: privateRoomSupportMaterialUrl.default(''),
+  supportMaterialCurrentPage: z.coerce.number().int().min(1).max(9999).default(1),
+}).superRefine((value, context) => {
+  if (value.supportMaterialEnabled && !value.supportMaterialUrl) {
+    context.addIssue({ code: 'custom', path: ['supportMaterialUrl'], message: 'Informe o material de apoio da sala.' });
+  }
 });
 
 export const brandingSchema = z.strictObject({

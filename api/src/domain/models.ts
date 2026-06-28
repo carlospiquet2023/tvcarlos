@@ -3,6 +3,19 @@ export interface User {
   username: string;
   normalizedUsername: string;
   passwordHash: string;
+  role: UserRole;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type UserRole = 'admin' | 'teacher';
+
+export interface TeacherAccount {
+  id: string;
+  username: string;
+  normalizedUsername: string;
+  role: 'teacher';
+  roomIds: string[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -34,6 +47,7 @@ export interface Program {
 }
 
 export type PrivateRoomSourceType = 'live' | 'youtube' | 'video' | 'external';
+export type PrivateRoomSupportMaterialType = 'url' | 'image' | 'pdf';
 
 export interface PrivateRoom {
   id: string;
@@ -42,6 +56,11 @@ export interface PrivateRoom {
   description: string;
   sourceType: PrivateRoomSourceType;
   sourceUrl: string;
+  supportMaterialEnabled: boolean;
+  supportMaterialTitle: string;
+  supportMaterialType: PrivateRoomSupportMaterialType;
+  supportMaterialUrl: string;
+  supportMaterialCurrentPage: number;
   isActive: boolean;
   expiresAt?: Date | null;
   createdAt: Date;
@@ -54,6 +73,39 @@ export interface PrivateRoomAccessSession {
   tokenHash: string;
   expiresAt: Date;
   createdAt: Date;
+}
+
+export type PrivateRoomInteractionMode = 'questions_comments' | 'questions_only' | 'comments_only';
+export type PrivateRoomMessageStatus = 'pending' | 'approved' | 'hidden' | 'answered' | 'archived';
+
+export interface PrivateRoomInteractionSettings {
+  roomId: string;
+  enabled: boolean;
+  mode: PrivateRoomInteractionMode;
+  requireName: boolean;
+  allowAnonymous: boolean;
+  collectContact: boolean;
+  moderationRequired: boolean;
+  allowPublicReplies: boolean;
+  noticeText: string;
+  updatedAt: Date;
+}
+
+export interface PrivateRoomMessage {
+  id: string;
+  roomId: string;
+  participantName: string;
+  participantContact: string;
+  body: string;
+  adminReply: string;
+  status: PrivateRoomMessageStatus;
+  isHighlighted: boolean;
+  ipHash?: string | null;
+  userAgent: string;
+  moderatedBy?: string | null;
+  moderatedAt?: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface Branding {
@@ -110,7 +162,7 @@ export interface AuditLog {
   createdAt: Date;
 }
 
-export type MediaKind = 'image' | 'video';
+export type MediaKind = 'image' | 'video' | 'document';
 
 export interface MediaAsset {
   id: string;

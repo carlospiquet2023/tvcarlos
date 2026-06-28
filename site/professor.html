@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#eef6f5">
+    <meta name="robots" content="noindex,nofollow">
+    <title>Espaço do Professor · TV Carlos</title>
+    <link rel="stylesheet" href="vendor/fontawesome/css/all.min.css">
+    <link rel="stylesheet" href="css/foundation.css">
+    <link rel="stylesheet" href="admin.css">
+</head>
+<body class="auth-loading admin-body">
+    <div class="admin-shell">
+        <aside class="admin-sidebar" aria-label="Navegação do professor">
+            <a class="admin-brand" href="#rooms" aria-label="Espaço do Professor TV Carlos">
+                <span class="admin-brand-mark"><i class="fa-solid fa-chalkboard-user"></i></span>
+                <span><strong>TV Carlos</strong><small>Espaço do Professor</small></span>
+            </a>
+            <nav class="admin-nav" id="professor-room-nav"></nav>
+            <div class="admin-sidebar-footer">
+                <span class="admin-user-avatar"><i class="fa-regular fa-user"></i></span>
+                <span><strong id="professor-username">Professor</strong><small>Acesso limitado</small></span>
+            </div>
+        </aside>
+
+        <main class="admin-main">
+            <header class="admin-topbar">
+                <div>
+                    <p class="admin-eyebrow">ESPAÇO DO PROFESSOR</p>
+                    <h1 id="professor-room-title">Salas privadas</h1>
+                </div>
+                <div class="admin-topbar-actions">
+                    <button class="admin-icon-button" id="professor-refresh-btn" type="button" title="Atualizar" aria-label="Atualizar"><i class="fa-solid fa-rotate"></i></button>
+                    <a class="admin-btn secondary compact hidden" id="professor-open-room-link" href="#" target="_blank" rel="noopener"><i class="fa-solid fa-arrow-up-right-from-square"></i><span>Abrir sala</span></a>
+                    <button class="admin-btn danger compact" id="professor-logout-btn" type="button"><i class="fa-solid fa-power-off"></i><span>Sair</span></button>
+                </div>
+            </header>
+
+            <div class="admin-content">
+                <section class="admin-view active">
+                    <div class="view-heading">
+                        <div><span class="section-kicker">SALAS AUTORIZADAS</span><h2 id="professor-heading">Carregando…</h2><p>Controle o material de apoio e modere perguntas da sala liberada pelo admin principal.</p></div>
+                        <span class="sync-label" id="professor-last-sync">Atualizando…</span>
+                    </div>
+
+                    <div class="admin-grid two-columns align-start">
+                        <article class="admin-card">
+                            <div class="card-heading"><div><h3>Material de apoio</h3><p>PDF e imagem aparecem sobre o vídeo da Sala Privada.</p></div><i class="fa-solid fa-file-lines"></i></div>
+                            <form id="professor-material-form" class="admin-form">
+                                <label class="toggle-field"><input type="checkbox" id="professor-material-enabled-input"><span><strong>Mostrar material na sala</strong><small>Participantes podem abrir, ocultar e colocar em tela cheia.</small></span></label>
+                                <div class="form-grid">
+                                    <div class="form-group"><label for="professor-material-title-input">Título</label><input type="text" id="professor-material-title-input" class="form-control" maxlength="160" placeholder="Material de apoio"></div>
+                                    <div class="form-group">
+                                        <label for="professor-material-type-input">Tipo</label>
+                                        <select id="professor-material-type-input" class="form-control">
+                                            <option value="pdf">PDF enviado</option>
+                                            <option value="image">Imagem enviada</option>
+                                            <option value="url">URL externa</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="professor-material-url-input">Arquivo ou URL</label>
+                                    <div class="upload-field">
+                                        <input type="text" id="professor-material-url-input" class="form-control" maxlength="2048" placeholder="PDF, imagem ou URL HTTPS">
+                                        <label class="admin-btn secondary upload-button" id="professor-material-pdf-upload-button"><i class="fa-solid fa-file-pdf"></i> Enviar PDF<input type="file" id="professor-material-pdf-upload" accept="application/pdf"></label>
+                                        <label class="admin-btn secondary upload-button hidden" id="professor-material-image-upload-button"><i class="fa-solid fa-image"></i> Enviar imagem<input type="file" id="professor-material-image-upload" accept="image/*"></label>
+                                    </div>
+                                    <span class="field-status" id="professor-material-upload-status"></span>
+                                </div>
+                                <div class="form-group" id="professor-material-page-group">
+                                    <label for="professor-material-page-input">Página atual do PDF</label>
+                                    <div class="material-page-control">
+                                        <button class="admin-icon-button" id="professor-material-prev-page-btn" type="button" title="Página anterior" aria-label="Página anterior"><i class="fa-solid fa-chevron-left"></i></button>
+                                        <input type="number" id="professor-material-page-input" class="form-control" min="1" max="9999" value="1">
+                                        <button class="admin-icon-button" id="professor-material-next-page-btn" type="button" title="Próxima página" aria-label="Próxima página"><i class="fa-solid fa-chevron-right"></i></button>
+                                    </div>
+                                </div>
+                                <button class="admin-btn primary full-width" type="submit"><i class="fa-solid fa-floppy-disk"></i> Salvar material</button>
+                            </form>
+                        </article>
+
+                        <article class="admin-card">
+                            <div class="card-heading"><div><h3>Interação da sala</h3><p>Aprove, responda, destaque ou oculte mensagens.</p></div><span class="count-chip" id="professor-pending-count">0 pendentes</span></div>
+                            <div class="interaction-toolbar">
+                                <div class="form-group">
+                                    <label for="professor-message-filter-input">Filtro</label>
+                                    <select id="professor-message-filter-input" class="form-control">
+                                        <option value="pending">Pendentes</option>
+                                        <option value="approved">Aprovadas</option>
+                                        <option value="answered">Respondidas</option>
+                                        <option value="highlighted">Destacadas</option>
+                                        <option value="hidden">Ocultas</option>
+                                        <option value="all">Todas</option>
+                                    </select>
+                                </div>
+                                <button class="admin-icon-button" id="professor-interaction-refresh-btn" type="button" title="Atualizar mensagens" aria-label="Atualizar mensagens"><i class="fa-solid fa-rotate"></i></button>
+                            </div>
+                            <div class="interaction-message-list" id="professor-message-list"><div class="admin-empty">Selecione uma sala.</div></div>
+                        </article>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>
+    <script type="module" src="professor.js"></script>
+</body>
+</html>

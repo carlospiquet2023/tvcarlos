@@ -4,13 +4,14 @@ services:
   media-init:
     image: alpine:3.22
     command: >-
-      sh -c "mkdir -p /data/images /data/videos &&
+      sh -c "mkdir -p /data/images /data/videos /data/documents &&
       cp -n /seed-videos/* /data/videos/ 2>/dev/null || true;
-      chown -R 100:101 /data/images /data/videos"
+      chown -R 100:101 /data/images /data/videos /data/documents"
     volumes:
       - ./videos:/seed-videos:ro
       - image-data:/data/images
       - video-data:/data/videos
+      - document-data:/data/documents
     restart: "no"
     security_opt:
       - no-new-privileges:true
@@ -44,6 +45,7 @@ services:
     volumes:
       - image-data:/data/images
       - video-data:/data/videos
+      - document-data:/data/documents
     tmpfs:
       - /tmp:size=1g,mode=1777
     read_only: true
@@ -74,6 +76,7 @@ services:
       - ./site:/usr/share/nginx/html:ro
       - image-data:/data/images:ro
       - video-data:/data/videos:ro
+      - document-data:/data/documents:ro
     tmpfs:
       - /var/cache/nginx/hls:size=512m,mode=1777
       - /var/lib/nginx/tmp:size=256m,mode=1777
@@ -126,3 +129,4 @@ volumes:
   postgres-data:
   image-data:
   video-data:
+  document-data:

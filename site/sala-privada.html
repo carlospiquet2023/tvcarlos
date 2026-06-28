@@ -45,8 +45,46 @@
             <div class="private-room-actions" id="private-room-controls">
                 <button class="private-room-action" id="private-room-play" type="button"><i class="fa-solid fa-play"></i> Reproduzir</button>
                 <button class="private-room-action" id="private-room-volume" type="button"><i class="fa-solid fa-volume-xmark"></i> Ativar som</button>
+                <button class="private-room-action hidden" id="private-room-material-toggle" type="button"><i class="fa-solid fa-file-lines"></i> Ocultar material</button>
                 <a class="private-room-action hidden" id="private-room-external-link" href="#" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-arrow-up-right-from-square"></i> Abrir conteúdo</a>
             </div>
+
+            <section class="private-room-interaction hidden" id="private-room-interaction" aria-live="polite">
+                <div class="private-room-interaction-tabs">
+                    <button class="private-room-tab active" type="button"><i class="fa-regular fa-comments"></i> Perguntas e Comentários</button>
+                </div>
+
+                <article class="private-room-highlight hidden" id="private-room-highlight">
+                    <span><i class="fa-solid fa-star"></i> Destaque</span>
+                    <strong id="private-room-highlight-author">—</strong>
+                    <p id="private-room-highlight-body">—</p>
+                    <div class="private-room-highlight-reply hidden" id="private-room-highlight-reply"></div>
+                </article>
+
+                <div class="private-room-interaction-grid">
+                    <form class="private-room-message-form" id="private-room-message-form">
+                        <p id="private-room-interaction-notice">Envie suas perguntas e comentários para a moderação.</p>
+                        <div class="private-room-field" id="private-room-name-field">
+                            <label for="private-room-participant-name">Nome</label>
+                            <input id="private-room-participant-name" type="text" maxlength="120" autocomplete="name">
+                        </div>
+                        <div class="private-room-field hidden" id="private-room-contact-field">
+                            <label for="private-room-participant-contact">Contato</label>
+                            <input id="private-room-participant-contact" type="text" maxlength="180" autocomplete="email">
+                        </div>
+                        <div class="private-room-field">
+                            <label for="private-room-message-body" id="private-room-message-label">Mensagem</label>
+                            <textarea id="private-room-message-body" maxlength="1000" rows="4" required></textarea>
+                        </div>
+                        <button class="private-room-submit" id="private-room-message-submit" type="submit"><i class="fa-regular fa-paper-plane"></i> Enviar</button>
+                        <span class="private-room-message-status" id="private-room-message-status"></span>
+                    </form>
+
+                    <div class="private-room-approved-messages" id="private-room-approved-messages">
+                        <div class="private-room-empty">Carregando interação…</div>
+                    </div>
+                </div>
+            </section>
 
             <p class="legal-strip">© 2026 <span id="legal-owner-name">Carlos Antonio de Oliveira Piquet</span> · Acesso individual e rastreável.</p>
         </main>

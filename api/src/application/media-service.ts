@@ -15,6 +15,7 @@ import type { RequestAuditContext } from './auth-service.js';
 const executeFile = promisify(execFile);
 const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif']);
 const VIDEO_TYPES = new Set(['video/mp4', 'video/webm', 'video/quicktime', 'video/x-matroska', 'video/mpeg']);
+const DOCUMENT_TYPES = new Set(['application/pdf']);
 
 export class MediaService {
   constructor(
@@ -49,11 +50,15 @@ export class MediaService {
           .toFile(sourcePath);
         mimeType = 'image/webp';
         extension = 'webp';
-      } else {
+      } else if (kind === 'video') {
         if (!VIDEO_TYPES.has(detected.mime)) throw new ValidationError('Formato de vídeo não permitido.');
         await validateVideo(uploadedPath);
         mimeType = detected.mime;
         extension = detected.ext === 'mov' ? 'mov' : detected.ext;
+      } else {
+        if (!DOCUMENT_TYPES.has(detected.mime)) throw new ValidationError('Envie um arquivo PDF válido.');
+        mimeType = 'application/pdf';
+        extension = 'pdf';
       }
 
       const fileStat = await stat(sourcePath);

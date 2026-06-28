@@ -34,6 +34,7 @@ export class PostgresSessionRepository implements SessionRepository {
         'users.username',
         'users.normalized_username',
         'users.password_hash',
+        'users.role',
         'users.created_at as user_created_at',
         'users.updated_at',
       ])
@@ -54,6 +55,7 @@ export class PostgresSessionRepository implements SessionRepository {
         username: row.username,
         normalizedUsername: row.normalized_username,
         passwordHash: row.password_hash,
+        role: row.role,
         createdAt: row.user_created_at,
         updatedAt: row.updated_at,
       },

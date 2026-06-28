@@ -18,10 +18,11 @@
 - Argon2id; hashes legados fracos não são aceitos porque a instalação é nova;
 - sessão aleatória em cookie `HttpOnly`, `SameSite=Strict`, persistida como SHA-256;
 - token CSRF e validação estrita de `Origin` em métodos mutáveis;
+- papéis `admin` e `teacher`; professor não acessa o admin principal e só modera/atualiza salas atribuídas;
 - rate limit global e específico para autenticação;
 - validação Zod com limites de tamanho e rejeição de campos inesperados;
 - detecção de arquivo por assinatura, nomes UUID e reprocessamento seguro de imagens;
-- inspeção de vídeo por `ffprobe`, limites de bytes e diretórios sem execução;
+- inspeção de vídeo por `ffprobe`, validação de PDF por assinatura, limites de bytes e diretórios sem execução;
 - headers HTTP, CSP, proteção contra MIME sniffing e política de permissões;
 - usuário sem credencial padrão em instalação nova;
 - logs JSON com request ID, trilha de auditoria e respostas sem stack trace;
@@ -29,9 +30,11 @@
 - embeds limitados ao player `youtube-nocookie.com`, com CSP dedicada, validação de ID e camada de interação própria;
 - links comerciais de parceiros restritos a HTTPS e abertos com `noopener`, `noreferrer` e relação `sponsored`;
 - histórico administrativo visível somente para sessão autenticada;
+- interação da Sala Privada com aprovação antes da publicação, anti-spam por IP hash, resposta do admin/professor e arquivamento;
+- painel operacional com alertas de API, banco, storage, R2, Railway/Docker e HLS, sem expor chaves RTMP;
 - bloqueio de F12, atalhos comuns de ferramentas de desenvolvimento e menu de contexto como redução de abuso casual.
 - log de acesso RTMP desativado no proxy para impedir que chaves de publicação apareçam em texto puro; a API registra somente o evento de autorização sem persistir o segredo.
 
 ## Limites honestos
 
-Nenhum sistema pode prometer “segurança absoluta”. TLS válido, rotação de segredo, backup testado, WAF/CDN, atualizações, monitoramento, segredo de publicação RTMP e permissões do host são responsabilidades do ambiente. Bloqueios de F12, menu de contexto e overlays podem ser contornados e são apenas atrito contra uso casual. Vídeo reproduzível pelo cliente pode ser gravado; para conteúdo premium, use DRM e contratos de licença apropriados.
+Nenhum sistema pode prometer “segurança absoluta”. TLS válido, rotação de segredo, backup testado, WAF/CDN, atualizações, monitoramento, segredo de publicação RTMP e permissões do host são responsabilidades do ambiente. Professor convidado reduz acesso administrativo, mas não substitui contrato operacional e revisão humana. Material externo em iframe depende da política do provedor e pode ser bloqueado por ele. Bloqueios de F12, menu de contexto e overlays podem ser contornados e são apenas atrito contra uso casual. Vídeo reproduzível pelo cliente pode ser gravado; para conteúdo premium, use DRM e contratos de licença apropriados.

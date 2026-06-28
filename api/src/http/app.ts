@@ -1,4 +1,4 @@
-import Fastify from 'fastify';
+import Fastify, { type FastifyInstance } from 'fastify';
 import cookie from '@fastify/cookie';
 import formbody from '@fastify/formbody';
 import helmet from '@fastify/helmet';
@@ -8,11 +8,13 @@ import type { AppConfig } from '../config.js';
 import type { AuthService } from '../application/auth-service.js';
 import type { ContentService } from '../application/content-service.js';
 import type { MediaService } from '../application/media-service.js';
+import type { ServiceHealthStatus, StorageHealth } from '../application/ports.js';
 import { AppError, ForbiddenError } from '../application/errors.js';
 import { registerAuthRoutes } from './routes/auth-routes.js';
 import { registerContentRoutes } from './routes/content-routes.js';
 import { registerMediaRoutes } from './routes/media-routes.js';
 import { registerStreamRoutes } from './routes/stream-routes.js';
+import { requestAuditContext } from './auth-context.js';
 
 export interface AppDependencies {
   config: AppConfig;
@@ -20,7 +22,17 @@ export interface AppDependencies {
   contentService: ContentService;
   mediaService: MediaService;
   readiness: () => Promise<void>;
+  storageHealth: () => Promise<StorageHealth>;
 }
+
+type OperationalService = {
+  id: string;
+  label: string;
+  status: ServiceHealthStatus;
+  detail: string;
+  checkedAt: Date;
+  metadata?: Record<string, unknown>;
+};
 
 export async function buildApp(dependencies: AppDependencies) {
   const { config } = dependencies;
@@ -71,10 +83,12 @@ export async function buildApp(dependencies: AppDependencies) {
     await dependencies.readiness();
     return { status: 'ready' };
   });
+  app.get('/api/stream/status', { config: { rateLimit: false } }, async () => ({ live: false, loop: false, source: 'api-fallback' }));
 
   registerStreamRoutes(app, config);
 
   const authContext = registerAuthRoutes(app, config, dependencies.authService);
+  registerOperationsRoutes(app, dependencies, authContext);
   registerContentRoutes(app, config, dependencies.contentService, authContext);
   registerMediaRoutes(app, dependencies.mediaService, authContext);
 
@@ -113,4 +127,153 @@ export async function buildApp(dependencies: AppDependencies) {
   });
 
   return app;
+}
+
+function registerOperationsRoutes(
+  app: FastifyInstance,
+  dependencies: AppDependencies,
+  auth: ReturnType<typeof registerAuthRoutes>,
+) {
+  const previousStatus = new Map<string, ServiceHealthStatus>();
+
+  app.get('/api/operations/status', { preHandler: auth.requireAdmin }, async (request) => {
+    const services = await collectOperationalServices(dependencies);
+    const session = auth.getSession(request);
+    const context = { userId: session.user.id, ...requestAuditContext(request) };
+
+    for (const service of services) {
+      const previous = previousStatus.get(service.id);
+      const isIssue = service.status === 'warning' || service.status === 'error';
+      const recovered = previous && previous !== 'ok' && service.status === 'ok';
+      if ((!previous && isIssue) || (previous && previous !== service.status && (isIssue || recovered))) {
+        await dependencies.contentService.recordOperationalStatusChange(service.id, service.status, previous, service.detail, context);
+      }
+      previousStatus.set(service.id, service.status);
+    }
+
+    const logs = (await dependencies.contentService.listAuditLogs(50))
+      .filter((entry) => entry.action.startsWith('operations.'))
+      .slice(0, 12);
+    const summary = services.reduce((accumulator, service) => {
+      accumulator[service.status] += 1;
+      return accumulator;
+    }, { ok: 0, warning: 0, error: 0, neutral: 0 });
+    const status = summary.error > 0 ? 'error' : summary.warning > 0 ? 'warning' : 'ok';
+
+    return {
+      checkedAt: new Date(),
+      status,
+      summary,
+      services,
+      logs,
+    };
+  });
+}
+
+async function collectOperationalServices(dependencies: AppDependencies): Promise<OperationalService[]> {
+  const checkedAt = new Date();
+  const services: OperationalService[] = [
+    { id: 'api', label: 'API Fastify', status: 'ok', detail: 'Backend respondendo requisições administrativas.', checkedAt },
+  ];
+
+  services.push(await databaseStatus(dependencies, checkedAt));
+  services.push(await storageStatus(dependencies, checkedAt));
+  services.push(r2ConfigurationStatus(dependencies.config, checkedAt));
+  services.push(environmentStatus(checkedAt));
+  services.push(securityStatus(dependencies.config, checkedAt));
+
+  return services;
+}
+
+async function databaseStatus(dependencies: AppDependencies, checkedAt: Date): Promise<OperationalService> {
+  try {
+    await dependencies.readiness();
+    return { id: 'database', label: 'PostgreSQL', status: 'ok', detail: 'Banco respondendo consulta de prontidão.', checkedAt };
+  } catch (error) {
+    return {
+      id: 'database',
+      label: 'PostgreSQL',
+      status: 'error',
+      detail: error instanceof Error ? `Banco indisponível: ${error.message}` : 'Banco indisponível.',
+      checkedAt,
+    };
+  }
+}
+
+async function storageStatus(dependencies: AppDependencies, checkedAt: Date): Promise<OperationalService> {
+  try {
+    const health = await dependencies.storageHealth();
+    return {
+      id: 'storage',
+      label: health.provider === 'r2' ? 'Storage Cloudflare R2' : 'Storage local',
+      status: health.status,
+      detail: health.detail,
+      checkedAt: health.checkedAt,
+      ...(health.metadata ? { metadata: health.metadata } : {}),
+    };
+  } catch (error) {
+    return {
+      id: 'storage',
+      label: 'Storage de mídia',
+      status: 'error',
+      detail: error instanceof Error ? `Storage indisponível: ${error.message}` : 'Storage indisponível.',
+      checkedAt,
+    };
+  }
+}
+
+function r2ConfigurationStatus(config: AppConfig, checkedAt: Date): OperationalService {
+  const configured = Boolean(config.r2AccountId && config.r2AccessKeyId && config.r2SecretAccessKey && config.r2Bucket && config.r2PublicUrl);
+  if (configured) {
+    return {
+      id: 'cloudflare-r2',
+      label: 'Cloudflare R2',
+      status: 'ok',
+      detail: 'Variáveis do R2 configuradas para uploads de mídia e documentos.',
+      checkedAt,
+      metadata: { bucket: config.r2Bucket, publicUrl: config.r2PublicUrl },
+    };
+  }
+  return {
+    id: 'cloudflare-r2',
+    label: 'Cloudflare R2',
+    status: config.nodeEnv === 'production' ? 'warning' : 'neutral',
+    detail: config.nodeEnv === 'production'
+      ? 'R2 não configurado em produção; uploads ficam dependentes do volume local.'
+      : 'R2 não configurado neste ambiente; usando storage local.',
+    checkedAt,
+  };
+}
+
+function environmentStatus(checkedAt: Date): OperationalService {
+  const railwayEnvironment = process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_SERVICE_NAME;
+  return {
+    id: 'runtime',
+    label: railwayEnvironment ? 'Railway' : 'Docker/local',
+    status: 'ok',
+    detail: railwayEnvironment
+      ? `Executando no Railway (${railwayEnvironment}).`
+      : 'Executando fora do Railway, compatível com Docker/local.',
+    checkedAt,
+    ...(railwayEnvironment ? { metadata: { railwayEnvironment } } : {}),
+  };
+}
+
+function securityStatus(config: AppConfig, checkedAt: Date): OperationalService {
+  if (config.nodeEnv === 'production' && !config.cookieSecure) {
+    return {
+      id: 'security',
+      label: 'Sessão e cookies',
+      status: 'warning',
+      detail: 'COOKIE_SECURE está desligado em produção. Ative HTTPS antes de liberar acesso real.',
+      checkedAt,
+    };
+  }
+  return {
+    id: 'security',
+    label: 'Sessão e cookies',
+    status: 'ok',
+    detail: 'Sessões administrativas protegidas por cookie HttpOnly, CSRF e expiração.',
+    checkedAt,
+  };
 }

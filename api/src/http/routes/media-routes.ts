@@ -19,9 +19,14 @@ export function registerMediaRoutes(app: FastifyInstance, media: MediaService, a
     return reply.code(201).send(result);
   });
 
-  app.post('/api/upload/video', { preHandler: [auth.requireAuth, auth.requireCsrf] }, async (request, reply) => {
+  app.post('/api/upload/video', { preHandler: [auth.requireAdmin, auth.requireCsrf] }, async (request, reply) => {
     const result = await receiveAndStore(request, 'video', 500 * 1024 * 1024, media, auth);
     return reply.code(201).send({ ...result, filename: result.url });
+  });
+
+  app.post('/api/upload/document', { preHandler: [auth.requireAuth, auth.requireCsrf] }, async (request, reply) => {
+    const result = await receiveAndStore(request, 'document', 25 * 1024 * 1024, media, auth);
+    return reply.code(201).send(result);
   });
 }
 

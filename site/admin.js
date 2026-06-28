@@ -7,6 +7,7 @@ import { createOperationsController } from './js/admin/operations-controller.js'
 import { createPrivateRoomAdminController } from './js/admin/private-room-controller.js';
 import { createResourceController } from './js/admin/resource-controller.js';
 import { createSecurityController } from './js/admin/security-controller.js';
+import { createTeacherAdminController } from './js/admin/teacher-controller.js';
 import { initializeNavigation, showToast } from './js/admin/ui.js';
 
 const operations = createOperationsController();
@@ -14,6 +15,7 @@ const navigate = initializeNavigation();
 const resources = createResourceController({ navigate, onMutation: operations.loadAudit });
 const branding = createBrandingAdminController({ onMutation: operations.loadAudit });
 const privateRooms = createPrivateRoomAdminController({ navigate, onMutation: operations.loadAudit });
+const teachers = createTeacherAdminController({ navigate, onMutation: operations.loadAudit });
 const security = createSecurityController();
 let statusTimer;
 
@@ -22,6 +24,7 @@ async function refreshAll(showFeedback = false) {
     buttonIcon.classList.add('fa-spin');
     try {
         await Promise.all([resources.loadAll(), branding.load(), privateRooms.load(), operations.loadAudit(), operations.checkStatus()]);
+        await teachers.load();
         byId('last-sync').textContent = `Atualizado às ${new Intl.DateTimeFormat('pt-BR', { timeStyle: 'short' }).format(new Date())}`;
         if (showFeedback) showToast('Painel atualizado', 'Dados sincronizados com a TV pública.');
     } catch (error) {
@@ -34,9 +37,14 @@ async function refreshAll(showFeedback = false) {
 async function initialize() {
     try {
         adminState.session = await apiJson('/api/auth/session');
+        if (adminState.session.user.role !== 'admin') {
+            location.replace('professor.html');
+            return;
+        }
         resources.initialize();
         branding.initialize();
         privateRooms.initialize();
+        teachers.initialize();
         security.initialize();
         security.renderSession();
         bindSessionActions();

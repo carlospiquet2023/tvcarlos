@@ -31,12 +31,12 @@ form.addEventListener('submit', async (event) => {
     setButtonContent(submitButton, 'fa-solid fa-spinner fa-spin', 'Entrando...');
 
     try {
-        await apiJson('/api/auth/login', {
+        const session = await apiJson('/api/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username: usernameInput.value.trim(), password: passwordInput.value }),
         }, { redirectOnUnauthorized: false });
-        window.location.replace('admin.html');
+        window.location.replace(session.user?.role === 'teacher' ? 'professor.html' : 'admin.html');
     } catch (error) {
         errorText.textContent = error.message || 'Não foi possível entrar.';
         errorAlert.classList.remove('hidden');
@@ -48,6 +48,6 @@ form.addEventListener('submit', async (event) => {
 
 if (document.cookie.split('; ').some((value) => value.startsWith('tv_csrf='))) {
     apiJson('/api/auth/session', {}, { redirectOnUnauthorized: false })
-        .then(() => window.location.replace('admin.html'))
+        .then((session) => window.location.replace(session.user?.role === 'teacher' ? 'professor.html' : 'admin.html'))
         .catch(() => undefined);
 }

@@ -9,6 +9,7 @@ servers:
 tags:
   - { name: Health }
   - { name: Auth }
+  - { name: Operations }
   - { name: Content }
   - { name: Media }
 security: []
@@ -38,7 +39,16 @@ paths:
               schema:
                 type: object
                 required: [live, loop]
-                properties: { live: { type: boolean }, loop: { type: boolean } }
+                properties: { live: { type: boolean }, loop: { type: boolean }, source: { type: string } }
+  /api/operations/status:
+    get:
+      tags: [Operations]
+      operationId: getOperationsStatus
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200': { description: Monitor operacional usado pelo dashboard principal, content: { application/json: { schema: { $ref: '#/components/schemas/OperationsStatus' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /api/auth/login:
     post:
       tags: [Auth]
@@ -74,6 +84,38 @@ paths:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/CredentialsInput' } } }
       responses: { '204': { description: Credenciais alteradas e sessões revogadas }, '400': { $ref: '#/components/responses/ValidationError' }, '401': { $ref: '#/components/responses/Unauthorized' }, '403': { $ref: '#/components/responses/Forbidden' } }
+  /api/teachers:
+    get:
+      tags: [Auth]
+      operationId: listTeachers
+      security: [{ sessionCookie: [] }]
+      responses: { '200': { description: Professores convidados e salas atribuídas, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/TeacherAccount' } } } } }, '403': { $ref: '#/components/responses/Forbidden' } }
+    post:
+      tags: [Auth]
+      operationId: createTeacher
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/TeacherCreateInput' } } } }
+      responses: { '201': { description: Professor criado; a senha só aparece nesta resposta, content: { application/json: { schema: { $ref: '#/components/schemas/CreateTeacherResponse' } } } }, '400': { $ref: '#/components/responses/ValidationError' }, '403': { $ref: '#/components/responses/Forbidden' } }
+  /api/teachers/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    put:
+      tags: [Auth]
+      operationId: updateTeacherRooms
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/TeacherUpdateInput' } } } }
+      responses: { '200': { description: Salas do professor atualizadas, content: { application/json: { schema: { $ref: '#/components/schemas/TeacherAccount' } } } }, '404': { $ref: '#/components/responses/NotFound' }, '403': { $ref: '#/components/responses/Forbidden' } }
+    delete:
+      tags: [Auth]
+      operationId: deleteTeacher
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses: { '204': { description: Professor removido e sessões associadas revogadas }, '404': { $ref: '#/components/responses/NotFound' }, '403': { $ref: '#/components/responses/Forbidden' } }
+  /api/teachers/{id}/rotate-password:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Auth]
+      operationId: rotateTeacherPassword
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses: { '200': { description: Nova senha do professor gerada, content: { application/json: { schema: { $ref: '#/components/schemas/CreateTeacherResponse' } } } }, '404': { $ref: '#/components/responses/NotFound' }, '403': { $ref: '#/components/responses/Forbidden' } }
   /api/news:
     get:
       tags: [Content]
@@ -109,7 +151,12 @@ paths:
     get:
       tags: [Content]
       operationId: listPrograms
-      responses: { '200': { description: Grade ordenada, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Program' } } } } } }
+      parameters:
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+        - { name: search, in: query, schema: { type: string, maxLength: 100 } }
+        - { name: category, in: query, schema: { type: string, maxLength: 100 } }
+      responses: { '200': { description: Grade paginada e ordenada, content: { application/json: { schema: { $ref: '#/components/schemas/ProgramListResponse' } } } } }
     post:
       tags: [Content]
       operationId: createProgram
@@ -179,6 +226,57 @@ paths:
       operationId: rotatePrivateRoomPassword
       security: [{ sessionCookie: [], csrfHeader: [] }]
       responses: { '200': { description: Nova senha gerada; copie antes de sair da tela, content: { application/json: { schema: { $ref: '#/components/schemas/CreatePrivateRoomResponse' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/private-rooms/{id}/interaction:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Content]
+      operationId: getPrivateRoomInteractionAdmin
+      security: [{ sessionCookie: [] }]
+      responses: { '200': { description: Configuração e mensagens da interação da sala, content: { application/json: { schema: { $ref: '#/components/schemas/PrivateRoomInteractionAdmin' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/private-rooms/{id}/interaction/settings:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    put:
+      tags: [Content]
+      operationId: updatePrivateRoomInteractionSettings
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PrivateRoomInteractionSettingsInput' } } } }
+      responses: { '200': { description: Configuração de interação atualizada, content: { application/json: { schema: { $ref: '#/components/schemas/PrivateRoomInteractionSettings' } } } }, '400': { $ref: '#/components/responses/ValidationError' }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/private-rooms/{id}/interaction/archive:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Content]
+      operationId: archivePrivateRoomInteraction
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses: { '204': { description: Mensagens da sala arquivadas }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/private-room-messages/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    patch:
+      tags: [Content]
+      operationId: moderatePrivateRoomMessage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PrivateRoomMessageModerationInput' } } } }
+      responses: { '200': { description: Mensagem moderada, content: { application/json: { schema: { $ref: '#/components/schemas/PrivateRoomMessage' } } } }, '400': { $ref: '#/components/responses/ValidationError' }, '403': { $ref: '#/components/responses/Forbidden' }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/teacher/private-rooms:
+    get:
+      tags: [Content]
+      operationId: listTeacherPrivateRooms
+      security: [{ sessionCookie: [] }]
+      responses: { '200': { description: Salas privadas visíveis para professor ou admin, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/PrivateRoom' } } } } }, '401': { $ref: '#/components/responses/Unauthorized' } }
+  /api/teacher/private-rooms/{id}/interaction:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Content]
+      operationId: getTeacherPrivateRoomInteraction
+      security: [{ sessionCookie: [] }]
+      responses: { '200': { description: Interação da sala atribuída ao professor, content: { application/json: { schema: { $ref: '#/components/schemas/PrivateRoomInteractionAdmin' } } } }, '403': { $ref: '#/components/responses/Forbidden' }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/teacher/private-rooms/{id}/material:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    put:
+      tags: [Content]
+      operationId: updateTeacherPrivateRoomMaterial
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PrivateRoomSupportMaterialInput' } } } }
+      responses: { '200': { description: Material de apoio e página atual atualizados, content: { application/json: { schema: { $ref: '#/components/schemas/PrivateRoom' } } } }, '400': { $ref: '#/components/responses/ValidationError' }, '403': { $ref: '#/components/responses/Forbidden' }, '404': { $ref: '#/components/responses/NotFound' } }
   /api/private-room-access:
     post:
       tags: [Content]
@@ -192,6 +290,21 @@ paths:
       security: [{ privateRoomCookie: [] }]
       parameters: [{ name: roomCode, in: path, required: true, schema: { type: string, pattern: '^[a-zA-Z0-9-]{4,24}$' } }]
       responses: { '200': { description: Sala liberada para a sessão privada atual, content: { application/json: { schema: { $ref: '#/components/schemas/PrivateRoom' } } } }, '401': { $ref: '#/components/responses/Unauthorized' } }
+  /api/private-room-access/{roomCode}/interaction:
+    get:
+      tags: [Content]
+      operationId: getPrivateRoomInteractionPublic
+      security: [{ privateRoomCookie: [] }]
+      parameters: [{ name: roomCode, in: path, required: true, schema: { type: string, pattern: '^[a-zA-Z0-9-]{4,24}$' } }]
+      responses: { '200': { description: Mensagens aprovadas e destaque público da sala, content: { application/json: { schema: { $ref: '#/components/schemas/PrivateRoomInteractionPublic' } } } }, '401': { $ref: '#/components/responses/Unauthorized' } }
+  /api/private-room-access/{roomCode}/messages:
+    post:
+      tags: [Content]
+      operationId: submitPrivateRoomMessage
+      security: [{ privateRoomCookie: [] }]
+      parameters: [{ name: roomCode, in: path, required: true, schema: { type: string, pattern: '^[a-zA-Z0-9-]{4,24}$' } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PrivateRoomMessageSubmitInput' } } } }
+      responses: { '201': { description: Mensagem recebida para moderação ou publicação, content: { application/json: { schema: { $ref: '#/components/schemas/PrivateRoomMessageSubmitResponse' } } } }, '400': { $ref: '#/components/responses/ValidationError' }, '401': { $ref: '#/components/responses/Unauthorized' }, '429': { $ref: '#/components/responses/RateLimited' } }
   /api/private-room-access/logout:
     post:
       tags: [Content]
@@ -281,6 +394,13 @@ paths:
       security: [{ sessionCookie: [], csrfHeader: [] }]
       requestBody: { $ref: '#/components/requestBodies/File' }
       responses: { '201': { description: Vídeo validado por assinatura e ffprobe, content: { application/json: { schema: { $ref: '#/components/schemas/StoredMedia' } } } }, '400': { $ref: '#/components/responses/ValidationError' }, '413': { description: Limite de 500 MB excedido } }
+  /api/upload/document:
+    post:
+      tags: [Media]
+      operationId: uploadDocument
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody: { $ref: '#/components/requestBodies/File' }
+      responses: { '201': { description: PDF validado por assinatura e armazenado para material de apoio, content: { application/json: { schema: { $ref: '#/components/schemas/StoredMedia' } } } }, '400': { $ref: '#/components/responses/ValidationError' }, '413': { description: Limite de 25 MB excedido } }
 components:
   securitySchemes:
     sessionCookie: { type: apiKey, in: cookie, name: tv_session }
@@ -305,21 +425,72 @@ components:
     InternalError: { description: Falha interna com request ID nos logs, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
   schemas:
     Health: { type: object, additionalProperties: false, properties: { status: { type: string } }, required: [status] }
+    ServiceHealthStatus: { type: string, enum: [ok, warning, error, neutral] }
+    OperationalService:
+      type: object
+      required: [id, label, status, detail, checkedAt]
+      properties:
+        id: { type: string }
+        label: { type: string }
+        status: { $ref: '#/components/schemas/ServiceHealthStatus' }
+        detail: { type: string }
+        checkedAt: { type: string, format: date-time }
+        metadata: { type: object }
+    OperationsStatus:
+      type: object
+      required: [checkedAt, status, summary, services, logs]
+      properties:
+        checkedAt: { type: string, format: date-time }
+        status: { $ref: '#/components/schemas/ServiceHealthStatus' }
+        summary:
+          type: object
+          required: [ok, warning, error, neutral]
+          properties: { ok: { type: integer }, warning: { type: integer }, error: { type: integer }, neutral: { type: integer } }
+        services: { type: array, items: { $ref: '#/components/schemas/OperationalService' } }
+        logs: { type: array, items: { $ref: '#/components/schemas/AuditLog' } }
     Error:
       type: object
       required: [error]
       properties:
         error:
-          type: object
-          required: [code, message]
-          properties: { code: { type: string }, message: { type: string } }
+            type: object
+            required: [code, message]
+            properties: { code: { type: string }, message: { type: string } }
     LoginInput: { type: object, additionalProperties: false, required: [username, password], properties: { username: { type: string, minLength: 3, maxLength: 80 }, password: { type: string, minLength: 1, maxLength: 128, format: password } } }
     CredentialsInput: { type: object, additionalProperties: false, required: [currentPassword, newUsername, newPassword], properties: { currentPassword: { type: string, format: password }, newUsername: { type: string, minLength: 3, maxLength: 80 }, newPassword: { type: string, minLength: 14, maxLength: 128, format: password } } }
-    Session: { type: object, required: [user, expiresAt], properties: { user: { type: object, required: [id, username], properties: { id: { type: string, format: uuid }, username: { type: string } } }, expiresAt: { type: string, format: date-time } } }
+    Session: { type: object, required: [user, expiresAt], properties: { user: { type: object, required: [id, username, role], properties: { id: { type: string, format: uuid }, username: { type: string }, role: { type: string, enum: [admin, teacher] } } }, expiresAt: { type: string, format: date-time } } }
+    TeacherCreateInput: { type: object, additionalProperties: false, required: [username], properties: { username: { type: string, minLength: 3, maxLength: 80 }, roomIds: { type: array, maxItems: 100, items: { type: string, format: uuid } } } }
+    TeacherUpdateInput: { type: object, additionalProperties: false, required: [roomIds], properties: { roomIds: { type: array, maxItems: 100, items: { type: string, format: uuid } } } }
+    TeacherAccount:
+      type: object
+      required: [id, username, normalizedUsername, role, roomIds, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        username: { type: string }
+        normalizedUsername: { type: string }
+        role: { type: string, enum: [teacher] }
+        roomIds: { type: array, items: { type: string, format: uuid } }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    TeacherSummary:
+      type: object
+      required: [id, username, role]
+      properties:
+        id: { type: string, format: uuid }
+        username: { type: string }
+        role: { type: string, enum: [teacher] }
+    CreateTeacherResponse:
+      type: object
+      additionalProperties: false
+      required: [teacher, password]
+      properties:
+        teacher: { anyOf: [{ $ref: '#/components/schemas/TeacherAccount' }, { $ref: '#/components/schemas/TeacherSummary' }] }
+        password: { type: string, format: password, description: "Senha exibida apenas na criação/rotação." }
     OrderedEntity: { type: object, required: [id, position, createdAt], properties: { id: { type: string, format: uuid }, position: { type: integer, minimum: 0 }, createdAt: { type: string, format: date-time } } }
     News: { allOf: [{ $ref: '#/components/schemas/OrderedEntity' }, { type: object, required: [text], properties: { text: { type: string } } }] }
     ProgramInput: { type: object, additionalProperties: false, required: [title, description, video], properties: { title: { type: string, minLength: 1, maxLength: 160 }, description: { type: string, maxLength: 500 }, video: { type: string, maxLength: 2048, description: "Nome de upload, URL HTTPS ou URL válida do YouTube." } } }
     Program: { allOf: [{ $ref: '#/components/schemas/OrderedEntity' }, { $ref: '#/components/schemas/ProgramInput' }] }
+    ProgramListResponse: { type: object, required: [items, total], properties: { items: { type: array, items: { $ref: '#/components/schemas/Program' } }, total: { type: integer, minimum: 0 } } }
     PrivateRoomInput:
       type: object
       additionalProperties: false
@@ -329,6 +500,11 @@ components:
         description: { type: string, maxLength: 500 }
         sourceType: { type: string, enum: [live, youtube, video, external], description: "live usa o HLS principal; youtube aceita URL do YouTube; video aceita upload/HTTPS; external aceita URL HTTPS." }
         sourceUrl: { type: string, maxLength: 2048, description: "Obrigatória exceto quando sourceType for live." }
+        supportMaterialEnabled: { type: boolean, default: false }
+        supportMaterialTitle: { type: string, maxLength: 160, default: Material de apoio }
+        supportMaterialType: { type: string, enum: [url, image, pdf], default: url }
+        supportMaterialUrl: { type: string, maxLength: 2048, description: "URL HTTPS, /uploads/... ou /documents/...pdf para slide/PDF da sala." }
+        supportMaterialCurrentPage: { type: integer, minimum: 1, maximum: 9999, default: 1 }
         isActive: { type: boolean }
         expiresAt: { type: [string, 'null'], format: date-time }
     PrivateRoom:
@@ -362,6 +538,104 @@ components:
       properties:
         room: { $ref: '#/components/schemas/PrivateRoom' }
         url: { type: string, description: "Página protegida da sala." }
+    PrivateRoomSupportMaterialInput:
+      type: object
+      additionalProperties: false
+      required: [supportMaterialEnabled, supportMaterialTitle, supportMaterialType, supportMaterialUrl, supportMaterialCurrentPage]
+      properties:
+        supportMaterialEnabled: { type: boolean }
+        supportMaterialTitle: { type: string, maxLength: 160 }
+        supportMaterialType: { type: string, enum: [url, image, pdf] }
+        supportMaterialUrl: { type: string, maxLength: 2048 }
+        supportMaterialCurrentPage: { type: integer, minimum: 1, maximum: 9999 }
+    PrivateRoomInteractionSettingsInput:
+      type: object
+      additionalProperties: false
+      required: [enabled, mode, requireName, allowAnonymous, collectContact, moderationRequired, allowPublicReplies, noticeText]
+      properties:
+        enabled: { type: boolean }
+        mode: { type: string, enum: [questions_comments, questions_only, comments_only] }
+        requireName: { type: boolean }
+        allowAnonymous: { type: boolean }
+        collectContact: { type: boolean }
+        moderationRequired: { type: boolean }
+        allowPublicReplies: { type: boolean }
+        noticeText: { type: string, maxLength: 300 }
+    PrivateRoomInteractionSettings:
+      allOf:
+        - $ref: '#/components/schemas/PrivateRoomInteractionSettingsInput'
+        - type: object
+          required: [roomId, updatedAt]
+          properties:
+            roomId: { type: string, format: uuid }
+            updatedAt: { type: string, format: date-time }
+    PrivateRoomMessageStatus: { type: string, enum: [pending, approved, hidden, answered, archived] }
+    PrivateRoomMessage:
+      type: object
+      required: [id, roomId, participantName, participantContact, body, adminReply, status, isHighlighted, userAgent, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        roomId: { type: string, format: uuid }
+        participantName: { type: string }
+        participantContact: { type: string }
+        body: { type: string }
+        adminReply: { type: string }
+        status: { $ref: '#/components/schemas/PrivateRoomMessageStatus' }
+        isHighlighted: { type: boolean }
+        userAgent: { type: string }
+        moderatedBy: { type: [string, 'null'], format: uuid }
+        moderatedAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    PublicPrivateRoomMessage:
+      type: object
+      required: [id, participantName, body, adminReply, status, isHighlighted, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        participantName: { type: string }
+        body: { type: string }
+        adminReply: { type: string }
+        status: { $ref: '#/components/schemas/PrivateRoomMessageStatus' }
+        isHighlighted: { type: boolean }
+        createdAt: { type: string, format: date-time }
+    PrivateRoomInteractionAdmin:
+      type: object
+      required: [settings, messages, pendingCount, highlightedMessage]
+      properties:
+        settings: { $ref: '#/components/schemas/PrivateRoomInteractionSettings' }
+        messages: { type: array, items: { $ref: '#/components/schemas/PrivateRoomMessage' } }
+        pendingCount: { type: integer, minimum: 0 }
+        highlightedMessage: { anyOf: [{ $ref: '#/components/schemas/PrivateRoomMessage' }, { type: 'null' }] }
+    PrivateRoomInteractionPublic:
+      type: object
+      required: [settings, messages, highlightedMessage]
+      properties:
+        settings: { $ref: '#/components/schemas/PrivateRoomInteractionSettingsInput' }
+        messages: { type: array, items: { $ref: '#/components/schemas/PublicPrivateRoomMessage' } }
+        highlightedMessage: { anyOf: [{ $ref: '#/components/schemas/PublicPrivateRoomMessage' }, { type: 'null' }] }
+    PrivateRoomMessageSubmitInput:
+      type: object
+      additionalProperties: false
+      required: [body]
+      properties:
+        participantName: { type: string, maxLength: 120 }
+        participantContact: { type: string, maxLength: 180 }
+        body: { type: string, minLength: 1, maxLength: 1000 }
+    PrivateRoomMessageSubmitResponse:
+      type: object
+      required: [id, status, createdAt, moderated]
+      properties:
+        id: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/PrivateRoomMessageStatus' }
+        createdAt: { type: string, format: date-time }
+        moderated: { type: boolean }
+    PrivateRoomMessageModerationInput:
+      type: object
+      additionalProperties: false
+      properties:
+        status: { $ref: '#/components/schemas/PrivateRoomMessageStatus' }
+        adminReply: { type: string, maxLength: 1000 }
+        isHighlighted: { type: boolean }
     PartnerInput: { type: object, additionalProperties: false, required: [name, logoUrl, destinationUrl], properties: { name: { type: string, maxLength: 160 }, logoUrl: { type: string, maxLength: 2048 }, destinationUrl: { type: string, maxLength: 2048 } } }
     Partner: { allOf: [{ $ref: '#/components/schemas/OrderedEntity' }, { $ref: '#/components/schemas/PartnerInput' }] }
     HeaderLinkInput: { type: object, additionalProperties: false, required: [name, url], properties: { name: { type: string, maxLength: 40 }, url: { type: string, maxLength: 2048 } } }

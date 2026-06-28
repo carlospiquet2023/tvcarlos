@@ -9,6 +9,9 @@ import {
   type Partner,
   type PrivateRoom,
   type PrivateRoomAccessSession,
+  type PrivateRoomInteractionSettings,
+  type PrivateRoomMessage,
+  type PrivateRoomMessageStatus,
   type Program,
 } from '../../domain/models.js';
 import type { Database } from '../database/schema.js';
@@ -137,6 +140,32 @@ export class PostgresContentRepository implements ContentRepository {
     return rows.map((row) => this.privateRoomFromRow(row));
   }
 
+  async listPrivateRoomsForTeacher(userId: string): Promise<PrivateRoom[]> {
+    const rows = await this.database
+      .selectFrom('teacher_private_room_access')
+      .innerJoin('private_rooms', 'private_rooms.id', 'teacher_private_room_access.room_id')
+      .selectAll('private_rooms')
+      .where('teacher_private_room_access.user_id', '=', userId)
+      .orderBy('private_rooms.created_at', 'desc')
+      .execute();
+    return rows.map((row) => this.privateRoomFromRow(row));
+  }
+
+  async userCanAccessPrivateRoom(userId: string, roomId: string): Promise<boolean> {
+    const row = await this.database
+      .selectFrom('teacher_private_room_access')
+      .select('room_id')
+      .where('user_id', '=', userId)
+      .where('room_id', '=', roomId)
+      .executeTakeFirst();
+    return Boolean(row);
+  }
+
+  async findPrivateRoomById(id: string): Promise<PrivateRoom | undefined> {
+    const row = await this.database.selectFrom('private_rooms').selectAll().where('id', '=', id).executeTakeFirst();
+    return row ? this.privateRoomFromRow(row) : undefined;
+  }
+
   async findPrivateRoomByCode(roomCode: string): Promise<(PrivateRoom & { accessPasswordHash: string }) | undefined> {
     const row = await this.database.selectFrom('private_rooms').selectAll().where('room_code', '=', roomCode).executeTakeFirst();
     return row ? { ...this.privateRoomFromRow(row), accessPasswordHash: row.access_password_hash } : undefined;
@@ -148,6 +177,11 @@ export class PostgresContentRepository implements ContentRepository {
     description: string;
     sourceType: PrivateRoom['sourceType'];
     sourceUrl: string;
+    supportMaterialEnabled: boolean;
+    supportMaterialTitle: string;
+    supportMaterialType: PrivateRoom['supportMaterialType'];
+    supportMaterialUrl: string;
+    supportMaterialCurrentPage: number;
     accessPasswordHash: string;
     isActive: boolean;
     expiresAt?: Date | null;
@@ -162,6 +196,11 @@ export class PostgresContentRepository implements ContentRepository {
         description: input.description,
         source_type: input.sourceType,
         source_url: input.sourceUrl,
+        support_material_enabled: input.supportMaterialEnabled,
+        support_material_title: input.supportMaterialTitle,
+        support_material_type: input.supportMaterialType,
+        support_material_url: input.supportMaterialUrl,
+        support_material_current_page: input.supportMaterialCurrentPage,
         access_password_hash: input.accessPasswordHash,
         is_active: input.isActive,
         expires_at: input.expiresAt ?? null,
@@ -178,6 +217,11 @@ export class PostgresContentRepository implements ContentRepository {
     description: string;
     sourceType: PrivateRoom['sourceType'];
     sourceUrl: string;
+    supportMaterialEnabled: boolean;
+    supportMaterialTitle: string;
+    supportMaterialType: PrivateRoom['supportMaterialType'];
+    supportMaterialUrl: string;
+    supportMaterialCurrentPage: number;
     isActive: boolean;
     expiresAt?: Date | null;
   }): Promise<PrivateRoom | undefined> {
@@ -188,6 +232,11 @@ export class PostgresContentRepository implements ContentRepository {
         description: input.description,
         source_type: input.sourceType,
         source_url: input.sourceUrl,
+        support_material_enabled: input.supportMaterialEnabled,
+        support_material_title: input.supportMaterialTitle,
+        support_material_type: input.supportMaterialType,
+        support_material_url: input.supportMaterialUrl,
+        support_material_current_page: input.supportMaterialCurrentPage,
         is_active: input.isActive,
         expires_at: input.expiresAt ?? null,
         updated_at: new Date(),
@@ -241,6 +290,196 @@ export class PostgresContentRepository implements ContentRepository {
 
   async deleteExpiredPrivateRoomAccessSessions(now: Date): Promise<void> {
     await this.database.deleteFrom('private_room_access_sessions').where('expires_at', '<=', now).execute();
+  }
+
+  async getPrivateRoomInteractionSettings(roomId: string): Promise<PrivateRoomInteractionSettings | undefined> {
+    const row = await this.database
+      .selectFrom('private_room_interaction_settings')
+      .selectAll()
+      .where('room_id', '=', roomId)
+      .executeTakeFirst();
+    return row ? this.interactionSettingsFromRow(row) : undefined;
+  }
+
+  async updatePrivateRoomInteractionSettings(
+    roomId: string,
+    input: Omit<PrivateRoomInteractionSettings, 'roomId' | 'updatedAt'>,
+  ): Promise<PrivateRoomInteractionSettings> {
+    const now = new Date();
+    const values = {
+      room_id: roomId,
+      enabled: input.enabled,
+      mode: input.mode,
+      require_name: input.requireName,
+      allow_anonymous: input.allowAnonymous,
+      collect_contact: input.collectContact,
+      moderation_required: input.moderationRequired,
+      allow_public_replies: input.allowPublicReplies,
+      notice_text: input.noticeText,
+      updated_at: now,
+    };
+    const row = await this.database
+      .insertInto('private_room_interaction_settings')
+      .values(values)
+      .onConflict((conflict) => conflict.column('room_id').doUpdateSet({
+        enabled: input.enabled,
+        mode: input.mode,
+        require_name: input.requireName,
+        allow_anonymous: input.allowAnonymous,
+        collect_contact: input.collectContact,
+        moderation_required: input.moderationRequired,
+        allow_public_replies: input.allowPublicReplies,
+        notice_text: input.noticeText,
+        updated_at: now,
+      }))
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    return this.interactionSettingsFromRow(row);
+  }
+
+  async listPrivateRoomMessages(
+    roomId: string,
+    options: { includeArchived?: boolean; publicOnly?: boolean } = {},
+  ): Promise<PrivateRoomMessage[]> {
+    const rows = await this.database
+      .selectFrom('private_room_interaction_messages')
+      .selectAll()
+      .where('room_id', '=', roomId)
+      .$if(!options.includeArchived, (query) => query.where('status', '!=', 'archived'))
+      .$if(Boolean(options.publicOnly), (query) => query.where((expression) => expression.or([
+        expression('status', '=', 'approved'),
+        expression('status', '=', 'answered'),
+      ])))
+      .orderBy('is_highlighted', 'desc')
+      .orderBy('created_at', 'desc')
+      .limit(options.publicOnly ? 80 : 500)
+      .execute();
+    return rows.map((row) => this.privateRoomMessageFromRow(row));
+  }
+
+  async findPrivateRoomMessage(id: string): Promise<PrivateRoomMessage | undefined> {
+    const row = await this.database
+      .selectFrom('private_room_interaction_messages')
+      .selectAll()
+      .where('id', '=', id)
+      .executeTakeFirst();
+    return row ? this.privateRoomMessageFromRow(row) : undefined;
+  }
+
+  async createPrivateRoomMessage(input: Pick<PrivateRoomMessage, 'roomId' | 'participantName' | 'participantContact' | 'body' | 'status' | 'ipHash' | 'userAgent'>): Promise<PrivateRoomMessage> {
+    const now = new Date();
+    const row = await this.database
+      .insertInto('private_room_interaction_messages')
+      .values({
+        id: randomUUID(),
+        room_id: input.roomId,
+        participant_name: input.participantName,
+        participant_contact: input.participantContact,
+        body: input.body,
+        admin_reply: '',
+        status: input.status,
+        is_highlighted: false,
+        ip_hash: input.ipHash ?? null,
+        user_agent: input.userAgent,
+        moderated_by: null,
+        moderated_at: null,
+        created_at: now,
+        updated_at: now,
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    return this.privateRoomMessageFromRow(row);
+  }
+
+  async updatePrivateRoomMessage(
+    id: string,
+    input: {
+      status?: PrivateRoomMessageStatus | undefined;
+      adminReply?: string | undefined;
+      isHighlighted?: boolean | undefined;
+      moderatedBy?: string | null | undefined;
+      moderatedAt?: Date | null | undefined;
+    },
+  ): Promise<PrivateRoomMessage | undefined> {
+    const changes: {
+      status?: PrivateRoomMessageStatus;
+      admin_reply?: string;
+      is_highlighted?: boolean;
+      moderated_by?: string | null;
+      moderated_at?: Date | null;
+      updated_at: Date;
+    } = { updated_at: new Date() };
+    if (input.status !== undefined) changes.status = input.status;
+    if (input.adminReply !== undefined) changes.admin_reply = input.adminReply;
+    if (input.isHighlighted !== undefined) changes.is_highlighted = input.isHighlighted;
+    if (input.moderatedBy !== undefined) changes.moderated_by = input.moderatedBy;
+    if (input.moderatedAt !== undefined) changes.moderated_at = input.moderatedAt;
+
+    if (input.isHighlighted === true) {
+      return this.database.transaction().execute(async (transaction) => {
+        const existing = await transaction
+          .selectFrom('private_room_interaction_messages')
+          .select(['id', 'room_id'])
+          .where('id', '=', id)
+          .executeTakeFirst();
+        if (!existing) return undefined;
+        await transaction
+          .updateTable('private_room_interaction_messages')
+          .set({ is_highlighted: false })
+          .where('room_id', '=', existing.room_id)
+          .where('id', '!=', id)
+          .execute();
+        const row = await transaction
+          .updateTable('private_room_interaction_messages')
+          .set(changes)
+          .where('id', '=', id)
+          .returningAll()
+          .executeTakeFirst();
+        return row ? this.privateRoomMessageFromRow(row) : undefined;
+      });
+    }
+
+    const row = await this.database
+      .updateTable('private_room_interaction_messages')
+      .set(changes)
+      .where('id', '=', id)
+      .returningAll()
+      .executeTakeFirst();
+    return row ? this.privateRoomMessageFromRow(row) : undefined;
+  }
+
+  async archivePrivateRoomMessages(roomId: string): Promise<void> {
+    await this.database
+      .updateTable('private_room_interaction_messages')
+      .set({ status: 'archived', is_highlighted: false, updated_at: new Date() })
+      .where('room_id', '=', roomId)
+      .where('status', '!=', 'archived')
+      .execute();
+  }
+
+  async countRecentPrivateRoomMessages(roomId: string, ipHash: string, since: Date): Promise<number> {
+    const row = await this.database
+      .selectFrom('private_room_interaction_messages')
+      .select((expression) => expression.fn.count<number>('id').as('count'))
+      .where('room_id', '=', roomId)
+      .where('ip_hash', '=', ipHash)
+      .where('created_at', '>=', since)
+      .executeTakeFirst();
+    return Number(row?.count ?? 0);
+  }
+
+  async hasRecentDuplicatePrivateRoomMessage(roomId: string, ipHash: string, body: string, since: Date): Promise<boolean> {
+    const row = await this.database
+      .selectFrom('private_room_interaction_messages')
+      .select('id')
+      .where('room_id', '=', roomId)
+      .where('ip_hash', '=', ipHash)
+      .where('body', '=', body)
+      .where('created_at', '>=', since)
+      .where('status', '!=', 'archived')
+      .limit(1)
+      .executeTakeFirst();
+    return Boolean(row);
   }
 
   async getBranding(): Promise<Branding> {
@@ -407,6 +646,11 @@ export class PostgresContentRepository implements ContentRepository {
     description: string;
     source_type: PrivateRoom['sourceType'];
     source_url: string;
+    support_material_enabled: boolean;
+    support_material_title: string;
+    support_material_type: PrivateRoom['supportMaterialType'];
+    support_material_url: string;
+    support_material_current_page: number;
     is_active: boolean;
     expires_at: Date | null;
     created_at: Date;
@@ -419,8 +663,73 @@ export class PostgresContentRepository implements ContentRepository {
       description: row.description,
       sourceType: row.source_type,
       sourceUrl: row.source_url,
+      supportMaterialEnabled: row.support_material_enabled,
+      supportMaterialTitle: row.support_material_title,
+      supportMaterialType: row.support_material_type,
+      supportMaterialUrl: row.support_material_url,
+      supportMaterialCurrentPage: row.support_material_current_page,
       isActive: row.is_active,
       expiresAt: row.expires_at,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  }
+
+  private interactionSettingsFromRow(row: {
+    room_id: string;
+    enabled: boolean;
+    mode: PrivateRoomInteractionSettings['mode'];
+    require_name: boolean;
+    allow_anonymous: boolean;
+    collect_contact: boolean;
+    moderation_required: boolean;
+    allow_public_replies: boolean;
+    notice_text: string;
+    updated_at: Date;
+  }): PrivateRoomInteractionSettings {
+    return {
+      roomId: row.room_id,
+      enabled: row.enabled,
+      mode: row.mode,
+      requireName: row.require_name,
+      allowAnonymous: row.allow_anonymous,
+      collectContact: row.collect_contact,
+      moderationRequired: row.moderation_required,
+      allowPublicReplies: row.allow_public_replies,
+      noticeText: row.notice_text,
+      updatedAt: row.updated_at,
+    };
+  }
+
+  private privateRoomMessageFromRow(row: {
+    id: string;
+    room_id: string;
+    participant_name: string;
+    participant_contact: string;
+    body: string;
+    admin_reply: string;
+    status: PrivateRoomMessageStatus;
+    is_highlighted: boolean;
+    ip_hash: string | null;
+    user_agent: string;
+    moderated_by: string | null;
+    moderated_at: Date | null;
+    created_at: Date;
+    updated_at: Date;
+  }): PrivateRoomMessage {
+    return {
+      id: row.id,
+      roomId: row.room_id,
+      participantName: row.participant_name,
+      participantContact: row.participant_contact,
+      body: row.body,
+      adminReply: row.admin_reply,
+      status: row.status,
+      isHighlighted: row.is_highlighted,
+      ipHash: row.ip_hash,
+      userAgent: row.user_agent,
+      moderatedBy: row.moderated_by,
+      moderatedAt: row.moderated_at,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };

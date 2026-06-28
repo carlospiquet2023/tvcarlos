@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, DeleteObjectCommand, HeadBucketCommand } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
 import type { MediaStorage } from '../../application/ports.js';
 import type { MediaKind } from '../../domain/models.js';
@@ -31,11 +31,42 @@ export class R2MediaStorage implements MediaStorage {
     // Pode ser usado no futuro para verificar acesso ao bucket
   }
 
+  async healthCheck() {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4_000);
+    try {
+      await this.client.send(new HeadBucketCommand({ Bucket: this.bucket }), { abortSignal: controller.signal });
+      return {
+        provider: 'r2' as const,
+        status: 'ok' as const,
+        detail: 'Cloudflare R2 acessível e bucket respondendo.',
+        checkedAt: new Date(),
+        metadata: { bucket: this.bucket, publicUrl: this.publicUrl },
+      };
+    } catch (error) {
+      return {
+        provider: 'r2' as const,
+        status: 'error' as const,
+        detail: error instanceof Error
+          ? `Cloudflare R2 não respondeu corretamente: ${error.message}`
+          : 'Cloudflare R2 não respondeu corretamente.',
+        checkedAt: new Date(),
+        metadata: { bucket: this.bucket, publicUrl: this.publicUrl },
+      };
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
   async store(kind: MediaKind, sourcePath: string, extension: string) {
-    const key = `${kind === 'image' ? 'logo' : 'videos'}/${randomUUID()}.${extension.replace(/^\./, '')}`;
+    const key = `${prefixFor(kind)}/${randomUUID()}.${extension.replace(/^\./, '')}`;
     
     // Mapeamento básico; real validação do tipo já ocorreu no media-service.ts
-    const mimeType = kind === 'image' ? 'image/webp' : `video/${extension === 'mov' ? 'quicktime' : 'mp4'}`;
+    const mimeType = kind === 'image'
+      ? 'image/webp'
+      : kind === 'document'
+        ? 'application/pdf'
+        : `video/${extension === 'mov' ? 'quicktime' : 'mp4'}`;
     const fileStat = await stat(sourcePath);
     const body = createReadStream(sourcePath);
 
@@ -70,4 +101,10 @@ export class R2MediaStorage implements MediaStorage {
     });
     await this.client.send(command);
   }
+}
+
+function prefixFor(kind: MediaKind) {
+  if (kind === 'image') return 'logo';
+  if (kind === 'video') return 'videos';
+  return 'documents';
 }

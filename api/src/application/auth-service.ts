@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { AuditRepository, SessionRepository, UserRepository } from './ports.js';
-import { UnauthorizedError, ValidationError } from './errors.js';
+import { ForbiddenError, NotFoundError, UnauthorizedError, ValidationError } from './errors.js';
 import type { User } from '../domain/models.js';
 import { hashPassword, verifyPassword } from '../infrastructure/security/password.js';
 import { hashToken, randomToken } from '../infrastructure/security/tokens.js';
@@ -12,11 +12,13 @@ export interface RequestAuditContext {
 }
 
 export interface AuthenticatedSession {
-  user: Pick<User, 'id' | 'username'>;
+  user: Pick<User, 'id' | 'username' | 'role'>;
   csrfHash: string;
   expiresAt: Date;
   tokenHash: string;
 }
+
+type AdminActor = RequestAuditContext & { userId: string; role: User['role'] };
 
 export class AuthService {
   constructor(
@@ -78,7 +80,7 @@ export class AuthService {
       metadata: { userAgent: context.userAgent },
     });
 
-    return { token, csrfToken, expiresAt, user: { id: user.id, username: user.username } };
+    return { token, csrfToken, expiresAt, user: { id: user.id, username: user.username, role: user.role } };
   }
 
   async authenticate(rawToken: string | undefined): Promise<AuthenticatedSession> {
@@ -87,7 +89,7 @@ export class AuthService {
     const session = await this.sessions.findValidByTokenHash(tokenHash, new Date());
     if (!session) throw new UnauthorizedError('Sessão inválida ou expirada.');
     return {
-      user: { id: session.user.id, username: session.user.username },
+      user: { id: session.user.id, username: session.user.username, role: session.user.role },
       csrfHash: session.csrfHash,
       expiresAt: session.expiresAt,
       tokenHash,
@@ -133,6 +135,86 @@ export class AuthService {
       ip: context.ip,
     });
   }
+
+  listTeachers() {
+    return this.users.listTeachers();
+  }
+
+  async createTeacher(username: string, roomIds: string[], actor: AdminActor) {
+    requireAdminActor(actor);
+    const password = generateTeacherPassword();
+    const teacher = await this.users.createTeacher({
+      id: randomUUID(),
+      username: username.trim(),
+      normalizedUsername: normalizeUsername(username),
+      passwordHash: await hashPassword(password),
+      roomIds,
+    });
+    await this.audit.append({
+      actorUserId: actor.userId,
+      action: 'teacher.created',
+      targetType: 'user',
+      targetId: teacher.id,
+      requestId: actor.requestId,
+      ip: actor.ip,
+      metadata: { roomIds },
+    });
+    return { teacher, password };
+  }
+
+  async updateTeacherRooms(userId: string, roomIds: string[], actor: AdminActor) {
+    requireAdminActor(actor);
+    const teacher = await this.users.updateTeacherRooms(userId, roomIds);
+    if (!teacher) throw new NotFoundError('Professor não encontrado.');
+    await this.audit.append({
+      actorUserId: actor.userId,
+      action: 'teacher.rooms_updated',
+      targetType: 'user',
+      targetId: userId,
+      requestId: actor.requestId,
+      ip: actor.ip,
+      metadata: { roomIds },
+    });
+    return teacher;
+  }
+
+  async rotateTeacherPassword(userId: string, actor: AdminActor) {
+    requireAdminActor(actor);
+    const teacher = await this.users.findById(userId);
+    if (!teacher || teacher.role !== 'teacher') throw new NotFoundError('Professor não encontrado.');
+    const password = generateTeacherPassword();
+    await this.users.updatePasswordHash(userId, await hashPassword(password));
+    await this.audit.append({
+      actorUserId: actor.userId,
+      action: 'teacher.password_rotated',
+      targetType: 'user',
+      targetId: userId,
+      requestId: actor.requestId,
+      ip: actor.ip,
+    });
+    return { teacher: { id: teacher.id, username: teacher.username, role: teacher.role }, password };
+  }
+
+  async deleteTeacher(userId: string, actor: AdminActor) {
+    requireAdminActor(actor);
+    if (!(await this.users.deleteTeacher(userId))) throw new NotFoundError('Professor não encontrado.');
+    await this.audit.append({
+      actorUserId: actor.userId,
+      action: 'teacher.deleted',
+      targetType: 'user',
+      targetId: userId,
+      requestId: actor.requestId,
+      ip: actor.ip,
+    });
+  }
+}
+
+function requireAdminActor(actor: AdminActor) {
+  if (actor.role !== 'admin') throw new ForbiddenError('Acesso restrito ao administrador principal.');
+}
+
+function generateTeacherPassword() {
+  return `${randomToken().replace(/[^a-zA-Z0-9]/g, '').slice(0, 18)}Aa1!`;
 }
 
 export function normalizeUsername(username: string): string {

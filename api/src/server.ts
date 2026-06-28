@@ -37,7 +37,7 @@ console.log('--- R2 CONFIG CHECK ---', {
 if (config.r2AccountId && config.r2AccessKeyId && config.r2SecretAccessKey && config.r2Bucket && config.r2PublicUrl) {
   storage = new R2MediaStorage(config.r2AccountId, config.r2AccessKeyId, config.r2SecretAccessKey, config.r2Bucket, config.r2PublicUrl);
 } else {
-  storage = new LocalMediaStorage(config.imageStorageDir, config.videoStorageDir);
+  storage = new LocalMediaStorage(config.imageStorageDir, config.videoStorageDir, config.documentStorageDir);
 }
 await storage.initialize();
 
@@ -51,6 +51,7 @@ const app = await buildApp({
   contentService,
   mediaService,
   readiness: async () => { await sql`select 1`.execute(database); },
+  storageHealth: () => storage.healthCheck(),
 });
 
 const shutdown = async (signal: string) => {

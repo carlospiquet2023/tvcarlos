@@ -81,7 +81,7 @@ http {
         add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()" always;
         add_header Cross-Origin-Opener-Policy "same-origin" always;
         add_header Cross-Origin-Resource-Policy "same-site" always;
-        add_header Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; frame-src https://www.youtube-nocookie.com; form-action 'self'; script-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: https:; media-src 'self' blob: https:; connect-src 'self' https://api.open-meteo.com https://api.rss2json.com; upgrade-insecure-requests" always;
+        add_header Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; frame-src 'self' https://www.youtube-nocookie.com https:; form-action 'self'; script-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: https:; media-src 'self' blob: https:; connect-src 'self' https://api.open-meteo.com https://api.rss2json.com; upgrade-insecure-requests" always;
 
         location ~ /\. {
             deny all;
@@ -147,6 +147,16 @@ http {
             limit_conn per_ip 8;
             add_header Cache-Control "public, max-age=86400" always;
             add_header X-Content-Type-Options "nosniff" always;
+        }
+
+        location /documents/ {
+            alias /data/documents/;
+            autoindex off;
+            add_header Cache-Control "private, max-age=86400" always;
+            add_header X-Content-Type-Options "nosniff" always;
+            types {
+                application/pdf pdf;
+            }
         }
     }
 }

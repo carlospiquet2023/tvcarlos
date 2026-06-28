@@ -22,6 +22,7 @@
                 <a href="#identity" data-view="identity"><i class="fa-regular fa-image"></i><span>Marca e sinal</span></a>
                 <a href="#navigation" data-view="navigation"><i class="fa-solid fa-bars"></i><span>Menu do site</span><b id="nav-header-link-count">0</b></a>
                 <a href="#private-rooms" data-view="private-rooms"><i class="fa-solid fa-lock"></i><span>Sala Privada</span><b id="nav-private-room-count">0</b></a>
+                <a href="#teachers" data-view="teachers"><i class="fa-solid fa-chalkboard-user"></i><span>Professores</span><b id="nav-teacher-count">0</b></a>
                 <a href="#programs" data-view="programs"><i class="fa-solid fa-clapperboard"></i><span>Vídeos</span><b id="nav-program-count">0</b></a>
                 <a href="#ticker" data-view="ticker"><i class="fa-regular fa-message"></i><span>Giro de notícias</span><b id="nav-news-count">0</b></a>
                 <a href="#partners" data-view="partners"><i class="fa-solid fa-handshake"></i><span>Parceiros</span><b id="nav-partner-count">0</b></a>
@@ -61,6 +62,16 @@
                         <article class="metric-card"><span class="metric-icon purple"><i class="fa-solid fa-lock"></i></span><div><strong id="stat-private-rooms">0</strong><span>salas privadas</span></div></article>
                     </div>
 
+                    <article class="admin-card operations-monitor">
+                        <div class="card-heading">
+                            <div><span class="section-kicker">MONITORAMENTO</span><h3>Saúde dos serviços integrados</h3><p>API, banco, storage, Railway/Docker, R2 e sinal em uma leitura para manutenção.</p></div>
+                            <strong class="status-pill checking" id="operations-summary-status">Verificando</strong>
+                        </div>
+                        <div class="operations-health-grid" id="operations-health-grid">
+                            <div class="admin-empty">Carregando status operacional…</div>
+                        </div>
+                    </article>
+
                     <div class="admin-grid two-columns">
                         <article class="admin-card">
                             <div class="card-heading"><div><span class="section-kicker">INFRAESTRUTURA</span><h3>Status operacional</h3></div><i class="fa-solid fa-tower-broadcast"></i></div>
@@ -82,6 +93,11 @@
                             </div>
                         </article>
                     </div>
+
+                    <article class="admin-card">
+                        <div class="card-heading"><div><span class="section-kicker">MANUTENÇÃO</span><h3>Log operacional</h3><p>Falhas, alertas e recuperações detectadas pelo monitor.</p></div><i class="fa-solid fa-triangle-exclamation"></i></div>
+                        <div class="operations-log-list" id="operations-log-list"><div class="admin-empty">Nenhum evento operacional registrado.</div></div>
+                    </article>
 
                     <article class="admin-card">
                         <div class="card-heading"><div><span class="section-kicker">RASTREABILIDADE</span><h3>Atividade recente</h3></div><i class="fa-solid fa-clock-rotate-left"></i></div>
@@ -200,6 +216,38 @@
                                     <span class="field-status" id="private-room-source-upload-status"></span>
                                     <small id="private-room-source-hint">Cole o link de compartilhamento do vídeo ou da live.</small>
                                 </div>
+                                <div class="form-divider"><span>Material de apoio</span></div>
+                                <label class="toggle-field"><input type="checkbox" id="private-room-material-enabled-input"><span><strong>Mostrar slide/PDF na sala</strong><small>Abre um painel sobre o vídeo, no canto direito da Sala Privada.</small></span></label>
+                                <div class="form-grid">
+                                    <div class="form-group"><label for="private-room-material-title-input">Título do material</label><input type="text" id="private-room-material-title-input" class="form-control" maxlength="160" placeholder="Material de apoio"></div>
+                                    <div class="form-group">
+                                        <label for="private-room-material-type-input">Tipo de material</label>
+                                        <select id="private-room-material-type-input" class="form-control">
+                                            <option value="url">Slide ou PDF por URL</option>
+                                            <option value="pdf">PDF enviado</option>
+                                            <option value="image">Imagem enviada</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="private-room-material-url-input">Arquivo ou URL do material</label>
+                                    <div class="upload-field">
+                                        <input type="text" id="private-room-material-url-input" class="form-control" maxlength="2048" placeholder="https://... ou PDF/imagem enviada">
+                                        <label class="admin-btn secondary upload-button hidden" id="private-room-material-pdf-upload-button"><i class="fa-solid fa-file-pdf"></i> Enviar PDF<input type="file" id="private-room-material-pdf-upload" accept="application/pdf"></label>
+                                        <label class="admin-btn secondary upload-button hidden" id="private-room-material-image-upload-button"><i class="fa-solid fa-image"></i> Enviar imagem<input type="file" id="private-room-material-image-upload" accept="image/*"></label>
+                                    </div>
+                                    <span class="field-status" id="private-room-material-upload-status"></span>
+                                    <small id="private-room-material-hint">Use PDF, imagem ou link HTTPS de apresentação.</small>
+                                </div>
+                                <div class="form-group" id="private-room-material-page-group">
+                                    <label for="private-room-material-page-input">Página atual do PDF</label>
+                                    <div class="material-page-control">
+                                        <button class="admin-icon-button" id="private-room-material-prev-page-btn" type="button" title="Página anterior" aria-label="Página anterior"><i class="fa-solid fa-chevron-left"></i></button>
+                                        <input type="number" id="private-room-material-page-input" class="form-control" min="1" max="9999" value="1">
+                                        <button class="admin-icon-button" id="private-room-material-next-page-btn" type="button" title="Próxima página" aria-label="Próxima página"><i class="fa-solid fa-chevron-right"></i></button>
+                                    </div>
+                                    <small>Durante a aula, use as setas e a página será enviada para quem está na sala.</small>
+                                </div>
                                 <label class="toggle-field"><input type="checkbox" id="private-room-active-input" checked><span><strong>Sala ativa</strong><small>Desative para bloquear o acesso sem apagar a configuração.</small></span></label>
                                 <div class="security-note"><i class="fa-solid fa-shield-halved"></i><div><strong>Controle correto de acesso</strong><p>O visitante só entra com ID e senha válidos. A sessão privada usa cookie HttpOnly e expira automaticamente.</p></div></div>
                                 <div class="form-actions"><button class="admin-btn primary" id="private-room-submit-btn" type="submit"><i class="fa-solid fa-plus"></i> Criar sala e gerar senha</button><button class="admin-btn secondary hidden" id="private-room-cancel-btn" type="button">Cancelar edição</button></div>
@@ -216,6 +264,99 @@
                         <article class="admin-card list-card">
                             <div class="card-heading"><div><h3>Salas criadas</h3><p>Gerencie status, fonte e senha de acesso.</p></div><span class="count-chip" id="private-room-list-count">0 salas</span></div>
                             <div class="resource-list" id="active-private-rooms-list"><div class="admin-empty">Carregando salas privadas…</div></div>
+                        </article>
+                    </div>
+
+                    <article class="admin-card private-room-interaction-panel">
+                        <div class="card-heading">
+                            <div><span class="section-kicker">INTERAÇÃO DA SALA</span><h3>Perguntas e comentários moderados</h3><p>Aprove, responda, oculte e destaque mensagens dentro da sala privada.</p></div>
+                            <span class="count-chip" id="private-room-interaction-pending-count">0 pendentes</span>
+                        </div>
+
+                        <div class="admin-grid two-columns align-start">
+                            <form id="private-room-interaction-settings-form" class="admin-form">
+                                <div class="form-grid">
+                                    <div class="form-group">
+                                        <label for="private-room-interaction-room-select">Sala</label>
+                                        <select id="private-room-interaction-room-select" class="form-control"></select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="private-room-interaction-mode-input">Modo</label>
+                                        <select id="private-room-interaction-mode-input" class="form-control">
+                                            <option value="questions_comments">Perguntas e comentários</option>
+                                            <option value="questions_only">Somente perguntas</option>
+                                            <option value="comments_only">Somente comentários</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="interaction-toggle-grid">
+                                    <label class="toggle-field"><input type="checkbox" id="private-room-interaction-enabled-input"><span><strong>Interação ativa</strong><small>Mostra a aba na sala privada e permite novos envios.</small></span></label>
+                                    <label class="toggle-field"><input type="checkbox" id="private-room-interaction-require-name-input"><span><strong>Exigir nome</strong><small>Participante precisa se identificar antes de enviar.</small></span></label>
+                                    <label class="toggle-field"><input type="checkbox" id="private-room-interaction-anonymous-input"><span><strong>Permitir anônimo</strong><small>Se não informar nome, aparece como Anônimo.</small></span></label>
+                                    <label class="toggle-field"><input type="checkbox" id="private-room-interaction-contact-input"><span><strong>Coletar contato</strong><small>Exibe campo opcional de e-mail ou telefone.</small></span></label>
+                                    <label class="toggle-field"><input type="checkbox" id="private-room-interaction-moderation-input"><span><strong>Aprovação manual</strong><small>Mensagem só aparece depois de aprovada.</small></span></label>
+                                    <label class="toggle-field"><input type="checkbox" id="private-room-interaction-public-replies-input"><span><strong>Respostas públicas</strong><small>Respostas do admin aparecem para os participantes.</small></span></label>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="private-room-interaction-notice-input">Aviso fixado</label>
+                                    <textarea id="private-room-interaction-notice-input" class="form-control" maxlength="300" rows="3" placeholder="Envie suas perguntas e comentários para a moderação."></textarea>
+                                </div>
+                                <div class="form-actions">
+                                    <button class="admin-btn primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Salvar interação</button>
+                                    <button class="admin-btn secondary" id="private-room-interaction-export-btn" type="button"><i class="fa-solid fa-file-export"></i> Exportar CSV</button>
+                                    <button class="admin-btn danger" id="private-room-interaction-archive-btn" type="button"><i class="fa-solid fa-box-archive"></i> Arquivar histórico</button>
+                                </div>
+                            </form>
+
+                            <div class="interaction-moderation">
+                                <div class="interaction-toolbar">
+                                    <div class="form-group">
+                                        <label for="private-room-interaction-filter-input">Filtro</label>
+                                        <select id="private-room-interaction-filter-input" class="form-control">
+                                            <option value="pending">Pendentes</option>
+                                            <option value="approved">Aprovadas</option>
+                                            <option value="answered">Respondidas</option>
+                                            <option value="highlighted">Destacadas</option>
+                                            <option value="hidden">Ocultas</option>
+                                            <option value="all">Todas</option>
+                                        </select>
+                                    </div>
+                                    <button class="admin-icon-button" id="private-room-interaction-refresh-btn" type="button" title="Atualizar interação" aria-label="Atualizar interação"><i class="fa-solid fa-rotate"></i></button>
+                                </div>
+                                <div class="interaction-message-list" id="private-room-interaction-message-list"><div class="admin-empty">Selecione uma sala para carregar mensagens.</div></div>
+                            </div>
+                        </div>
+                    </article>
+                </section>
+
+                <section class="admin-view" id="view-teachers" data-title="Professores">
+                    <div class="view-heading"><div><span class="section-kicker">ACESSO LIMITADO</span><h2>Professores convidados</h2><p>Crie credenciais para professores operarem somente as salas privadas autorizadas.</p></div></div>
+                    <div class="admin-grid editor-layout">
+                        <article class="admin-card editor-card">
+                            <div class="card-heading"><div><h3 id="teacher-form-title">Criar professor</h3><p>O professor acessa o Espaço do Professor, não o admin principal.</p></div><i class="fa-solid fa-user-shield"></i></div>
+                            <form id="teacher-form" class="admin-form">
+                                <div class="form-group"><label for="teacher-username-input">Usuário do professor</label><input type="text" id="teacher-username-input" class="form-control" maxlength="80" required autocomplete="off" placeholder="Ex.: professor.gustavo"></div>
+                                <div class="form-group">
+                                    <label>Salas liberadas</label>
+                                    <div class="teacher-room-checklist" id="teacher-room-checklist"><div class="admin-empty">Crie uma sala privada antes de cadastrar professores.</div></div>
+                                </div>
+                                <div class="security-note"><i class="fa-solid fa-shield-halved"></i><div><strong>Permissão separada</strong><p>Professor convidado não acessa vídeos, marca, parceiros, senhas das salas nem segurança do admin principal.</p></div></div>
+                                <div class="form-actions"><button class="admin-btn primary" id="teacher-submit-btn" type="submit"><i class="fa-solid fa-plus"></i> Criar professor</button><button class="admin-btn secondary hidden" id="teacher-cancel-btn" type="button">Cancelar edição</button></div>
+                            </form>
+
+                            <div class="credential-card hidden" id="teacher-credentials">
+                                <div><span>Usuário</span><strong id="teacher-credential-username">—</strong></div>
+                                <div><span>Senha</span><strong id="teacher-credential-password">—</strong></div>
+                                <div><span>Espaço do Professor</span><strong id="teacher-credential-link">—</strong></div>
+                                <button class="admin-btn primary full-width" id="teacher-copy-credentials-btn" type="button"><i class="fa-regular fa-copy"></i> Copiar credenciais</button>
+                                <small>Guarde essa senha agora. Depois gere uma nova se necessário.</small>
+                            </div>
+                        </article>
+                        <article class="admin-card list-card">
+                            <div class="card-heading"><div><h3>Professores ativos</h3><p>Gerencie acesso às salas privadas.</p></div><span class="count-chip" id="teacher-list-count">0 professores</span></div>
+                            <div class="resource-list" id="teacher-list"><div class="admin-empty">Carregando professores…</div></div>
                         </article>
                     </div>
                 </section>

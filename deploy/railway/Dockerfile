@@ -13,6 +13,7 @@ ENV NODE_ENV=production \
     API_PORT=3000 \
     IMAGE_STORAGE_DIR=/data/images \
     VIDEO_STORAGE_DIR=/data/videos \
+    DOCUMENT_STORAGE_DIR=/data/documents \
     VIDEO_DIRECTORY=/data/videos \
     PLAYLIST_FILE=/app/playlists/programacao.txt \
     RTMP_HOST=127.0.0.1 \
@@ -39,6 +40,7 @@ RUN apk add --no-cache \
       /app/seed-videos \
       /app/site \
       /data/images \
+      /data/documents \
       /data/videos \
       /run/nginx \
       /var/cache/nginx/hls \

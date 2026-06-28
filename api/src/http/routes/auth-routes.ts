@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { AppConfig } from '../../config.js';
 import type { AuthService } from '../../application/auth-service.js';
-import { credentialsSchema, loginSchema, parseInput } from '../schemas.js';
+import { credentialsSchema, idSchema, loginSchema, parseInput, teacherCreateSchema, teacherUpdateSchema } from '../schemas.js';
 import { CSRF_COOKIE, SESSION_COOKIE, createAuthContext, requestAuditContext } from '../auth-context.js';
 
 export function registerAuthRoutes(app: FastifyInstance, config: AppConfig, authService: AuthService) {
@@ -42,7 +42,37 @@ export function registerAuthRoutes(app: FastifyInstance, config: AppConfig, auth
     return reply.code(204).send();
   });
 
+  app.get('/api/teachers', { preHandler: context.requireAdmin }, async () => authService.listTeachers());
+
+  app.post('/api/teachers', { preHandler: [context.requireAdmin, context.requireCsrf] }, async (request, reply) => {
+    const input = parseInput(teacherCreateSchema, request.body);
+    const result = await authService.createTeacher(input.username, input.roomIds, actor(request, context));
+    return reply.code(201).send(result);
+  });
+
+  app.put('/api/teachers/:id', { preHandler: [context.requireAdmin, context.requireCsrf] }, async (request) => {
+    const id = parseInput(idSchema, (request.params as { id?: unknown }).id);
+    const input = parseInput(teacherUpdateSchema, request.body);
+    return authService.updateTeacherRooms(id, input.roomIds, actor(request, context));
+  });
+
+  app.post('/api/teachers/:id/rotate-password', { preHandler: [context.requireAdmin, context.requireCsrf] }, async (request) => {
+    const id = parseInput(idSchema, (request.params as { id?: unknown }).id);
+    return authService.rotateTeacherPassword(id, actor(request, context));
+  });
+
+  app.delete('/api/teachers/:id', { preHandler: [context.requireAdmin, context.requireCsrf] }, async (request, reply) => {
+    const id = parseInput(idSchema, (request.params as { id?: unknown }).id);
+    await authService.deleteTeacher(id, actor(request, context));
+    return reply.code(204).send();
+  });
+
   return context;
+}
+
+function actor(request: FastifyRequest, auth: ReturnType<typeof createAuthContext>) {
+  const session = auth.getSession(request);
+  return { userId: session.user.id, role: session.user.role, ...requestAuditContext(request) };
 }
 
 function cookieOptions(config: AppConfig, httpOnly: boolean) {

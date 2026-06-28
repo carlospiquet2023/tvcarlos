@@ -8,8 +8,15 @@ export interface UsersTable {
   username: string;
   normalized_username: string;
   password_hash: string;
+  role: 'admin' | 'teacher';
   created_at: Timestamp;
   updated_at: Timestamp;
+}
+
+export interface TeacherPrivateRoomAccessTable {
+  user_id: string;
+  room_id: string;
+  created_at: Timestamp;
 }
 
 export interface SessionsTable {
@@ -45,6 +52,11 @@ export interface PrivateRoomsTable {
   description: string;
   source_type: 'live' | 'youtube' | 'video' | 'external';
   source_url: string;
+  support_material_enabled: boolean;
+  support_material_title: string;
+  support_material_type: 'url' | 'image' | 'pdf';
+  support_material_url: string;
+  support_material_current_page: number;
   access_password_hash: string;
   is_active: boolean;
   expires_at: NullableTimestamp;
@@ -58,6 +70,36 @@ export interface PrivateRoomAccessSessionsTable {
   token_hash: string;
   expires_at: Timestamp;
   created_at: Timestamp;
+}
+
+export interface PrivateRoomInteractionSettingsTable {
+  room_id: string;
+  enabled: boolean;
+  mode: 'questions_comments' | 'questions_only' | 'comments_only';
+  require_name: boolean;
+  allow_anonymous: boolean;
+  collect_contact: boolean;
+  moderation_required: boolean;
+  allow_public_replies: boolean;
+  notice_text: string;
+  updated_at: Timestamp;
+}
+
+export interface PrivateRoomInteractionMessagesTable {
+  id: string;
+  room_id: string;
+  participant_name: string;
+  participant_contact: string;
+  body: string;
+  admin_reply: string;
+  status: 'pending' | 'approved' | 'hidden' | 'answered' | 'archived';
+  is_highlighted: boolean;
+  ip_hash: string | null;
+  user_agent: string;
+  moderated_by: string | null;
+  moderated_at: NullableTimestamp;
+  created_at: Timestamp;
+  updated_at: Timestamp;
 }
 
 export interface BrandingTable {
@@ -105,7 +147,7 @@ export interface PartnersTable {
 
 export interface MediaAssetsTable {
   id: string;
-  kind: 'image' | 'video';
+  kind: 'image' | 'video' | 'document';
   storage_key: string;
   mime_type: string;
   byte_size: number;
@@ -134,11 +176,14 @@ export interface AppMigrationsTable {
 
 export interface DatabaseSchema {
   users: UsersTable;
+  teacher_private_room_access: TeacherPrivateRoomAccessTable;
   sessions: SessionsTable;
   news: NewsTable;
   programs: ProgramsTable;
   private_rooms: PrivateRoomsTable;
   private_room_access_sessions: PrivateRoomAccessSessionsTable;
+  private_room_interaction_settings: PrivateRoomInteractionSettingsTable;
+  private_room_interaction_messages: PrivateRoomInteractionMessagesTable;
   branding: BrandingTable;
   partners: PartnersTable;
   header_links: HeaderLinksTable;

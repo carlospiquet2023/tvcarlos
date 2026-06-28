@@ -14,6 +14,12 @@ export function createAuthContext(authService: AuthService) {
     authenticated.set(request, session);
   };
 
+  const requireAdmin = async (request: FastifyRequest) => {
+    const session = authenticated.get(request) ?? await authService.authenticate(request.cookies[SESSION_COOKIE]);
+    authenticated.set(request, session);
+    if (session.user.role !== 'admin') throw new ForbiddenError('Acesso restrito ao administrador principal.');
+  };
+
   const requireCsrf = async (request: FastifyRequest) => {
     const session = authenticated.get(request);
     if (!session) throw new UnauthorizedError();
@@ -29,7 +35,7 @@ export function createAuthContext(authService: AuthService) {
     return session;
   };
 
-  return { requireAuth, requireCsrf, getSession };
+  return { requireAuth, requireAdmin, requireCsrf, getSession };
 }
 
 export function requestAuditContext(request: FastifyRequest): RequestAuditContext {

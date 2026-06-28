@@ -219,7 +219,8 @@
     background: linear-gradient(135deg, rgba(255,255,255,.035), rgba(255,255,255,.01));
     border: 1px solid rgba(255,255,255,.1);
     border-radius: 8px;
-    backdrop-filter: blur(1.4px);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
 }
 .private-room-actions {
     display: flex;
@@ -242,6 +243,289 @@
     font-weight: 850;
     text-decoration: none;
     cursor: pointer;
+}
+
+.private-room-material-panel {
+    position: absolute;
+    top: 43%;
+    right: 12px;
+    bottom: 12px;
+    z-index: 18;
+    width: min(32%, 360px);
+    min-width: 260px;
+    display: grid;
+    grid-template-rows: auto minmax(0,1fr);
+    overflow: hidden;
+    color: #17364d;
+    background: rgba(255,255,255,.97);
+    border: 1px solid #c7dfe0;
+    border-radius: 8px;
+    box-shadow: 0 18px 50px rgba(0,0,0,.26);
+}
+.private-room-material-panel.hidden { display: none; }
+.private-room-material-header {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+    padding: .42rem .5rem;
+    background: #f7fbfa;
+    border-bottom: 1px solid #d5e4e4;
+}
+.private-room-material-header strong {
+    min-width: 0;
+    overflow: hidden;
+    color: #1f4056;
+    font-size: .67rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.private-room-material-header button,
+.private-room-material-header a {
+    width: 28px;
+    height: 28px;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    color: #236277;
+    background: #fff;
+    border: 1px solid #d6e3e3;
+    border-radius: 6px;
+    text-decoration: none;
+    cursor: pointer;
+}
+.private-room-material-body {
+    min-width: 0;
+    min-height: 0;
+    background: #111;
+}
+.private-room-material-body iframe,
+.private-room-material-body img {
+    width: 100%;
+    height: 100%;
+    display: block;
+    border: 0;
+}
+.private-room-material-body img {
+    object-fit: contain;
+    background: #f4f7f7;
+}
+.private-room-material-panel:fullscreen {
+    width: 100vw;
+    height: 100vh;
+    min-width: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    border: 0;
+    border-radius: 0;
+}
+.private-room-material-panel:-webkit-full-screen {
+    width: 100vw;
+    height: 100vh;
+    min-width: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    border: 0;
+    border-radius: 0;
+}
+.private-room-material-fallback {
+    height: 100%;
+    display: grid;
+    place-items: center;
+    gap: .55rem;
+    padding: .75rem;
+    color: #526f80;
+    background: #f8fbfb;
+    text-align: center;
+}
+.private-room-material-fallback p {
+    margin: 0;
+    font-size: .7rem;
+    line-height: 1.45;
+}
+
+.private-room-interaction {
+    display: grid;
+    gap: .8rem;
+    padding: .9rem;
+    background: rgba(255,255,255,.88);
+    border: 1px solid var(--line);
+    border-radius: 11px;
+    box-shadow: var(--shadow-sm);
+}
+.private-room-interaction-tabs {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    border-bottom: 1px solid #d9e8e8;
+}
+.private-room-tab {
+    min-height: 38px;
+    display: inline-flex;
+    align-items: center;
+    gap: .45rem;
+    margin-bottom: -1px;
+    padding: .55rem .75rem;
+    color: #176b87;
+    background: #fff;
+    border: 1px solid #d9e8e8;
+    border-bottom-color: #fff;
+    border-radius: 8px 8px 0 0;
+    font-size: .72rem;
+    font-weight: 900;
+    cursor: default;
+}
+.private-room-highlight {
+    display: grid;
+    gap: .35rem;
+    padding: .85rem;
+    color: #1d3d54;
+    background: #fffaf0;
+    border: 1px solid #ead39a;
+    border-radius: 9px;
+    box-shadow: inset 4px 0 #c9962f;
+}
+.private-room-highlight > span {
+    color: #996a1b;
+    font-size: .58rem;
+    font-weight: 950;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+}
+.private-room-highlight strong { color: #17364d; font-size: .8rem; }
+.private-room-highlight p { margin: 0; color: #2c4d63; font-size: .8rem; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.private-room-highlight-reply {
+    margin-top: .2rem;
+    padding: .55rem .65rem;
+    color: #245064;
+    background: rgba(255,255,255,.72);
+    border: 1px solid #ecdcae;
+    border-radius: 7px;
+    font-size: .73rem;
+    line-height: 1.45;
+}
+.private-room-interaction-grid {
+    display: grid;
+    grid-template-columns: minmax(280px, .75fr) minmax(360px, 1.25fr);
+    gap: .8rem;
+    align-items: start;
+}
+.private-room-message-form {
+    display: grid;
+    gap: .65rem;
+    padding: .8rem;
+    background: #f7fbfa;
+    border: 1px solid #d8e6e6;
+    border-radius: 9px;
+}
+.private-room-message-form p {
+    margin: 0;
+    color: #526f80;
+    font-size: .74rem;
+    line-height: 1.5;
+}
+.private-room-field {
+    display: grid;
+    gap: .32rem;
+}
+.private-room-field label {
+    color: #365d70;
+    font-size: .62rem;
+    font-weight: 900;
+}
+.private-room-field input,
+.private-room-field textarea {
+    width: 100%;
+    min-height: 41px;
+    padding: .68rem .74rem;
+    color: var(--ink);
+    background: #fff;
+    border: 1px solid #cbdede;
+    border-radius: 8px;
+    outline: none;
+    font-size: .76rem;
+}
+.private-room-field textarea {
+    min-height: 104px;
+    line-height: 1.5;
+    resize: vertical;
+}
+.private-room-field input:focus,
+.private-room-field textarea:focus {
+    border-color: #2a8b9d;
+    box-shadow: 0 0 0 3px rgba(42,139,157,.12);
+}
+.private-room-submit {
+    min-height: 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .45rem;
+    color: #fff;
+    background: linear-gradient(135deg, #176b87, #0e8176);
+    border: 0;
+    border-radius: 8px;
+    font-size: .74rem;
+    font-weight: 900;
+    cursor: pointer;
+}
+.private-room-submit:disabled { opacity: .62; cursor: wait; }
+.private-room-message-status {
+    min-height: 1em;
+    color: #597484;
+    font-size: .64rem;
+    line-height: 1.35;
+}
+.private-room-message-status.error { color: #a3453f; }
+.private-room-approved-messages {
+    display: grid;
+    gap: .55rem;
+    max-height: 520px;
+    overflow-y: auto;
+    padding-right: .2rem;
+    scrollbar-width: thin;
+    scrollbar-color: #9bbec3 transparent;
+}
+.private-room-message-card {
+    display: grid;
+    gap: .38rem;
+    padding: .75rem;
+    background: #fff;
+    border: 1px solid #d8e6e6;
+    border-radius: 9px;
+}
+.private-room-message-card.highlighted { border-color: #ead39a; background: #fffaf0; }
+.private-room-message-card header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .6rem;
+}
+.private-room-message-card strong { min-width: 0; overflow: hidden; color: #254359; font-size: .73rem; text-overflow: ellipsis; white-space: nowrap; }
+.private-room-message-card time { flex: 0 0 auto; color: #7b909d; font-size: .58rem; }
+.private-room-message-card p { margin: 0; color: #334f62; font-size: .74rem; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.private-room-admin-reply {
+    padding: .55rem .65rem;
+    color: #245064;
+    background: #edf6f5;
+    border: 1px solid #cde2e0;
+    border-radius: 7px;
+    font-size: .7rem;
+    line-height: 1.45;
+}
+.private-room-empty {
+    padding: 1rem;
+    color: #758a96;
+    text-align: center;
+    background: #f7fbfa;
+    border: 1px dashed #d1e1e1;
+    border-radius: 9px;
+    font-size: .72rem;
 }
 .private-room-error {
     display: grid;
@@ -289,6 +573,16 @@
 @media (max-width: 860px) {
     .private-room-trigger { display: none; }
     .private-room-hero { align-items: flex-start; flex-direction: column; }
+    .private-room-interaction-grid { grid-template-columns: 1fr; }
+    .private-room-material-panel {
+        top: auto;
+        right: 8px;
+        bottom: 8px;
+        left: 8px;
+        width: auto;
+        min-width: 0;
+        height: 42%;
+    }
 }
 
 @media (max-width: 560px) {
@@ -296,4 +590,5 @@
     .private-room-access-form { padding: 1.1rem; }
     .private-room-player { padding: 4px; border-radius: 9px; }
     .private-room-glass-layer { inset: 4px; border-radius: 6px; }
+    .private-room-material-panel { right: 6px; bottom: 6px; left: 6px; height: 46%; }
 }

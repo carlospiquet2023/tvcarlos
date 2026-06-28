@@ -11,12 +11,28 @@ const player = requiredElement('private-room-player');
 const playButton = requiredElement('private-room-play');
 const volumeButton = requiredElement('private-room-volume');
 const externalLink = requiredElement('private-room-external-link');
+const materialToggle = requiredElement('private-room-material-toggle');
+const interactionSection = requiredElement('private-room-interaction');
+const interactionForm = requiredElement('private-room-message-form');
+const interactionStatus = requiredElement('private-room-message-status');
+const participantNameInput = requiredElement('private-room-participant-name');
+const participantContactInput = requiredElement('private-room-participant-contact');
+const messageBodyInput = requiredElement('private-room-message-body');
+const messageSubmitButton = requiredElement('private-room-message-submit');
+const approvedMessages = requiredElement('private-room-approved-messages');
 
 let hls = null;
 let media = null;
 let youtubeFrame = null;
 let youtubePlaying = false;
 let muted = true;
+let materialVisible = true;
+let activeRoomCode = null;
+let interactionTimer = null;
+let roomTimer = null;
+let currentInteractionSettings = null;
+let currentRoomSourceSignature = '';
+let currentMaterialSignature = '';
 
 async function initialize() {
     bindControls();
@@ -30,7 +46,11 @@ async function initialize() {
 
     try {
         const room = await fetchPrivateRoom(roomCode);
+        activeRoomCode = room.roomCode;
         renderRoom(room);
+        await loadInteraction(room.roomCode);
+        interactionTimer = window.setInterval(() => loadInteraction(room.roomCode), 10_000);
+        roomTimer = window.setInterval(() => refreshRoomState(room.roomCode), 5_000);
     } catch (error) {
         renderAccessError('Acesso não autorizado ou expirado.', error.message, roomCode);
     }
@@ -48,6 +68,7 @@ async function fetchPrivateRoom(roomCode) {
 }
 
 function renderRoom(room) {
+    currentRoomSourceSignature = roomSourceSignature(room);
     requiredElement('private-room-title').textContent = room.title;
     requiredElement('private-room-description').textContent = room.description || 'Conteúdo privado liberado para esta sessão.';
     document.title = `${room.title} · Sala Privada · TV Carlos`;
@@ -56,16 +77,37 @@ function renderRoom(room) {
 
     if (room.sourceType === 'external') {
         renderExternal(room);
+        renderSupportMaterial(room);
         return;
     }
 
     const youtubeUrl = room.sourceType === 'youtube' ? buildYouTubeEmbedUrl(room.sourceUrl) : buildYouTubeEmbedUrl(room.sourceUrl);
     if (youtubeUrl) {
         renderYouTube(youtubeUrl, room.title);
+        renderSupportMaterial(room);
         return;
     }
 
     renderVideo(room.sourceType === 'live' ? STREAMS.live.url : normalizeVideoUrl(room.sourceUrl), room.sourceType === 'live');
+    renderSupportMaterial(room);
+}
+
+async function refreshRoomState(roomCode) {
+    try {
+        const room = await fetchPrivateRoom(roomCode);
+        requiredElement('private-room-title').textContent = room.title;
+        requiredElement('private-room-description').textContent = room.description || 'Conteúdo privado liberado para esta sessão.';
+        document.title = `${room.title} · Sala Privada · TV Carlos`;
+        if (roomSourceSignature(room) !== currentRoomSourceSignature) {
+            renderRoom(room);
+            return;
+        }
+        if (materialSignature(room) !== currentMaterialSignature) {
+            if (!updateSupportMaterialInPlace(room)) renderSupportMaterial(room, { preserveVisibility: true });
+        }
+    } catch {
+        window.clearInterval(roomTimer);
+    }
 }
 
 function renderYouTube(embedUrl, title) {
@@ -149,11 +191,276 @@ function renderProtectedFrame(frame) {
 function bindControls() {
     playButton.addEventListener('click', togglePlayback);
     volumeButton.addEventListener('click', toggleVolume);
+    materialToggle.addEventListener('click', toggleSupportMaterial);
+    interactionForm.addEventListener('submit', submitInteractionMessage);
     requiredElement('private-room-logout').addEventListener('click', async () => {
         try { await fetch('/api/private-room-access/logout', { method: 'POST', credentials: 'same-origin' }); }
         finally { location.assign('index.html'); }
     });
-    window.addEventListener('pagehide', destroyMedia, { once: true });
+    window.addEventListener('pagehide', () => {
+        destroyMedia();
+        window.clearInterval(interactionTimer);
+        window.clearInterval(roomTimer);
+    }, { once: true });
+}
+
+function renderSupportMaterial(room, { preserveVisibility = false } = {}) {
+    const previousVisible = preserveVisibility ? materialVisible : true;
+    const existing = player.querySelector('.private-room-material-panel');
+    existing?.remove();
+    currentMaterialSignature = materialSignature(room);
+    if (!room.supportMaterialEnabled || !room.supportMaterialUrl) {
+        materialToggle.classList.add('hidden');
+        materialToggle.removeAttribute('aria-pressed');
+        return;
+    }
+
+    materialVisible = previousVisible;
+    const panel = element('aside', {
+        className: 'private-room-material-panel',
+        attributes: { 'aria-label': room.supportMaterialTitle || 'Material de apoio' },
+    });
+    panel.dataset.materialIdentity = materialIdentity(room);
+    const materialUrl = supportMaterialDisplayUrl(room);
+    const header = element('div', { className: 'private-room-material-header' });
+    const openLink = element('a', {
+        title: 'Abrir material em nova aba',
+        attributes: { href: materialUrl, target: '_blank', rel: 'noopener noreferrer', 'aria-label': 'Abrir material em nova aba', 'data-material-open': 'true' },
+    });
+    openLink.append(icon('fa-solid fa-arrow-up-right-from-square'));
+    const fullscreenButton = element('button', { title: 'Tela cheia', attributes: { type: 'button', 'aria-label': 'Tela cheia do material' } });
+    fullscreenButton.append(icon('fa-solid fa-expand'));
+    fullscreenButton.addEventListener('click', () => toggleSupportMaterialFullscreen(panel));
+    const closeButton = element('button', { title: 'Ocultar material', attributes: { type: 'button', 'aria-label': 'Ocultar material' } });
+    closeButton.append(icon('fa-solid fa-xmark'));
+    closeButton.addEventListener('click', () => setSupportMaterialVisible(false));
+    header.append(element('strong', { text: room.supportMaterialTitle || 'Material de apoio' }), openLink, fullscreenButton, closeButton);
+    panel.append(header, renderSupportMaterialBody(room));
+    player.append(panel);
+    materialToggle.classList.remove('hidden');
+    setSupportMaterialVisible(previousVisible);
+}
+
+function updateSupportMaterialInPlace(room) {
+    const panel = player.querySelector('.private-room-material-panel');
+    if (!panel || panel.dataset.materialIdentity !== materialIdentity(room)) return false;
+    const materialUrl = supportMaterialDisplayUrl(room);
+    panel.querySelector('[data-material-open]')?.setAttribute('href', materialUrl);
+    const frame = panel.querySelector('iframe');
+    if (frame && frame.getAttribute('src') !== materialUrl) frame.setAttribute('src', materialUrl);
+    currentMaterialSignature = materialSignature(room);
+    return true;
+}
+
+function renderSupportMaterialBody(room) {
+    const body = element('div', { className: 'private-room-material-body' });
+    const materialUrl = supportMaterialDisplayUrl(room);
+    if (room.supportMaterialType === 'image') {
+        body.append(element('img', { attributes: { src: materialUrl, alt: room.supportMaterialTitle || 'Material de apoio', loading: 'lazy' } }));
+        return body;
+    }
+
+    const frame = element('iframe', {
+        attributes: {
+            title: room.supportMaterialTitle || 'Material de apoio',
+            src: materialUrl,
+            referrerpolicy: 'strict-origin-when-cross-origin',
+            loading: 'lazy',
+        },
+    });
+    body.append(frame);
+    const fallback = element('div', { className: 'private-room-material-fallback hidden' });
+    const fallbackLink = element('a', {
+        className: 'private-room-action',
+        text: 'Abrir material',
+        attributes: { href: materialUrl, target: '_blank', rel: 'noopener noreferrer' },
+    });
+    fallback.prepend(icon('fa-solid fa-file-lines'));
+    fallback.append(element('p', { text: 'Se o material não abrir aqui, use o botão abaixo.' }), fallbackLink);
+    body.append(fallback);
+    return body;
+}
+
+function toggleSupportMaterial() {
+    setSupportMaterialVisible(!materialVisible);
+}
+
+function setSupportMaterialVisible(visible) {
+    materialVisible = visible;
+    const panel = player.querySelector('.private-room-material-panel');
+    panel?.classList.toggle('hidden', !visible);
+    materialToggle.setAttribute('aria-pressed', String(visible));
+    materialToggle.replaceChildren(
+        icon(visible ? 'fa-solid fa-file-circle-xmark' : 'fa-solid fa-file-lines'),
+        document.createTextNode(visible ? ' Ocultar material' : ' Abrir material'),
+    );
+}
+
+async function toggleSupportMaterialFullscreen(panel) {
+    if (document.fullscreenElement) {
+        await document.exitFullscreen().catch(() => undefined);
+        return;
+    }
+    await panel.requestFullscreen?.().catch(() => undefined);
+}
+
+function supportMaterialDisplayUrl(room) {
+    if (room.supportMaterialType !== 'pdf') return room.supportMaterialUrl;
+    const page = Math.max(1, Number.parseInt(room.supportMaterialCurrentPage, 10) || 1);
+    const [baseUrl] = room.supportMaterialUrl.split('#');
+    return `${baseUrl}#page=${page}&toolbar=0&navpanes=0`;
+}
+
+function roomSourceSignature(room) {
+    return [room.title, room.description, room.sourceType, room.sourceUrl].join('|');
+}
+
+function materialSignature(room) {
+    return [
+        room.supportMaterialEnabled,
+        room.supportMaterialTitle,
+        room.supportMaterialType,
+        room.supportMaterialUrl,
+        room.supportMaterialCurrentPage,
+    ].join('|');
+}
+
+function materialIdentity(room) {
+    return [
+        room.supportMaterialEnabled,
+        room.supportMaterialTitle,
+        room.supportMaterialType,
+        room.supportMaterialUrl,
+    ].join('|');
+}
+
+async function loadInteraction(roomCode) {
+    if (!roomCode) return;
+    try {
+        const response = await fetch(`/api/private-room-access/${encodeURIComponent(roomCode)}/interaction`, {
+            headers: { Accept: 'application/json' },
+            credentials: 'same-origin',
+            cache: 'no-store',
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload?.error?.message || 'Não foi possível carregar a interação.');
+        renderInteraction(payload);
+    } catch {
+        interactionSection.classList.add('hidden');
+    }
+}
+
+function renderInteraction(payload) {
+    const settings = payload.settings;
+    currentInteractionSettings = settings;
+    if (!settings?.enabled) {
+        interactionSection.classList.add('hidden');
+        return;
+    }
+
+    interactionSection.classList.remove('hidden');
+    requiredElement('private-room-interaction-notice').textContent = settings.noticeText || 'Envie suas perguntas e comentários para a moderação.';
+    configureInteractionForm(settings);
+    renderHighlightedMessage(payload.highlightedMessage, settings);
+    renderApprovedMessages(payload.messages || [], settings);
+}
+
+function configureInteractionForm(settings) {
+    const nameRequired = settings.requireName && !settings.allowAnonymous;
+    requiredElement('private-room-name-field').classList.remove('hidden');
+    participantNameInput.required = nameRequired;
+    participantNameInput.placeholder = nameRequired ? 'Seu nome' : 'Nome opcional';
+    requiredElement('private-room-name-field').querySelector('label').textContent = nameRequired ? 'Nome' : 'Nome opcional';
+    requiredElement('private-room-contact-field').classList.toggle('hidden', !settings.collectContact);
+    participantContactInput.required = false;
+
+    const label = settings.mode === 'questions_only'
+        ? 'Pergunta'
+        : settings.mode === 'comments_only'
+            ? 'Comentário'
+            : 'Mensagem';
+    requiredElement('private-room-message-label').textContent = label;
+    messageBodyInput.placeholder = settings.mode === 'questions_only'
+        ? 'Escreva sua pergunta'
+        : settings.mode === 'comments_only'
+            ? 'Escreva seu comentário'
+            : 'Escreva sua pergunta ou comentário';
+}
+
+function renderHighlightedMessage(message, settings) {
+    const highlight = requiredElement('private-room-highlight');
+    if (!message) {
+        highlight.classList.add('hidden');
+        return;
+    }
+    requiredElement('private-room-highlight-author').textContent = message.participantName || 'Anônimo';
+    requiredElement('private-room-highlight-body').textContent = message.body;
+    const reply = requiredElement('private-room-highlight-reply');
+    if (settings.allowPublicReplies && message.adminReply) {
+        reply.textContent = `Resposta: ${message.adminReply}`;
+        reply.classList.remove('hidden');
+    } else {
+        reply.classList.add('hidden');
+    }
+    highlight.classList.remove('hidden');
+}
+
+function renderApprovedMessages(messages, settings) {
+    clear(approvedMessages);
+    if (!messages.length) {
+        approvedMessages.append(element('div', { className: 'private-room-empty', text: 'Nenhuma mensagem aprovada ainda.' }));
+        return;
+    }
+    messages.forEach((message) => approvedMessages.append(renderPublicMessage(message, settings)));
+}
+
+function renderPublicMessage(message, settings) {
+    const card = element('article', { className: `private-room-message-card${message.isHighlighted ? ' highlighted' : ''}` });
+    const header = element('header');
+    header.append(
+        element('strong', { text: message.participantName || 'Anônimo' }),
+        element('time', { text: formatPublicTime(message.createdAt) }),
+    );
+    card.append(header, element('p', { text: message.body }));
+    if (settings.allowPublicReplies && message.adminReply) {
+        card.append(element('div', { className: 'private-room-admin-reply', text: `Resposta: ${message.adminReply}` }));
+    }
+    return card;
+}
+
+async function submitInteractionMessage(event) {
+    event.preventDefault();
+    if (!activeRoomCode || !currentInteractionSettings?.enabled) return;
+    interactionStatus.textContent = '';
+    interactionStatus.classList.remove('error');
+    messageSubmitButton.disabled = true;
+    try {
+        const response = await fetch(`/api/private-room-access/${encodeURIComponent(activeRoomCode)}/messages`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+                participantName: participantNameInput.value,
+                participantContact: participantContactInput.value,
+                body: messageBodyInput.value,
+            }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload?.error?.message || 'Não foi possível enviar a mensagem.');
+        messageBodyInput.value = '';
+        if (!currentInteractionSettings.collectContact) participantContactInput.value = '';
+        interactionStatus.textContent = payload.moderated ? 'Mensagem enviada para moderação.' : 'Mensagem publicada.';
+        await loadInteraction(activeRoomCode);
+    } catch (error) {
+        interactionStatus.textContent = error.message;
+        interactionStatus.classList.add('error');
+    } finally {
+        messageSubmitButton.disabled = false;
+    }
+}
+
+function formatPublicTime(value) {
+    return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value));
 }
 
 function togglePlayback() {
@@ -207,6 +514,10 @@ function renderAccessError(title, message, roomCode = '') {
     requiredElement('private-room-title').textContent = title;
     requiredElement('private-room-description').textContent = message;
     destroyMedia();
+    window.clearInterval(interactionTimer);
+    window.clearInterval(roomTimer);
+    interactionSection.classList.add('hidden');
+    materialToggle.classList.add('hidden');
     clear(player);
     const panel = element('div', { className: 'private-room-frame private-room-error' });
     const retryUrl = `index.html${roomCode ? `?room=${encodeURIComponent(roomCode)}` : ''}`;
