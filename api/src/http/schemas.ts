@@ -92,7 +92,7 @@ export const programSchema = z.strictObject({
   category: z.string().trim().max(100).optional().nullable(),
 });
 
-export const gradeQuerySchema = z.strictObject({
+export const gradeQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(50),
   search: z.string().trim().max(100).optional(),
