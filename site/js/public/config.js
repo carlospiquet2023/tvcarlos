@@ -41,7 +41,7 @@ export const INTERVALS = Object.freeze({
 });
 
 export const WEATHER_ENDPOINT = 'https://api.open-meteo.com/v1/forecast?latitude=-15.78,-23.55,-22.91,-19.92,-12.97,-8.05,-30.03,-3.11,-25.43&longitude=-47.93,-46.64,-43.17,-43.94,-38.50,-34.88,-51.23,-60.02,-49.27&current_weather=true';
-
+export const RSS_NEWS_ENDPOINT = 'https://api.rss2json.com/v1/api.json?rss_url=https://g1.globo.com/rss/g1/';
 export const CAPITALS = Object.freeze([
     ['DF', 21, 'America/Sao_Paulo'], ['SP', 19, 'America/Sao_Paulo'],
     ['RJ', 22, 'America/Sao_Paulo'], ['MG', 20, 'America/Sao_Paulo'],

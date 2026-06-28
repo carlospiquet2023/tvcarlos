@@ -1,5 +1,5 @@
 import { clear, element, requiredElement } from '../dom.js';
-import { CAPITALS, INTERVALS, WEATHER_ENDPOINT } from './config.js';
+import { CAPITALS, INTERVALS, WEATHER_ENDPOINT, RSS_NEWS_ENDPOINT } from './config.js';
 import { fetchJson } from './request.js';
 
 export function createTickerController() {
@@ -18,14 +18,30 @@ export function createTickerController() {
     }
 
     async function refresh() {
-        const [weather, news] = await Promise.allSettled([fetchJson(WEATHER_ENDPOINT), fetchJson('/api/news')]);
+        const [weather, manualNews, rssNews] = await Promise.allSettled([
+            fetchJson(WEATHER_ENDPOINT),
+            fetchJson('/api/news'),
+            fetchJson(RSS_NEWS_ENDPOINT)
+        ]);
+
         if (weather.status === 'fulfilled' && Array.isArray(weather.value)) {
             weather.value.forEach((item, index) => {
                 const value = item?.current_weather?.temperature;
                 if (capitals[index] && Number.isFinite(value)) capitals[index].temp = Math.round(value);
             });
         }
-        renderNews(news.status === 'fulfilled' && Array.isArray(news.value) ? news.value : []);
+
+        const items = [];
+        if (manualNews.status === 'fulfilled' && Array.isArray(manualNews.value)) {
+            items.push(...manualNews.value);
+        }
+        
+        if (rssNews.status === 'fulfilled' && rssNews.value?.items) {
+            const fetchedItems = rssNews.value.items.slice(0, 5).map(item => `[Plantão] ${item.title}`);
+            items.push(...fetchedItems);
+        }
+
+        renderNews(items);
     }
 
     function renderNews(items) {
