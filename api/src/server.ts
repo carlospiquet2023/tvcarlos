@@ -26,6 +26,14 @@ const audit = new PostgresAuditRepository(database);
 await initializeDatabase(config, users, content);
 
 let storage: MediaStorage;
+console.log('--- R2 CONFIG CHECK ---', {
+  r2AccountId: !!config.r2AccountId,
+  r2AccessKeyId: !!config.r2AccessKeyId,
+  r2SecretAccessKey: !!config.r2SecretAccessKey,
+  r2Bucket: !!config.r2Bucket,
+  r2PublicUrl: !!config.r2PublicUrl
+});
+
 if (config.r2AccountId && config.r2AccessKeyId && config.r2SecretAccessKey && config.r2Bucket && config.r2PublicUrl) {
   storage = new R2MediaStorage(config.r2AccountId, config.r2AccessKeyId, config.r2SecretAccessKey, config.r2Bucket, config.r2PublicUrl);
 } else {
