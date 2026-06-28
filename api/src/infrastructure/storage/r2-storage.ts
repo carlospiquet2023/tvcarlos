@@ -25,7 +25,6 @@ export class R2MediaStorage implements MediaStorage {
         secretAccessKey: this.secretAccessKey,
       },
     });
-    this.cleanPublicUrl = this.publicUrl.replace(/\/$/, '');
   }
 
   async initialize(): Promise<void> {
