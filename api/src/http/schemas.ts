@@ -55,7 +55,7 @@ function hasValidYouTubeVideo(url: URL): boolean {
 }
 
 const videoReference = z.string().trim().min(1).max(2048).refine((value) => {
-  if (/^[a-zA-Z0-9._-]+$/.test(value)) return true;
+  if (/^(?:videos\/)?[a-zA-Z0-9._-]+$/.test(value)) return true;
   try {
     const url = new URL(value);
     if (url.protocol !== 'https:') return false;
