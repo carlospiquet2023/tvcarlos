@@ -564,8 +564,14 @@ function toggleVolume() {
 
 function updateButtons() {
     const playing = youtubeFrame ? youtubePlaying : media && !media.paused;
-    playButton.replaceChildren(icon(playing ? 'fa-solid fa-pause' : 'fa-solid fa-play'), document.createTextNode(playing ? ' Pausar' : ' Reproduzir'));
-    volumeButton.replaceChildren(icon(muted ? 'fa-solid fa-volume-xmark' : 'fa-solid fa-volume-high'), document.createTextNode(muted ? ' Ativar som' : ' Silenciar'));
+    const playLabel = playing ? 'Pausar' : 'Reproduzir';
+    const volumeLabel = muted ? 'Ativar som' : 'Silenciar';
+    playButton.replaceChildren(icon(playing ? 'fa-solid fa-pause' : 'fa-solid fa-play'));
+    volumeButton.replaceChildren(icon(muted ? 'fa-solid fa-volume-xmark' : 'fa-solid fa-volume-high'));
+    playButton.setAttribute('aria-label', playLabel);
+    playButton.title = playLabel;
+    volumeButton.setAttribute('aria-label', volumeLabel);
+    volumeButton.title = volumeLabel;
 }
 
 function sendYouTubeCommand(command, args = []) {

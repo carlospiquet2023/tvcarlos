@@ -341,6 +341,12 @@
     backdrop-filter: blur(10px);
     pointer-events: auto;
 }
+#private-room-controls .private-room-icon-control {
+    width: 38px;
+    min-width: 38px;
+    padding: 0;
+}
+#private-room-controls .private-room-icon-control i { font-size: .92rem; }
 #private-room-controls .private-room-action:hover {
     color: #fff;
     background: rgba(12,31,44,.9);
@@ -776,6 +782,11 @@
         padding: .48rem .58rem;
         font-size: .62rem;
     }
+    #private-room-controls .private-room-icon-control {
+        width: 36px;
+        min-width: 36px;
+        padding: 0;
+    }
     .private-room-trigger { display: none; }
     .private-room-interaction {
         top: auto;
@@ -833,6 +844,11 @@
     #private-room-controls .private-room-action {
         min-height: 34px;
         padding: .42rem .5rem;
+    }
+    #private-room-controls .private-room-icon-control {
+        width: 34px;
+        min-width: 34px;
+        padding: 0;
     }
     .private-room-dialog { width: calc(100vw - 1rem); }
     .private-room-access-form { padding: 1.1rem; }
