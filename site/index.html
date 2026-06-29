@@ -194,12 +194,13 @@
             <aside class="schedule-section">
                 <div class="schedule-card">
                     <div class="schedule-header">
-                        <h2 id="schedule-title">Programação ao Vivo</h2>
-                        <a href="#" class="schedule-ver-grade" id="schedule-ver-grade">Ver Grade <i class="fa-solid fa-chevron-right"></i></a>
+                        <h2 id="schedule-title">Próximos vídeos</h2>
+                        <span id="schedule-count" class="badge badge-vod" style="font-size: 0.6rem; min-height: 24px; padding: 0.2rem 0.6rem;">0 vídeos</span>
                     </div>
-                    <div class="schedule-filters">
-                        <select id="schedule-category" aria-label="Filtrar por canal">
-                            <option value="">Todos os Canais</option>
+                    <div class="schedule-filters" style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+                        <input type="text" id="schedule-search" placeholder="Pesquisar vídeos..." aria-label="Pesquisar vídeos" style="flex: 1; padding: 0.5rem; border-radius: 4px; border: 1px solid var(--line-strong); background: rgba(0,0,0,0.2); color: #fff; font-size: 0.8rem;">
+                        <select id="schedule-category" aria-label="Filtrar por canal" style="flex: 1;">
+                            <option value="">Todas as categorias</option>
                         </select>
                     </div>
                     <div class="schedule-list" id="schedule-list" role="region" aria-label="Grade de programação" tabindex="0">
@@ -241,8 +242,8 @@
                 <span class="live-status-text">AO VIVO AGORA</span>
             </div>
             
-            <div class="bottom-bar-center">
-                <div class="ticker-wrap" style="width: 100%; min-width: 0; overflow: hidden; position: relative;">
+            <div class="bottom-bar-center" style="position: relative;">
+                <div class="ticker-wrap">
                     <div id="news-ticker" class="ticker">
                         <span>Carregando notícias e avisos...</span>
                     </div>

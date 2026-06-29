@@ -23,13 +23,12 @@ const destaques = createDestaquesController({
     onSelectProgram: (program) => player.playProgram(program),
 });
 
-player = createPlayerController({ state, onPlaybackChange: () => { schedule.render(); ticker.update(); } });
+player = createPlayerController({ state, onPlaybackChange: () => { schedule.render(); } });
 const branding = createBrandingController({
     state,
     onBrandingChange: () => {
         player.refreshPresentation();
         schedule.render();
-        ticker.update();
     },
 });
 const navigation = createNavigationController();
