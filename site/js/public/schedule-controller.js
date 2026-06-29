@@ -5,6 +5,7 @@ import { isOnDemand } from './state.js';
 
 export function createScheduleController({ state, onSelectLinear, onSelectProgram }) {
     const list = requiredElement('schedule-list');
+    const count = document.getElementById('schedule-count');
 
     let currentPage = 1;
     let hasMore = false;
@@ -91,6 +92,10 @@ export function createScheduleController({ state, onSelectLinear, onSelectProgra
 
     function render() {
         clear(list);
+        
+        if (count) {
+            count.textContent = `${state.programs.length} ${state.programs.length === 1 ? 'vídeo' : 'vídeos'}`;
+        }
         
         if (!currentSearch && !currentCategory) {
             list.append(createLinearItem());
