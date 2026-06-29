@@ -1,5 +1,5 @@
 @media (max-width: 1100px) {
-    .content-grid { grid-template-columns: minmax(0,1fr) minmax(300px, 32vw); }
+    .content-grid { grid-template-columns: minmax(0,1fr) minmax(288px, 30vw); }
     .transmission-facts { display: none; }
     .logo-icon.has-custom-logo { max-width: 22vw; }
 }
@@ -8,16 +8,17 @@
     .content-grid { padding: .55rem .9rem .35rem; }
     .section-rail { display: none; }
     .player-section { gap: .5rem; }
-    .player-wrapper { width: min(100%, calc((100dvh - var(--ticker-height) - 14.75rem) * 16 / 9)); }
-    .destaques-section { margin-top: .35rem; gap: .32rem; }
+    .player-wrapper { width: min(100%, calc((100dvh - var(--ticker-height) - 12.5rem) * 16 / 9)); }
+    .destaques-section { margin-top: .35rem; padding-left: 1.5rem; gap: .32rem; }
     .destaques-header { padding-bottom: .1rem; }
     .destaques-title { font-size: .95rem; }
     .destaques-track { gap: .7rem; padding-bottom: .25rem; }
-    .destaque-card { flex-basis: 178px; height: 80px; }
+    .destaque-card { flex-basis: 170px; height: 68px; }
     .destaque-card-content { padding: .45rem .65rem; gap: .16rem; }
     .destaque-card-content p { -webkit-line-clamp: 1; }
     .destaque-badge { margin-bottom: .05rem; padding: .1rem .35rem; }
     .destaques-pagination { margin-top: 0; }
+    .schedule-card { height: clamp(300px, calc(100dvh - var(--ticker-height) - 205px), 360px); }
 }
 
 @media (max-width: 860px) {
