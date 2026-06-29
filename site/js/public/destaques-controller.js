@@ -1,4 +1,4 @@
-import { clear, element, requiredElement } from '../dom.js';
+import { clear, element } from '../dom.js';
 import { fetchJson } from './request.js';
 import { getYouTubeVideoId } from '../media-source.js';
 

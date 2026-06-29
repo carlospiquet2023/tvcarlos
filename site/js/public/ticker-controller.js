@@ -34,7 +34,7 @@ export function createTickerController({ state }) {
             const text = await response.text();
             
             let xmlText = text;
-            try { const json = JSON.parse(text); if (json.contents) xmlText = json.contents; } catch (e) {}
+            try { const json = JSON.parse(text); if (json.contents) xmlText = json.contents; } catch { /* RSS direto vem como XML. */ }
             
             const doc = new DOMParser().parseFromString(xmlText, 'text/xml');
             const items = Array.from(doc.querySelectorAll('item')).slice(0, 15);

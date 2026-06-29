@@ -1,5 +1,5 @@
-.schedule-section { min-width: 0; height: clamp(520px, calc(100dvh - 204px), 900px); display: flex; flex-direction: column; gap: .8rem; position: sticky; top: 1rem; align-self: start; overflow: hidden; }
-.schedule-card { min-height: 0; flex: 1 1 auto; display: flex; flex-direction: column; overflow: hidden; background: rgba(10, 15, 25, 0.7); border: 1px solid rgba(0, 196, 181, 0.1); border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); backdrop-filter: blur(12px); padding: 1rem; }
+.schedule-section { min-width: 0; max-height: calc(100dvh - var(--ticker-height) - 1.5rem); display: flex; flex-direction: column; gap: .8rem; position: sticky; top: .75rem; align-self: start; overflow: hidden; }
+.schedule-card { height: clamp(270px, 48dvh, 370px); min-height: 0; flex: 0 0 auto; display: flex; flex-direction: column; overflow: hidden; background: rgba(10, 15, 25, 0.7); border: 1px solid rgba(0, 196, 181, 0.1); border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); backdrop-filter: blur(12px); padding: 1rem; }
 .schedule-header { min-height: 54px; display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: 0 0 .85rem 0; border-bottom: 1px solid rgba(255,255,255,0.05); margin-bottom: 0.85rem; }
 .schedule-header h2 { margin: 0; font: 600 1.1rem/1.2 var(--font-heading); color: #fff; text-shadow: 0 2px 4px rgba(0,0,0,0.8); }
 .schedule-ver-grade { color: var(--primary); font-size: .75rem; font-weight: 600; text-decoration: none; display: flex; align-items: center; gap: .4rem; transition: color 0.2s; }
@@ -33,6 +33,6 @@
 .schedule-empty p { margin: 0; font-size: .68rem; }
 
 /* Parceiros Card */
-.schedule-partners-card { margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid rgba(255, 255, 255, 0.1); }
+.schedule-partners-card { margin-top: .25rem; padding-top: .75rem; border-top: 1px solid rgba(255, 255, 255, 0.1); }
 .schedule-partners-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
 .schedule-partners-header h2 { margin: 0; font: 500 .9rem/1.2 var(--font-heading); color: #fff; }
