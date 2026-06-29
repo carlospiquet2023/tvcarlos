@@ -37,6 +37,8 @@ let currentInteractionSettings = null;
 let interactionVisible = false;
 let currentRoomSourceSignature = '';
 let currentMaterialSignature = '';
+const MATERIAL_MIN_WIDTH = 220;
+const MATERIAL_MIN_HEIGHT = 170;
 
 async function initialize() {
     bindControls();
@@ -199,9 +201,9 @@ function bindControls() {
     forumToggle.addEventListener('click', () => setInteractionVisible(!interactionVisible));
     requiredElement('private-room-interaction-close').addEventListener('click', () => setInteractionVisible(false));
     interactionForm.addEventListener('submit', submitInteractionMessage);
-    window.addEventListener('resize', updateInteractionGeometry);
+    window.addEventListener('resize', handleViewportResize);
     if ('ResizeObserver' in window) {
-        const observer = new ResizeObserver(updateInteractionGeometry);
+        const observer = new ResizeObserver(handleViewportResize);
         observer.observe(roomStage);
         window.addEventListener('pagehide', () => observer.disconnect(), { once: true });
     }
@@ -216,9 +218,14 @@ function bindControls() {
     }, { once: true });
 }
 
+function handleViewportResize() {
+    updateInteractionGeometry();
+    normalizeSupportMaterialPanelPosition();
+}
+
 function renderSupportMaterial(room, { preserveVisibility = false } = {}) {
     const previousVisible = preserveVisibility ? materialVisible : true;
-    const existing = player.querySelector('.private-room-material-panel');
+    const existing = roomStage.querySelector('.private-room-material-panel');
     existing?.remove();
     currentMaterialSignature = materialSignature(room);
     if (!room.supportMaterialEnabled || !room.supportMaterialUrl) {
@@ -235,6 +242,7 @@ function renderSupportMaterial(room, { preserveVisibility = false } = {}) {
     panel.dataset.materialIdentity = materialIdentity(room);
     const materialUrl = supportMaterialDisplayUrl(room);
     const header = element('div', { className: 'private-room-material-header' });
+    header.title = 'Arrastar material de apoio';
     const openLink = element('a', {
         title: 'Abrir material em nova aba',
         attributes: { href: materialUrl, target: '_blank', rel: 'noopener noreferrer', 'aria-label': 'Abrir material em nova aba', 'data-material-open': 'true' },
@@ -247,14 +255,16 @@ function renderSupportMaterial(room, { preserveVisibility = false } = {}) {
     closeButton.append(icon('fa-solid fa-xmark'));
     closeButton.addEventListener('click', () => setSupportMaterialVisible(false));
     header.append(element('strong', { text: room.supportMaterialTitle || 'Material de apoio' }), openLink, fullscreenButton, closeButton);
-    panel.append(header, renderSupportMaterialBody(room));
-    player.append(panel);
+    header.addEventListener('pointerdown', (event) => beginMaterialPanelDrag(event, panel));
+    panel.append(header, renderSupportMaterialBody(room), renderMaterialResizeHandles(panel));
+    roomStage.append(panel);
+    resetMaterialPanelPosition(panel);
     materialToggle.classList.remove('hidden');
     setSupportMaterialVisible(previousVisible);
 }
 
 function updateSupportMaterialInPlace(room) {
-    const panel = player.querySelector('.private-room-material-panel');
+    const panel = roomStage.querySelector('.private-room-material-panel');
     if (!panel || panel.dataset.materialIdentity !== materialIdentity(room)) return false;
     const materialUrl = supportMaterialDisplayUrl(room);
     panel.querySelector('[data-material-open]')?.setAttribute('href', materialUrl);
@@ -299,13 +309,165 @@ function toggleSupportMaterial() {
 
 function setSupportMaterialVisible(visible) {
     materialVisible = visible;
-    const panel = player.querySelector('.private-room-material-panel');
+    const panel = roomStage.querySelector('.private-room-material-panel');
     panel?.classList.toggle('hidden', !visible);
     materialToggle.setAttribute('aria-pressed', String(visible));
     materialToggle.replaceChildren(
         icon(visible ? 'fa-solid fa-file-circle-xmark' : 'fa-solid fa-file-lines'),
         document.createTextNode(visible ? ' Ocultar material' : ' Abrir material'),
     );
+}
+
+function renderMaterialResizeHandles(panel) {
+    const handles = element('div', { className: 'private-room-material-resize-handles', attributes: { 'aria-hidden': 'true' } });
+    ['n', 'e', 's', 'w', 'ne', 'se', 'sw', 'nw'].forEach((direction) => {
+        const handle = element('span', { className: `private-room-material-resize-dot resize-${direction}`, attributes: { 'data-resize-handle': direction } });
+        handle.addEventListener('pointerdown', (event) => beginMaterialPanelResize(event, panel, direction));
+        handles.append(handle);
+    });
+    return handles;
+}
+
+function resetMaterialPanelPosition(panel) {
+    if (window.innerWidth <= 860) {
+        clearMaterialPanelInlineGeometry(panel);
+        return;
+    }
+    const stageWidth = roomStage.clientWidth || 900;
+    const stageHeight = roomStage.clientHeight || 510;
+    const width = Math.min(360, Math.max(260, stageWidth * .32));
+    const top = Math.max(12, stageHeight * .43);
+    const height = Math.max(MATERIAL_MIN_HEIGHT, stageHeight - top - 12);
+    applyMaterialPanelRect(panel, constrainMaterialPanelRect({
+        left: stageWidth - width - 12,
+        top,
+        width,
+        height,
+    }));
+}
+
+function normalizeSupportMaterialPanelPosition() {
+    const panel = roomStage.querySelector('.private-room-material-panel');
+    if (!panel) return;
+    if (window.innerWidth <= 860) {
+        clearMaterialPanelInlineGeometry(panel);
+        return;
+    }
+    if (panel.dataset.userPositioned === 'true') {
+        applyMaterialPanelRect(panel, constrainMaterialPanelRect(readMaterialPanelRect(panel)));
+        return;
+    }
+    resetMaterialPanelPosition(panel);
+}
+
+function beginMaterialPanelDrag(event, panel) {
+    if (event.button !== 0) return;
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest('button, a')) return;
+    event.preventDefault();
+    const start = readMaterialPanelRect(panel);
+    beginMaterialPanelPointerOperation(event, panel, (dx, dy) => ({
+        ...start,
+        left: start.left + dx,
+        top: start.top + dy,
+    }), 'is-dragging');
+}
+
+function beginMaterialPanelResize(event, panel, direction) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const start = readMaterialPanelRect(panel);
+    beginMaterialPanelPointerOperation(event, panel, (dx, dy) => {
+        const rect = { ...start };
+        if (direction.includes('e')) rect.width = start.width + dx;
+        if (direction.includes('s')) rect.height = start.height + dy;
+        if (direction.includes('w')) {
+            rect.left = start.left + dx;
+            rect.width = start.width - dx;
+        }
+        if (direction.includes('n')) {
+            rect.top = start.top + dy;
+            rect.height = start.height - dy;
+        }
+        return rect;
+    }, 'is-resizing');
+}
+
+function beginMaterialPanelPointerOperation(event, panel, nextRect, activeClass) {
+    const startX = event.clientX;
+    const startY = event.clientY;
+    panel.dataset.userPositioned = 'true';
+    panel.classList.add(activeClass);
+    panel.setPointerCapture?.(event.pointerId);
+
+    const move = (moveEvent) => {
+        moveEvent.preventDefault();
+        applyMaterialPanelRect(panel, constrainMaterialPanelRect(nextRect(moveEvent.clientX - startX, moveEvent.clientY - startY)));
+    };
+    const finish = () => {
+        panel.classList.remove(activeClass);
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', finish);
+        window.removeEventListener('pointercancel', finish);
+    };
+
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', finish);
+    window.addEventListener('pointercancel', finish);
+}
+
+function readMaterialPanelRect(panel) {
+    const panelRect = panel.getBoundingClientRect();
+    const stageRect = roomStage.getBoundingClientRect();
+    return {
+        left: panelRect.left - stageRect.left,
+        top: panelRect.top - stageRect.top,
+        width: panelRect.width,
+        height: panelRect.height,
+    };
+}
+
+function constrainMaterialPanelRect(rect) {
+    const stageRect = roomStage.getBoundingClientRect();
+    const margin = 8;
+    const maxWidth = Math.min(920, window.innerWidth - (margin * 2));
+    const maxHeight = Math.min(720, window.innerHeight - (margin * 2));
+    const width = Math.max(MATERIAL_MIN_WIDTH, Math.min(rect.width, maxWidth));
+    const height = Math.max(MATERIAL_MIN_HEIGHT, Math.min(rect.height, maxHeight));
+    const minLeft = margin - stageRect.left;
+    const minTop = margin - stageRect.top;
+    const maxLeft = window.innerWidth - margin - width - stageRect.left;
+    const maxTop = window.innerHeight - margin - height - stageRect.top;
+    return {
+        left: clamp(rect.left, minLeft, maxLeft),
+        top: clamp(rect.top, minTop, maxTop),
+        width,
+        height,
+    };
+}
+
+function applyMaterialPanelRect(panel, rect) {
+    panel.style.left = `${rect.left}px`;
+    panel.style.top = `${rect.top}px`;
+    panel.style.width = `${rect.width}px`;
+    panel.style.height = `${rect.height}px`;
+    panel.style.right = 'auto';
+    panel.style.bottom = 'auto';
+}
+
+function clearMaterialPanelInlineGeometry(panel) {
+    panel.style.removeProperty('left');
+    panel.style.removeProperty('top');
+    panel.style.removeProperty('right');
+    panel.style.removeProperty('bottom');
+    panel.style.removeProperty('width');
+    panel.style.removeProperty('height');
+}
+
+function clamp(value, min, max) {
+    if (max < min) return min;
+    return Math.min(max, Math.max(min, value));
 }
 
 async function toggleSupportMaterialFullscreen(panel) {

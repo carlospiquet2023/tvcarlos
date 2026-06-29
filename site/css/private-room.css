@@ -358,17 +358,22 @@
     top: 43%;
     right: 12px;
     bottom: 12px;
-    z-index: 18;
+    z-index: 36;
     width: min(32%, 360px);
     min-width: 260px;
     display: grid;
     grid-template-rows: auto minmax(0,1fr);
-    overflow: hidden;
+    overflow: visible;
     color: #17364d;
     background: rgba(255,255,255,.97);
     border: 1px solid #c7dfe0;
     border-radius: 8px;
     box-shadow: 0 18px 50px rgba(0,0,0,.26);
+}
+.private-room-material-panel.is-dragging,
+.private-room-material-panel.is-resizing {
+    z-index: 44;
+    user-select: none;
 }
 .private-room-material-panel.hidden { display: none; }
 .private-room-material-header {
@@ -380,7 +385,11 @@
     padding: .42rem .5rem;
     background: #f7fbfa;
     border-bottom: 1px solid #d5e4e4;
+    border-radius: 8px 8px 0 0;
+    cursor: grab;
+    touch-action: none;
 }
+.private-room-material-panel.is-dragging .private-room-material-header { cursor: grabbing; }
 .private-room-material-header strong {
     min-width: 0;
     overflow: hidden;
@@ -406,7 +415,9 @@
 .private-room-material-body {
     min-width: 0;
     min-height: 0;
+    overflow: hidden;
     background: #111;
+    border-radius: 0 0 8px 8px;
 }
 .private-room-material-body iframe,
 .private-room-material-body img {
@@ -419,27 +430,60 @@
     object-fit: contain;
     background: #f4f7f7;
 }
+.private-room-material-resize-handles {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+.private-room-material-resize-dot {
+    position: absolute;
+    z-index: 4;
+    width: 13px;
+    height: 13px;
+    opacity: 0;
+    background: #00c4b5;
+    border: 2px solid #fff;
+    border-radius: 999px;
+    box-shadow: 0 4px 12px rgba(0,0,0,.28);
+    pointer-events: auto;
+    touch-action: none;
+    transition: opacity .16s ease, transform .16s ease;
+}
+.private-room-material-panel:hover .private-room-material-resize-dot,
+.private-room-material-panel.is-resizing .private-room-material-resize-dot {
+    opacity: 1;
+}
+.resize-n { top: -7px; left: 50%; cursor: ns-resize; transform: translateX(-50%); }
+.resize-s { bottom: -7px; left: 50%; cursor: ns-resize; transform: translateX(-50%); }
+.resize-e { top: 50%; right: -7px; cursor: ew-resize; transform: translateY(-50%); }
+.resize-w { top: 50%; left: -7px; cursor: ew-resize; transform: translateY(-50%); }
+.resize-ne { top: -7px; right: -7px; cursor: nesw-resize; }
+.resize-se { right: -7px; bottom: -7px; cursor: nwse-resize; }
+.resize-sw { bottom: -7px; left: -7px; cursor: nesw-resize; }
+.resize-nw { top: -7px; left: -7px; cursor: nwse-resize; }
 .private-room-material-panel:fullscreen {
-    width: 100vw;
-    height: 100vh;
+    width: 100vw !important;
+    height: 100vh !important;
     min-width: 0;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    left: 0;
+    top: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    left: 0 !important;
     border: 0;
     border-radius: 0;
+    overflow: hidden;
 }
 .private-room-material-panel:-webkit-full-screen {
-    width: 100vw;
-    height: 100vh;
+    width: 100vw !important;
+    height: 100vh !important;
     min-width: 0;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    left: 0;
+    top: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    left: 0 !important;
     border: 0;
     border-radius: 0;
+    overflow: hidden;
 }
 .private-room-material-fallback {
     height: 100%;
