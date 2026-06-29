@@ -18,12 +18,13 @@ const schedule = createScheduleController({
     onSelectProgram: (program) => player.playProgram(program),
 });
 
-player = createPlayerController({ state, onPlaybackChange: schedule.render });
+player = createPlayerController({ state, onPlaybackChange: () => { schedule.render(); ticker.update(); } });
 const branding = createBrandingController({
     state,
     onBrandingChange: () => {
         player.refreshPresentation();
         schedule.render();
+        ticker.update();
     },
 });
 const navigation = createNavigationController();

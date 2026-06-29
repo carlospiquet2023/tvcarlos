@@ -123,23 +123,30 @@ export function createScheduleController({ state, onSelectLinear, onSelectProgra
 
     function createLinearItem() {
         const active = !isOnDemand(state);
-        const item = element('button', {
+        const item = element('div', {
             className: `schedule-item${active ? ' active' : ''}`,
-            attributes: { type: 'button', 'aria-current': active ? 'true' : 'false' },
+            attributes: { role: 'button', tabindex: '0', 'aria-current': active ? 'true' : 'false' },
         });
         const live = state.isLiveOnline;
         const title = live ? state.branding.liveTitle : state.branding.loopTitle;
         const description = live ? state.branding.liveDescription : state.branding.loopDescription;
-        const badge = element('span', {
-            className: `schedule-time ${live ? 'schedule-time-live' : 'schedule-time-loop'}`,
-            text: live ? 'AO VIVO' : 'NO AR',
-        });
-        const details = element('span', { className: 'schedule-details' });
-        details.append(
-            element('strong', { text: title }),
-            element('span', { text: `${description}${active ? ' • Ativo no momento' : ' • Toque para assistir'}` }),
-        );
-        item.append(badge, details);
+        
+        const iconContainer = element('div', { className: 'schedule-icon-container' });
+        if (live) {
+            const iconEl = element('div', { className: 'schedule-icon-agora', text: 'AGORA' });
+            iconContainer.append(iconEl);
+        } else {
+            const iconEl = element('i', { className: 'fa-solid fa-broadcast-tower' });
+            iconContainer.append(iconEl);
+        }
+
+        const details = element('div', { className: 'schedule-details' });
+        const timeText = element('span', { className: 'schedule-time-text', text: 'Ao Vivo' });
+        const titleEl = element('strong', { text: title });
+        const descEl = element('span', { text: `${description}${active ? ' • Ativo no momento' : ' • Toque para assistir'}` });
+        
+        details.append(timeText, titleEl, descEl);
+        item.append(iconContainer, details);
         item.addEventListener('click', onSelectLinear);
         return item;
     }
@@ -147,22 +154,24 @@ export function createScheduleController({ state, onSelectLinear, onSelectProgra
     function createProgramItem(program) {
         const youtube = Boolean(getYouTubeVideoId(program.video));
         const active = isOnDemand(state) && state.activeProgram?.video === program.video;
-        const item = element('button', {
+        const item = element('div', {
             className: `schedule-item${active ? ' active' : ''}`,
-            attributes: { type: 'button', 'aria-current': active ? 'true' : 'false' },
+            attributes: { role: 'button', tabindex: '0', 'aria-current': active ? 'true' : 'false' },
         });
-        const badge = element('span', {
-            className: `schedule-time schedule-time-media${youtube ? ' schedule-time-youtube' : ''}`,
-            title: youtube ? 'Vídeo do YouTube' : 'Vídeo sob demanda',
-        });
-        badge.append(icon(youtube ? 'fa-brands fa-youtube' : 'fa-solid fa-play'));
-        const details = element('span', { className: 'schedule-details' });
+        
+        const iconContainer = element('div', { className: 'schedule-icon-container' });
+        const iconEl = element('i', { className: youtube ? 'fa-brands fa-youtube' : 'fa-solid fa-play' });
+        if (youtube) iconEl.style.color = 'var(--youtube)';
+        iconContainer.append(iconEl);
+
+        const details = element('div', { className: 'schedule-details' });
+        const timeText = element('span', { className: 'schedule-time-text', text: 'Gravado' });
         const description = program.description || program.desc || '';
-        details.append(
-            element('strong', { text: program.title }),
-            element('span', { text: `${description}${active ? ' • Ativo no momento' : ''}` }),
-        );
-        item.append(badge, details);
+        const titleEl = element('strong', { text: program.title });
+        const descEl = element('span', { text: `${description}${active ? ' • Assistindo agora' : ''}` });
+        
+        details.append(timeText, titleEl, descEl);
+        item.append(iconContainer, details);
         item.addEventListener('click', () => onSelectProgram(program));
         return item;
     }

@@ -138,38 +138,94 @@
                         <div><strong>24/7</strong><span>Sinal contínuo</span></div>
                     </div>
                 </div>
+
+                <!-- Destaques para você -->
+                <div class="destaques-section">
+                    <div class="destaques-header">
+                        <div class="destaques-title"><span class="highlight-pip"></span> Destaques para você</div>
+                        <a href="#" class="destaques-link">Ver todos <i class="fa-solid fa-chevron-right"></i></a>
+                    </div>
+                    
+                    <div class="destaques-carousel-container">
+                        <div class="destaques-track">
+                            <!-- Card 1 -->
+                            <div class="destaque-card">
+                                <img src="assets/fundo-site.png" alt="Destaque 1">
+                                <div class="destaque-card-content">
+                                    <div class="destaque-badge"><span class="badge-dot"></span> AO VIVO</div>
+                                    <h3>Cobertura Especial</h3>
+                                    <p>Acompanhe os principais acontecimentos em tempo real.</p>
+                                    <div class="destaque-progress"><div class="progress-fill" style="width: 40%"></div></div>
+                                </div>
+                            </div>
+                            
+                            <!-- Card 2 -->
+                            <div class="destaque-card">
+                                <img src="assets/fundo-site.png" alt="Destaque 2">
+                                <div class="destaque-card-content">
+                                    <h3>Cultura & História</h3>
+                                    <p>Conectando passado, presente e futuro da nossa sociedade.</p>
+                                </div>
+                            </div>
+                            
+                            <!-- Card 3 -->
+                            <div class="destaque-card">
+                                <img src="assets/fundo-site.png" alt="Destaque 3">
+                                <div class="destaque-card-content">
+                                    <h3>Tecnologia & Inovação</h3>
+                                    <p>O futuro acontece agora. E nós mostramos pra você.</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Paginação (Slider Dots) -->
+                        <div class="destaques-pagination">
+                            <span class="dot active"></span>
+                            <span class="dot"></span>
+                            <span class="dot"></span>
+                            <span class="dot"></span>
+                            <span class="dot"></span>
+                        </div>
+                    </div>
+                </div>
             </section>
 
             <!-- Coluna Direita: Grade de Programação -->
             <aside class="schedule-section">
                 <div class="schedule-card">
                     <div class="schedule-header">
-                        <h2 id="schedule-title">Próximos vídeos</h2>
-                        <span class="schedule-count" id="schedule-count" aria-live="polite">0 vídeos</span>
+                        <h2 id="schedule-title">Programação ao Vivo</h2>
+                        <a href="#" class="schedule-ver-grade" id="schedule-ver-grade">Ver Grade <i class="fa-solid fa-chevron-right"></i></a>
                     </div>
                     <div class="schedule-filters">
-                        <input type="text" id="schedule-search" placeholder="Pesquisar vídeos..." aria-label="Pesquisar vídeos">
-                        <select id="schedule-category" aria-label="Filtrar por categoria">
-                            <option value="">Todas as categorias</option>
+                        <select id="schedule-category" aria-label="Filtrar por canal">
+                            <option value="">Todos os Canais</option>
                         </select>
                     </div>
                     <div class="schedule-list" id="schedule-list" role="region" aria-label="Grade de programação" tabindex="0">
                         <!-- Itens da programação injetados via JS -->
                         <div class="schedule-item active">
-                            <span class="schedule-time" style="background-color: var(--primary); color: #fff;">AGORA</span>
+                            <div class="schedule-icon-container">
+                                <div class="schedule-icon schedule-icon-agora">AGORA</div>
+                            </div>
                             <div class="schedule-details">
+                                <span class="schedule-time-text">Ao Vivo</span>
                                 <h3>Carregando Grade...</h3>
                                 <p>Sintonizando a programação...</p>
                             </div>
                         </div>
                     </div>
                 </div>
-                <aside class="partner-showcase hidden" id="partner-showcase" aria-label="Parceiros e patrocinadores">
-                    <span class="partner-showcase-label" id="partner-showcase-label">PARCEIRO</span>
+
+                <div class="schedule-partners-card hidden" id="partner-showcase">
+                    <div class="schedule-partners-header">
+                        <h2>Parceiros que acreditam</h2>
+                        <a href="#" class="schedule-ver-grade">Ver Todos <i class="fa-solid fa-chevron-right"></i></a>
+                    </div>
                     <div class="partner-carousel" role="region" aria-roledescription="carrossel" aria-label="Logos dos parceiros">
                         <div class="partner-carousel-track" id="partner-carousel-track"></div>
                     </div>
-                </aside>
+                </div>
             </aside>
         </main>
 
@@ -178,16 +234,27 @@
             <a href="legal.html">Termos, privacidade e direitos</a>
         </div>
 
-        <!-- Barra de Notícias e Clima (Single Ticker Profissional) -->
-        <footer class="news-ticker-container">
-            <div class="ticker-label-news"><span class="ticker-signal-dot"></span><span id="ticker-label-text">GIRO TVC</span></div>
-            <div class="ticker-wrap">
-                <div id="news-ticker" class="ticker">
-                    <span>Carregando notícias e avisos...</span>
+        <!-- Barra Flutuante Poligonal (Bottom Bar) -->
+        <footer class="bottom-bar">
+            <div class="bottom-bar-left">
+                <i class="fa-solid fa-tower-broadcast signal-icon"></i>
+                <span class="live-status-text">AO VIVO AGORA</span>
+            </div>
+            
+            <div class="bottom-bar-center">
+                <button class="mini-play-btn" id="bottom-play-btn" type="button"><i class="fa-solid fa-pause"></i></button>
+                <div class="mini-player-info">
+                    <strong id="bottom-program-title">Jornal da Cidade</strong>
+                    <span id="bottom-program-desc">Informação com credibilidade</span>
                 </div>
             </div>
-            <div class="ticker-clock-container">
-                <span id="brasilia-clock">00:00:00</span>
+            
+            <div class="bottom-bar-right">
+                <span class="social-text">Siga-nos</span>
+                <a href="#" aria-label="Facebook"><i class="fa-brands fa-facebook-f"></i></a>
+                <a href="#" aria-label="Instagram"><i class="fa-brands fa-instagram"></i></a>
+                <a href="#" aria-label="YouTube"><i class="fa-brands fa-youtube"></i></a>
+                <a href="#" aria-label="Twitter"><i class="fa-brands fa-twitter"></i></a>
             </div>
         </footer>
     </div>
