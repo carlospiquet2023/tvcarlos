@@ -5,7 +5,6 @@ import { isOnDemand } from './state.js';
 
 export function createScheduleController({ state, onSelectLinear, onSelectProgram }) {
     const list = requiredElement('schedule-list');
-    const count = requiredElement('schedule-count');
 
     let currentPage = 1;
     let hasMore = false;
@@ -92,10 +91,6 @@ export function createScheduleController({ state, onSelectLinear, onSelectProgra
 
     function render() {
         clear(list);
-        
-        // Count represents what is currently shown. Alternatively we could use the total from API.
-        count.textContent = `${state.programs.length} ${state.programs.length === 1 ? 'vídeo' : 'vídeos'}`;
-        count.classList.toggle('is-empty', state.programs.length === 0);
         
         if (!currentSearch && !currentCategory) {
             list.append(createLinearItem());
