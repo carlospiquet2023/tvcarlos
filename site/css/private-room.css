@@ -37,8 +37,13 @@
 }
 
 .private-room-dialog {
+    --ink: #17364d;
+    --ink-soft: #526f80;
+    --ink-muted: #6d8491;
+    --line: #caddde;
     width: min(430px, calc(100vw - 2rem));
     padding: 0;
+    color-scheme: light;
     color: var(--ink);
     background: rgba(255,255,255,.98);
     border: 1px solid var(--line);
@@ -142,12 +147,17 @@
     padding: clamp(1rem, 3vw, 2rem);
 }
 .private-room-hero {
+    --ink: #17364d;
+    --ink-soft: #526f80;
+    --line: #caddde;
     display: flex;
     align-items: end;
     justify-content: space-between;
     gap: 1rem;
     padding: 1rem 1.1rem;
-    background: var(--surface-card);
+    color-scheme: light;
+    color: var(--ink);
+    background: rgba(255,255,255,.94);
     border: 1px solid var(--line);
     border-radius: 11px;
     box-shadow: var(--shadow-sm);
@@ -350,9 +360,15 @@
 }
 
 .private-room-interaction {
+    --ink: #17364d;
+    --ink-soft: #526f80;
+    --ink-muted: #6d8491;
+    --line: #caddde;
     display: grid;
     gap: .8rem;
     padding: .9rem;
+    color-scheme: light;
+    color: var(--ink);
     background: rgba(255,255,255,.88);
     border: 1px solid var(--line);
     border-radius: 11px;
@@ -555,6 +571,8 @@
 .private-room-external-panel p { max-width: 560px; margin: 0; font-size: .82rem; line-height: 1.55; }
 
 .private-room-external-panel {
+    --ink: #17364d;
+    --ink-soft: #526f80;
     display: grid;
     place-items: center;
     gap: .75rem;
