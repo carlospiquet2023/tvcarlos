@@ -17,6 +17,34 @@ export function createTickerController({ state }) {
         window.addEventListener('resize', synchronizeSpeed, { passive: true });
     }
 
+    async function fetchRssFeed(url) {
+        let targetUrl = url;
+        if (targetUrl.includes('api.rss2json.com')) {
+            const match = targetUrl.match(/rss_url=([^&]+)/);
+            if (match) targetUrl = `https://api.allorigins.win/raw?url=${match[1]}`;
+        }
+        
+        try {
+            if (targetUrl.includes('api.rss2json.com')) {
+                const data = await fetchJson(targetUrl);
+                return data?.items?.map(item => `[Plantão] ${item.title}`) || [];
+            }
+            
+            const response = await fetch(targetUrl + (targetUrl.includes('?') ? '&' : '?') + 't=' + Date.now(), { cache: 'no-store' });
+            const text = await response.text();
+            
+            let xmlText = text;
+            try { const json = JSON.parse(text); if (json.contents) xmlText = json.contents; } catch (e) {}
+            
+            const doc = new DOMParser().parseFromString(xmlText, 'text/xml');
+            const items = Array.from(doc.querySelectorAll('item')).slice(0, 15);
+            return items.map(item => `[Plantão] ${item.querySelector('title')?.textContent}`).filter(t => t && t !== '[Plantão] undefined');
+        } catch (error) {
+            console.error('RSS Fetch error:', error);
+            return [];
+        }
+    }
+
     async function refresh() {
         const promises = [
             fetchJson(WEATHER_ENDPOINT),
@@ -24,7 +52,7 @@ export function createTickerController({ state }) {
         ];
         
         if (state.branding.rssNewsUrl) {
-            promises.push(fetchJson(state.branding.rssNewsUrl));
+            promises.push(fetchRssFeed(state.branding.rssNewsUrl));
         }
 
         const results = await Promise.allSettled(promises);
@@ -42,9 +70,8 @@ export function createTickerController({ state }) {
             items.push(...manualNews.value);
         }
         
-        if (rssNews && rssNews.status === 'fulfilled' && rssNews.value?.items) {
-            const fetchedItems = rssNews.value.items.map(item => `[Plantão] ${item.title}`);
-            items.push(...fetchedItems);
+        if (rssNews && rssNews.status === 'fulfilled' && Array.isArray(rssNews.value)) {
+            items.push(...rssNews.value);
         }
 
         renderNews(items);
