@@ -217,8 +217,8 @@ export function createPlayerController({ state, onPlaybackChange }) {
             updateBottom(source === 'live' ? 'AO VIVO AGORA' : 'PROGRAMAÇÃO 24H', source === 'live' ? '#f43f5e' : '#00c4b5');
         } else if (source === 'vod' && state.activeProgram) {
             statusBadge.className = 'badge badge-vod';
-            statusText.textContent = 'SOB DEMANDA';
-            updateNowPlaying('SOB DEMANDA', state.activeProgram.title, programDescription('Conteúdo da TV Carlos.'));
+            statusText.textContent = 'GRAVADO';
+            updateNowPlaying('CONTEÚDO COMPLEMENTAR', state.activeProgram.title, programDescription('Conteúdo da TV Carlos.'));
             updateBottom('VÍDEO GRAVADO', '#00c4b5');
         } else if (source === 'youtube' && state.activeProgram) {
             statusBadge.className = 'badge badge-youtube';
@@ -251,7 +251,7 @@ export function createPlayerController({ state, onPlaybackChange }) {
     function updateRail(sourceType) {
         const labels = {
             live: ['SINAL AO VIVO', 'TEMPO REAL'], loop: ['PROGRAMAÇÃO 24H', 'FLUXO CONTÍNUO'],
-            vod: ['VÍDEO SELECIONADO', 'SOB DEMANDA'], youtube: ['VÍDEO DO YOUTUBE', 'CONTEÚDO EXTERNO'],
+            vod: ['VÍDEO SELECIONADO', 'GRAVADO'], youtube: ['VÍDEO DO YOUTUBE', 'CONTEÚDO EXTERNO'],
             'youtube-live': ['SINAL AO VIVO', 'YOUTUBE LIVE'], offline: ['SINAL INDISPONÍVEL', 'AGUARDANDO FONTE'],
         };
         [sourceLabel.textContent, modeLabel.textContent] = labels[sourceType] || labels.loop;
