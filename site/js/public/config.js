@@ -24,6 +24,7 @@ export const DEFAULT_BRANDING = Object.freeze({
     backgroundUrl: '',
     scheduleTitle: 'Próximos vídeos',
     tickerLabel: 'GIRO TVC',
+    rssNewsUrl: 'https://api.rss2json.com/v1/api.json?rss_url=https://g1.globo.com/rss/g1/',
     partnerLabel: 'PARCEIRO',
     liveSource: 'obs',
     liveYoutubeUrl: '',

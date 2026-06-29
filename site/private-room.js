@@ -7,11 +7,14 @@ import { createBroadcastState } from './js/public/state.js';
 
 const state = createBroadcastState();
 const branding = createBrandingController({ state, onBrandingChange: () => undefined });
+const roomStage = requiredElement('private-room-stage');
+const roomMain = roomStage.closest('.private-room-main');
 const player = requiredElement('private-room-player');
 const playButton = requiredElement('private-room-play');
 const volumeButton = requiredElement('private-room-volume');
 const externalLink = requiredElement('private-room-external-link');
 const materialToggle = requiredElement('private-room-material-toggle');
+const forumToggle = requiredElement('private-room-forum-toggle');
 const interactionSection = requiredElement('private-room-interaction');
 const interactionForm = requiredElement('private-room-message-form');
 const interactionStatus = requiredElement('private-room-message-status');
@@ -31,6 +34,7 @@ let activeRoomCode = null;
 let interactionTimer = null;
 let roomTimer = null;
 let currentInteractionSettings = null;
+let interactionVisible = false;
 let currentRoomSourceSignature = '';
 let currentMaterialSignature = '';
 
@@ -192,7 +196,15 @@ function bindControls() {
     playButton.addEventListener('click', togglePlayback);
     volumeButton.addEventListener('click', toggleVolume);
     materialToggle.addEventListener('click', toggleSupportMaterial);
+    forumToggle.addEventListener('click', () => setInteractionVisible(!interactionVisible));
+    requiredElement('private-room-interaction-close').addEventListener('click', () => setInteractionVisible(false));
     interactionForm.addEventListener('submit', submitInteractionMessage);
+    window.addEventListener('resize', updateInteractionGeometry);
+    if ('ResizeObserver' in window) {
+        const observer = new ResizeObserver(updateInteractionGeometry);
+        observer.observe(roomStage);
+        window.addEventListener('pagehide', () => observer.disconnect(), { once: true });
+    }
     requiredElement('private-room-logout').addEventListener('click', async () => {
         try { await fetch('/api/private-room-access/logout', { method: 'POST', credentials: 'same-origin' }); }
         finally { location.assign('index.html'); }
@@ -346,7 +358,9 @@ async function loadInteraction(roomCode) {
         if (!response.ok) throw new Error(payload?.error?.message || 'Não foi possível carregar a interação.');
         renderInteraction(payload);
     } catch {
-        interactionSection.classList.add('hidden');
+        currentInteractionSettings = null;
+        forumToggle.classList.add('hidden');
+        setInteractionVisible(false);
     }
 }
 
@@ -354,15 +368,74 @@ function renderInteraction(payload) {
     const settings = payload.settings;
     currentInteractionSettings = settings;
     if (!settings?.enabled) {
-        interactionSection.classList.add('hidden');
+        forumToggle.classList.add('hidden');
+        setInteractionVisible(false);
         return;
     }
 
-    interactionSection.classList.remove('hidden');
+    forumToggle.classList.remove('hidden');
+    setInteractionVisible(interactionVisible);
     requiredElement('private-room-interaction-notice').textContent = settings.noticeText || 'Envie suas perguntas e comentários para a moderação.';
     configureInteractionForm(settings);
     renderHighlightedMessage(payload.highlightedMessage, settings);
     renderApprovedMessages(payload.messages || [], settings);
+}
+
+function setInteractionVisible(visible) {
+    interactionVisible = Boolean(visible && currentInteractionSettings?.enabled);
+    document.body.classList.toggle('private-room-forum-open', interactionVisible);
+    if (interactionVisible) {
+        updateInteractionGeometry();
+    } else {
+        document.body.classList.remove('private-room-forum-docked', 'private-room-forum-narrow');
+        document.documentElement.style.setProperty('--private-room-video-shift', '0px');
+    }
+    interactionSection.classList.toggle('hidden', !interactionVisible);
+    forumToggle.classList.toggle('is-open', interactionVisible);
+    forumToggle.setAttribute('aria-expanded', String(interactionVisible));
+    forumToggle.setAttribute('aria-label', interactionVisible ? 'Minimizar fórum' : 'Abrir fórum');
+    forumToggle.title = interactionVisible ? 'Minimizar fórum' : 'Abrir fórum';
+    forumToggle.replaceChildren(
+        icon(interactionVisible ? 'fa-solid fa-minus' : 'fa-regular fa-comments'),
+    );
+}
+
+function updateInteractionGeometry() {
+    if (!interactionVisible || !roomMain) return;
+    const mainRect = roomMain.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const margin = viewportWidth <= 860 ? 8 : 12;
+    const gap = viewportWidth <= 1100 ? 8 : 12;
+    const closedLeft = mainRect.left + roomStage.offsetLeft;
+    const closedTop = mainRect.top + roomStage.offsetTop;
+    const stageWidth = roomStage.offsetWidth;
+    const stageHeight = roomStage.offsetHeight;
+    const maxShift = Math.max(0, mainRect.right - (closedLeft + stageWidth));
+    const shift = viewportWidth > 860 ? Math.min(220, maxShift) : 0;
+    const openLeft = closedLeft + shift;
+    const availablePanelWidth = openLeft - margin - gap;
+    const docked = viewportWidth > 860 && availablePanelWidth >= 180;
+    const width = docked
+        ? Math.min(360, availablePanelWidth)
+        : Math.min(430, viewportWidth - (margin * 2));
+    const left = docked
+        ? margin
+        : margin;
+    const top = docked
+        ? Math.max(margin, closedTop)
+        : Math.max(margin, Math.min(closedTop, viewportHeight * .14));
+    const height = docked
+        ? Math.max(320, Math.min(stageHeight, viewportHeight - top - margin))
+        : Math.max(320, viewportHeight - top - margin - 56);
+
+    document.documentElement.style.setProperty('--private-room-forum-left', `${left}px`);
+    document.documentElement.style.setProperty('--private-room-forum-top', `${top}px`);
+    document.documentElement.style.setProperty('--private-room-forum-width', `${width}px`);
+    document.documentElement.style.setProperty('--private-room-forum-height', `${height}px`);
+    document.documentElement.style.setProperty('--private-room-video-shift', `${docked ? shift : 0}px`);
+    document.body.classList.toggle('private-room-forum-docked', docked);
+    document.body.classList.toggle('private-room-forum-narrow', docked && width < 260);
 }
 
 function configureInteractionForm(settings) {
@@ -516,7 +589,9 @@ function renderAccessError(title, message, roomCode = '') {
     destroyMedia();
     window.clearInterval(interactionTimer);
     window.clearInterval(roomTimer);
-    interactionSection.classList.add('hidden');
+    currentInteractionSettings = null;
+    forumToggle.classList.add('hidden');
+    setInteractionVisible(false);
     materialToggle.classList.add('hidden');
     clear(player);
     const panel = element('div', { className: 'private-room-frame private-room-error' });

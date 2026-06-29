@@ -137,42 +137,70 @@
 }
 .private-room-submit:disabled { opacity: .6; cursor: wait; }
 
-.private-room-page .app-container { padding-bottom: 0; }
-.private-room-page .main-header { min-height: 86px; }
-.private-room-main {
-    width: min(1180px, 100%);
+.private-room-page .app-container {
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+    padding-bottom: 0;
+}
+.private-room-page .main-header {
+    min-height: 78px;
     display: grid;
-    gap: 1rem;
-    margin: 0 auto;
-    padding: clamp(1rem, 3vw, 2rem);
+    grid-template-columns: minmax(220px, max-content) minmax(240px, 1fr) auto;
+    align-items: center;
+    gap: clamp(.8rem, 2vw, 1.5rem);
 }
-.private-room-hero {
-    --ink: #17364d;
-    --ink-soft: #526f80;
-    --line: #caddde;
-    display: flex;
-    align-items: end;
-    justify-content: space-between;
-    gap: 1rem;
-    padding: 1rem 1.1rem;
-    color-scheme: light;
+.private-room-header-info {
+    min-width: 0;
+    width: min(560px, 100%);
+    display: grid;
+    justify-self: center;
+    gap: .16rem;
+}
+.private-room-kicker {
+    color: var(--ink-muted);
+    font-size: .52rem;
+    font-weight: 780;
+    letter-spacing: .16em;
+    line-height: 1;
+    text-transform: uppercase;
+}
+.private-room-header-info strong {
+    min-width: 0;
+    overflow: hidden;
     color: var(--ink);
-    background: rgba(255,255,255,.94);
-    border: 1px solid var(--line);
-    border-radius: 11px;
-    box-shadow: var(--shadow-sm);
+    font: 850 clamp(.95rem, 1.35vw, 1.2rem)/1.05 var(--font-heading);
+    letter-spacing: 0;
+    text-overflow: ellipsis;
+    text-transform: none;
+    white-space: nowrap;
 }
-.private-room-hero h1 {
-    margin: .2rem 0 .25rem;
-    color: var(--ink);
-    font: 900 clamp(1.45rem, 4vw, 2.4rem)/1.02 var(--font-heading);
-    letter-spacing: -.04em;
-}
-.private-room-hero p {
-    margin: 0;
+.private-room-header-info span:last-child {
+    min-width: 0;
+    overflow: hidden;
     color: var(--ink-soft);
-    font-size: .82rem;
-    line-height: 1.5;
+    font-size: .68rem;
+    line-height: 1.25;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.private-room-page .main-header > .private-room-actions {
+    min-width: 0;
+    justify-content: flex-end;
+    flex-wrap: nowrap;
+}
+.private-room-main {
+    position: relative;
+    width: min(1180px, 100%);
+    min-height: 0;
+    flex: 1 1 auto;
+    display: grid;
+    grid-template-rows: minmax(0, 1fr);
+    align-content: center;
+    justify-items: center;
+    gap: clamp(.45rem, 1vh, .65rem);
+    margin: 0 auto;
+    padding: clamp(.45rem, 1.4vw, .9rem);
 }
 .private-room-badge {
     display: inline-flex;
@@ -189,8 +217,18 @@
     text-transform: uppercase;
     white-space: nowrap;
 }
+.private-room-stage {
+    position: relative;
+    width: min(100%, calc((100dvh - 6rem) * 16 / 9));
+    min-width: 0;
+    justify-self: center;
+    transition: transform .22s ease;
+    will-change: transform;
+}
+.private-room-forum-docked .private-room-stage { transform: translateX(var(--private-room-video-shift, 0px)); }
 .private-room-player {
     position: relative;
+    width: 100%;
     aspect-ratio: 16 / 9;
     overflow: hidden;
     isolation: isolate;
@@ -199,6 +237,32 @@
     border: 1px solid #9abcc3;
     border-radius: 13px;
     box-shadow: var(--shadow-player);
+}
+.private-room-forum-bubble {
+    position: absolute;
+    bottom: clamp(.65rem, 1.4vw, 1rem);
+    left: clamp(.65rem, 1.4vw, 1rem);
+    z-index: 35;
+    width: 54px;
+    height: 54px;
+    display: grid;
+    place-items: center;
+    color: #fff;
+    background: linear-gradient(135deg, #00c4b5, #176b87);
+    border: 1px solid rgba(255,255,255,.55);
+    border-radius: 999px;
+    box-shadow: 0 14px 34px rgba(0,0,0,.34), 0 0 0 6px rgba(0,196,181,.16);
+    cursor: pointer;
+    transition: transform .18s ease, box-shadow .18s ease, background .18s ease;
+}
+.private-room-forum-bubble:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 18px 42px rgba(0,0,0,.4), 0 0 0 7px rgba(0,196,181,.2);
+}
+.private-room-forum-bubble i { font-size: 1.25rem; }
+.private-room-forum-bubble.is-open {
+    background: linear-gradient(135deg, #193247, #0f2435);
+    box-shadow: 0 12px 28px rgba(0,0,0,.38), 0 0 0 5px rgba(255,255,255,.12);
 }
 .private-room-frame {
     width: 100%;
@@ -235,8 +299,21 @@
 .private-room-actions {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: .55rem;
     flex-wrap: wrap;
+}
+#private-room-controls {
+    position: absolute;
+    right: clamp(.65rem, 1.4vw, 1rem);
+    bottom: clamp(.65rem, 1.4vw, 1rem);
+    left: calc(clamp(.65rem, 1.4vw, 1rem) + 66px);
+    z-index: 34;
+    justify-content: flex-start;
+    pointer-events: none;
+}
+.private-room-stage:has(.private-room-forum-bubble.hidden) #private-room-controls {
+    left: clamp(.65rem, 1.4vw, 1rem);
 }
 .private-room-action {
     min-height: 40px;
@@ -253,6 +330,21 @@
     font-weight: 850;
     text-decoration: none;
     cursor: pointer;
+}
+#private-room-controls .private-room-action {
+    min-height: 38px;
+    padding: .55rem .72rem;
+    color: #eaffff;
+    background: rgba(8,17,28,.78);
+    border-color: rgba(0,196,181,.5);
+    box-shadow: 0 10px 24px rgba(0,0,0,.32);
+    backdrop-filter: blur(10px);
+    pointer-events: auto;
+}
+#private-room-controls .private-room-action:hover {
+    color: #fff;
+    background: rgba(12,31,44,.9);
+    border-color: rgba(0,224,204,.72);
 }
 
 .private-room-material-panel {
@@ -364,19 +456,31 @@
     --ink-soft: #526f80;
     --ink-muted: #6d8491;
     --line: #caddde;
+    position: fixed;
+    top: var(--private-room-forum-top, clamp(5.6rem, 12vh, 7rem));
+    left: var(--private-room-forum-left, clamp(.9rem, 3vw, 2.5rem));
+    z-index: 92;
+    width: var(--private-room-forum-width, min(430px, calc(100vw - 2rem)));
+    height: var(--private-room-forum-height, calc(100dvh - 10rem));
+    min-height: 0;
     display: grid;
+    grid-template-rows: auto auto minmax(0, 1fr);
     gap: .8rem;
     padding: .9rem;
+    overflow: hidden;
     color-scheme: light;
     color: var(--ink);
-    background: rgba(255,255,255,.88);
+    background: rgba(255,255,255,.94);
     border: 1px solid var(--line);
     border-radius: 11px;
-    box-shadow: var(--shadow-sm);
+    box-shadow: 0 20px 70px rgba(4, 12, 20, .32);
+    backdrop-filter: blur(12px);
+    transition: opacity .18s ease, transform .22s ease;
 }
 .private-room-interaction-tabs {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: .5rem;
     border-bottom: 1px solid #d9e8e8;
 }
@@ -396,6 +500,19 @@
     font-weight: 900;
     cursor: default;
 }
+.private-room-panel-minimize {
+    width: 34px;
+    height: 34px;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    color: #236277;
+    background: #f4faf9;
+    border: 1px solid #cfe1e1;
+    border-radius: 8px;
+    cursor: pointer;
+}
+.private-room-panel-minimize:hover { color: #12384f; background: #e9f5f4; }
 .private-room-highlight {
     display: grid;
     gap: .35rem;
@@ -426,10 +543,15 @@
     line-height: 1.45;
 }
 .private-room-interaction-grid {
+    min-height: 0;
     display: grid;
-    grid-template-columns: minmax(280px, .75fr) minmax(360px, 1.25fr);
+    grid-template-columns: 1fr;
     gap: .8rem;
     align-items: start;
+    overflow-y: auto;
+    padding-right: .25rem;
+    scrollbar-width: thin;
+    scrollbar-color: #9bbec3 transparent;
 }
 .private-room-message-form {
     display: grid;
@@ -501,7 +623,7 @@
 .private-room-approved-messages {
     display: grid;
     gap: .55rem;
-    max-height: 520px;
+    max-height: none;
     overflow-y: auto;
     padding-right: .2rem;
     scrollbar-width: thin;
@@ -588,10 +710,82 @@
     background: linear-gradient(135deg, #176b87, #0e8176);
 }
 
+.private-room-main > .legal-strip {
+    display: none;
+}
+
+@media (max-width: 1100px) {
+    .private-room-page .main-header {
+        grid-template-columns: minmax(170px, max-content) minmax(0, 1fr) auto;
+        gap: .75rem;
+    }
+    .private-room-page .main-header .private-room-badge { display: none; }
+}
+
 @media (max-width: 860px) {
+    .private-room-page .app-container {
+        height: auto;
+        min-height: 100dvh;
+        overflow: visible;
+    }
+    .private-room-page .main-header {
+        grid-template-columns: minmax(0, 1fr) auto;
+        min-height: 0;
+        padding: .6rem .75rem;
+    }
+    .private-room-page .logo-area {
+        grid-column: 1;
+        grid-row: 1;
+    }
+    .private-room-header-info {
+        grid-column: 1 / -1;
+        grid-row: 2;
+        justify-self: stretch;
+        width: 100%;
+    }
+    .private-room-page .main-header > .private-room-actions {
+        grid-column: 2;
+        grid-row: 1;
+        gap: .45rem;
+    }
+    .private-room-page .main-header .private-room-action {
+        min-height: 36px;
+        padding: .48rem .62rem;
+        font-size: .64rem;
+    }
+    .private-room-main {
+        gap: .65rem;
+        padding: .65rem;
+    }
+    .private-room-stage { width: 100%; }
+    .private-room-forum-bubble {
+        width: 50px;
+        height: 50px;
+        bottom: .65rem;
+        left: .65rem;
+    }
+    #private-room-controls {
+        right: .65rem;
+        bottom: .65rem;
+        left: calc(.65rem + 60px);
+        gap: .4rem;
+    }
+    .private-room-stage:has(.private-room-forum-bubble.hidden) #private-room-controls { left: .65rem; }
+    #private-room-controls .private-room-action {
+        min-height: 36px;
+        padding: .48rem .58rem;
+        font-size: .62rem;
+    }
     .private-room-trigger { display: none; }
-    .private-room-hero { align-items: flex-start; flex-direction: column; }
-    .private-room-interaction-grid { grid-template-columns: 1fr; }
+    .private-room-interaction {
+        top: auto;
+        right: 8px;
+        bottom: 8px;
+        left: 8px;
+        width: auto;
+        height: auto;
+        max-height: min(78dvh, 620px);
+    }
     .private-room-material-panel {
         top: auto;
         right: 8px;
@@ -604,9 +798,46 @@
 }
 
 @media (max-width: 560px) {
+    .private-room-page .main-header {
+        grid-template-columns: 1fr;
+        padding: .55rem;
+    }
+    .private-room-page .logo-area {
+        grid-column: 1;
+        grid-row: 1;
+        justify-self: start;
+    }
+    .private-room-header-info { grid-column: 1; }
+    .private-room-page .main-header > .private-room-actions {
+        grid-column: 1;
+        grid-row: 3;
+        width: 100%;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+    }
+    .private-room-page .main-header .private-room-action {
+        width: 100%;
+        min-width: 0;
+    }
+    .private-room-header-info span:last-child { display: none; }
+    .private-room-main {
+        gap: .55rem;
+        padding: .45rem;
+    }
+    #private-room-controls {
+        right: .5rem;
+        bottom: .5rem;
+        left: calc(.5rem + 56px);
+    }
+    .private-room-stage:has(.private-room-forum-bubble.hidden) #private-room-controls { left: .5rem; }
+    #private-room-controls .private-room-action {
+        min-height: 34px;
+        padding: .42rem .5rem;
+    }
     .private-room-dialog { width: calc(100vw - 1rem); }
     .private-room-access-form { padding: 1.1rem; }
     .private-room-player { padding: 4px; border-radius: 9px; }
     .private-room-glass-layer { inset: 4px; border-radius: 6px; }
     .private-room-material-panel { right: 6px; bottom: 6px; left: 6px; height: 46%; }
+    .private-room-interaction { right: 6px; bottom: 6px; left: 6px; max-height: 82dvh; padding: .75rem; }
 }

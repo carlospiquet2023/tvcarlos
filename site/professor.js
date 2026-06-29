@@ -16,8 +16,12 @@ const state = {
     session: null,
     rooms: [],
     selectedRoomId: null,
-    interaction: { messages: [], filter: 'pending' },
+    interaction: { messages: [], filter: 'pending', replyDrafts: new Map() },
 };
+const INTERACTION_REFRESH_MS = 7_000;
+let interactionRefreshTimer = null;
+let interactionLoading = false;
+let interactionReloadQueued = false;
 
 async function initialize() {
     try {
@@ -26,6 +30,7 @@ async function initialize() {
         bindControls();
         bindUploads();
         await loadRooms();
+        startInteractionAutoRefresh();
         document.body.classList.remove('auth-loading');
     } catch {
         location.replace('login.html');
@@ -48,6 +53,17 @@ function bindControls() {
         state.interaction.filter = event.currentTarget.value;
         renderMessages();
     });
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') void loadInteraction();
+    });
+    window.addEventListener('pagehide', () => window.clearInterval(interactionRefreshTimer), { once: true });
+}
+
+function startInteractionAutoRefresh() {
+    window.clearInterval(interactionRefreshTimer);
+    interactionRefreshTimer = window.setInterval(() => {
+        if (document.visibilityState === 'visible') void loadInteraction();
+    }, INTERACTION_REFRESH_MS);
 }
 
 function bindUploads() {
@@ -184,8 +200,16 @@ function materialPayload() {
 
 async function loadInteraction(showFeedback = false) {
     if (!state.selectedRoomId) return;
+    if (interactionLoading) {
+        interactionReloadQueued = true;
+        return;
+    }
+    interactionLoading = true;
+    const roomId = state.selectedRoomId;
+    collectReplyDrafts();
     try {
-        const interaction = await apiJson(`/api/teacher/private-rooms/${encodeURIComponent(state.selectedRoomId)}/interaction`);
+        const interaction = await apiJson(`/api/teacher/private-rooms/${encodeURIComponent(roomId)}/interaction`);
+        if (state.selectedRoomId !== roomId) return;
         state.interaction.messages = interaction.messages || [];
         renderMessages();
         const pending = state.interaction.messages.filter((message) => message.status === 'pending').length;
@@ -193,7 +217,23 @@ async function loadInteraction(showFeedback = false) {
         if (showFeedback) showToast('Mensagens atualizadas', 'Interação sincronizada.');
     } catch (error) {
         showToast('Falha ao carregar interação', error.message, 'error');
+    } finally {
+        interactionLoading = false;
+        if (interactionReloadQueued) {
+            interactionReloadQueued = false;
+            void loadInteraction();
+        }
     }
+}
+
+function collectReplyDrafts() {
+    document.querySelectorAll('#professor-message-list textarea[data-message-id]').forEach((textarea) => {
+        const messageId = textarea.dataset.messageId;
+        if (!messageId) return;
+        const originalReply = textarea.dataset.originalReply || '';
+        if (textarea.value !== originalReply) state.interaction.replyDrafts.set(messageId, textarea.value);
+        else state.interaction.replyDrafts.delete(messageId);
+    });
 }
 
 function renderMessages() {
@@ -222,7 +262,14 @@ function renderMessage(message) {
         className: 'form-control',
         attributes: { maxlength: '1000', rows: '3', placeholder: 'Resposta do professor' },
     });
-    reply.value = message.adminReply || '';
+    const originalReply = message.adminReply || '';
+    reply.dataset.messageId = message.id;
+    reply.dataset.originalReply = originalReply;
+    reply.value = state.interaction.replyDrafts.get(message.id) ?? originalReply;
+    reply.addEventListener('input', () => {
+        if (reply.value !== originalReply) state.interaction.replyDrafts.set(message.id, reply.value);
+        else state.interaction.replyDrafts.delete(message.id);
+    });
 
     const actions = element('div', { className: 'interaction-message-actions' });
     actions.append(
@@ -267,6 +314,7 @@ async function updateMessage(message, payload) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
         });
+        if (Object.hasOwn(payload, 'adminReply')) state.interaction.replyDrafts.delete(message.id);
         await loadInteraction();
         showToast('Mensagem atualizada', 'Ação registrada.');
     } catch (error) {

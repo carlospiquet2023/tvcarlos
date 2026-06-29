@@ -8,7 +8,7 @@
     <meta name="robots" content="noindex,nofollow">
     <link rel="stylesheet" href="vendor/fontawesome/css/all.min.css">
     <script src="vendor/hls/hls.min.js"></script>
-    <link rel="stylesheet" href="style.css?v=24">
+    <link rel="stylesheet" href="style.css?v=30">
 </head>
 <body class="broadcast-page private-room-page">
     <div class="app-container">
@@ -22,36 +22,36 @@
                     <span class="logo-text" id="header-logo-text">TV <span>Carlos</span></span>
                 </div>
             </a>
+            <div class="private-room-header-info">
+                <span class="private-room-kicker">CONTEÚDO EXCLUSIVO</span>
+                <strong id="private-room-title">Sala Privada</strong>
+                <span id="private-room-description">Validando credenciais da sala…</span>
+            </div>
             <div class="private-room-actions">
+                <span class="private-room-badge"><i class="fa-solid fa-lock"></i> Acesso restrito</span>
                 <a class="private-room-action" href="index.html"><i class="fa-solid fa-tv"></i> TV aberta</a>
                 <button class="private-room-action" id="private-room-logout" type="button"><i class="fa-solid fa-door-open"></i> Sair da sala</button>
             </div>
         </header>
 
         <main class="private-room-main">
-            <section class="private-room-hero">
-                <div>
-                    <span class="section-kicker">CONTEÚDO EXCLUSIVO</span>
-                    <h1 id="private-room-title">Sala Privada</h1>
-                    <p id="private-room-description">Validando credenciais da sala…</p>
+            <div class="private-room-stage" id="private-room-stage">
+                <section class="private-room-player" id="private-room-player" aria-live="polite">
+                    <div class="private-room-frame private-room-error">Carregando sala privada…</div>
+                </section>
+                <button class="private-room-forum-bubble hidden" id="private-room-forum-toggle" type="button" aria-controls="private-room-interaction" aria-expanded="false" aria-label="Abrir fórum" title="Abrir fórum"><i class="fa-regular fa-comments"></i></button>
+                <div class="private-room-actions" id="private-room-controls">
+                    <button class="private-room-action" id="private-room-play" type="button"><i class="fa-solid fa-play"></i> Reproduzir</button>
+                    <button class="private-room-action" id="private-room-volume" type="button"><i class="fa-solid fa-volume-xmark"></i> Ativar som</button>
+                    <button class="private-room-action hidden" id="private-room-material-toggle" type="button"><i class="fa-solid fa-file-lines"></i> Ocultar material</button>
+                    <a class="private-room-action hidden" id="private-room-external-link" href="#" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-arrow-up-right-from-square"></i> Abrir conteúdo</a>
                 </div>
-                <span class="private-room-badge"><i class="fa-solid fa-lock"></i> Acesso restrito</span>
-            </section>
-
-            <section class="private-room-player" id="private-room-player" aria-live="polite">
-                <div class="private-room-frame private-room-error">Carregando sala privada…</div>
-            </section>
-
-            <div class="private-room-actions" id="private-room-controls">
-                <button class="private-room-action" id="private-room-play" type="button"><i class="fa-solid fa-play"></i> Reproduzir</button>
-                <button class="private-room-action" id="private-room-volume" type="button"><i class="fa-solid fa-volume-xmark"></i> Ativar som</button>
-                <button class="private-room-action hidden" id="private-room-material-toggle" type="button"><i class="fa-solid fa-file-lines"></i> Ocultar material</button>
-                <a class="private-room-action hidden" id="private-room-external-link" href="#" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-arrow-up-right-from-square"></i> Abrir conteúdo</a>
             </div>
 
             <section class="private-room-interaction hidden" id="private-room-interaction" aria-live="polite">
                 <div class="private-room-interaction-tabs">
                     <button class="private-room-tab active" type="button"><i class="fa-regular fa-comments"></i> Perguntas e Comentários</button>
+                    <button class="private-room-panel-minimize" id="private-room-interaction-close" type="button" aria-label="Minimizar fórum"><i class="fa-solid fa-minus"></i></button>
                 </div>
 
                 <article class="private-room-highlight hidden" id="private-room-highlight">
@@ -90,6 +90,6 @@
         </main>
     </div>
 
-    <script type="module" src="private-room.js"></script>
+    <script type="module" src="private-room.js?v=5"></script>
 </body>
 </html>

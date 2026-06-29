@@ -18,19 +18,17 @@ export function createTickerController({ state }) {
     }
 
     async function fetchRssFeed(url) {
-        let targetUrl = url;
-        if (targetUrl.includes('api.rss2json.com')) {
-            const match = targetUrl.match(/rss_url=([^&]+)/);
-            if (match) targetUrl = `https://api.allorigins.win/raw?url=${match[1]}`;
-        }
-        
+        const targetUrl = url.trim();
+        if (!targetUrl) return [];
+
         try {
             if (targetUrl.includes('api.rss2json.com')) {
                 const data = await fetchJson(targetUrl);
-                return data?.items?.map(item => `[Plantão] ${item.title}`) || [];
+                return data?.items?.map((item) => `[Plantão] ${item.title}`).filter(Boolean) || [];
             }
-            
-            const response = await fetch(targetUrl + (targetUrl.includes('?') ? '&' : '?') + 't=' + Date.now(), { cache: 'no-store' });
+
+            const proxiedUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+            const response = await fetch(proxiedUrl + (proxiedUrl.includes('?') ? '&' : '?') + 't=' + Date.now(), { cache: 'no-store' });
             const text = await response.text();
             
             let xmlText = text;
@@ -38,7 +36,7 @@ export function createTickerController({ state }) {
             
             const doc = new DOMParser().parseFromString(xmlText, 'text/xml');
             const items = Array.from(doc.querySelectorAll('item')).slice(0, 15);
-            return items.map(item => `[Plantão] ${item.querySelector('title')?.textContent}`).filter(t => t && t !== '[Plantão] undefined');
+            return items.map((item) => `[Plantão] ${item.querySelector('title')?.textContent}`).filter((textItem) => textItem && textItem !== '[Plantão] undefined');
         } catch (error) {
             console.error('RSS Fetch error:', error);
             return [];
@@ -79,11 +77,13 @@ export function createTickerController({ state }) {
 
     function renderNews(items) {
         clear(ticker);
-        if (!items.length) {
-            ticker.append(element('span', { text: '• TV CARLOS - PROGRAMAÇÃO CONTÍNUA 24H' }));
-        } else {
-            items.forEach((item) => ticker.append(element('span', { className: 'ticker-news-item', text: `• 📢 ${String(item.text || item).toUpperCase()}` })));
-        }
+        const visibleItems = items.length ? items : [
+            'TV Carlos - programação contínua 24h',
+            'Acompanhe notícias, aulas e conteúdos especiais na TV Carlos',
+            'Sala Privada disponível para eventos, aulas e reuniões fechadas',
+        ];
+        const loopItems = visibleItems.length < 6 ? [...visibleItems, ...visibleItems, ...visibleItems] : visibleItems;
+        loopItems.forEach((item) => ticker.append(element('span', { className: 'ticker-news-item', text: `• ${String(item.text || item).toUpperCase()}` })));
         synchronizeSpeed();
     }
 
