@@ -197,6 +197,14 @@ export function createPlayerController({ state, onPlaybackChange }) {
 
     function refreshPresentation() {
         const source = state.currentSource;
+        const bottomStatus = document.getElementById('bottom-bar-status');
+        const updateBottom = (text, color) => {
+            if (bottomStatus) {
+                bottomStatus.textContent = text;
+                bottomStatus.parentElement.style.setProperty('--primary', color);
+            }
+        };
+
         if (source === 'live' || source === 'loop') {
             const stream = STREAMS[source];
             statusBadge.className = `badge ${stream.badgeClass}`;
@@ -206,22 +214,27 @@ export function createPlayerController({ state, onPlaybackChange }) {
                 source === 'live' ? state.branding.liveTitle : state.branding.loopTitle,
                 source === 'live' ? state.branding.liveDescription : state.branding.loopDescription,
             );
+            updateBottom(source === 'live' ? 'AO VIVO AGORA' : 'PROGRAMAÇÃO 24H', source === 'live' ? '#f43f5e' : '#00c4b5');
         } else if (source === 'vod' && state.activeProgram) {
             statusBadge.className = 'badge badge-vod';
             statusText.textContent = 'SOB DEMANDA';
             updateNowPlaying('SOB DEMANDA', state.activeProgram.title, programDescription('Conteúdo da TV Carlos.'));
+            updateBottom('VÍDEO GRAVADO', '#00c4b5');
         } else if (source === 'youtube' && state.activeProgram) {
             statusBadge.className = 'badge badge-youtube';
             statusText.textContent = 'YOUTUBE';
             updateNowPlaying('CONTEÚDO COMPLEMENTAR', state.activeProgram.title, programDescription('Vídeo do YouTube.'));
+            updateBottom('VÍDEO YOUTUBE', '#ef4444');
         } else if (source === 'youtube-live') {
             statusBadge.className = 'badge badge-live';
             statusText.textContent = 'AO VIVO';
             updateNowPlaying('TRANSMISSÃO AO VIVO', state.branding.liveTitle, state.branding.liveDescription);
+            updateBottom('AO VIVO AGORA', '#f43f5e');
         } else if (source === 'offline') {
             statusBadge.className = 'badge badge-recorded';
             statusText.textContent = 'SEM SINAL';
             updateNowPlaying('SINAL INDISPONÍVEL', 'Nenhum sinal disponível', 'A transmissão será retomada assim que o sinal ao vivo ou a programação 24h estiverem disponíveis.');
+            updateBottom('SEM SINAL', '#64748b');
         }
     }
 
