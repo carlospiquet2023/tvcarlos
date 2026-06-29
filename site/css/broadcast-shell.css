@@ -72,7 +72,7 @@
 .now-playing { min-width: 0; }
 .now-playing-label { display: flex; align-items: center; gap: .45rem; color: var(--primary); }
 .on-air-pip { width: 8px; height: 8px; background: var(--primary); border-radius: 50%; box-shadow: 0 0 0 4px rgba(0, 196, 181, .12); }
-.now-playing h1 { margin: .45rem 0 .2rem; overflow: hidden; color: var(--ink); font: 850 clamp(1.35rem, 2.5vw, 2rem)/1.05 var(--font-heading); letter-spacing: -.035em; text-overflow: ellipsis; white-space: nowrap; }
+.now-playing h1 { margin: .3rem 0 .2rem; overflow: hidden; color: var(--ink); font: 750 clamp(1.1rem, 1.5vw, 1.35rem)/1.2 var(--font-heading); letter-spacing: -.02em; text-overflow: ellipsis; white-space: nowrap; }
 .now-playing p { margin: 0; color: var(--ink-soft); font-size: .78rem; }
 .transmission-facts { flex: 0 0 auto; display: flex; align-items: center; }
 .transmission-facts div { min-width: 110px; padding: .2rem 1rem; border-left: 1px solid var(--line-strong); }
