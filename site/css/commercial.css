@@ -46,8 +46,8 @@
 .signal-icon { color: var(--primary); font-size: 1rem; animation: pulse-glow 2s infinite; }
 .live-status-text { color: var(--primary); font-size: .7rem; font-weight: 800; letter-spacing: 0.1em; white-space: nowrap; }
 
-/* Centro - Player Info */
-.bottom-bar-center { flex: 0 1 auto; padding: 0 3rem; gap: 1rem; justify-content: center; clip-path: polygon(20px 0, calc(100% - 20px) 0, 100% 100%, 0 100%); border-right: 1px solid rgba(0, 196, 181, 0.2); border-left: 1px solid rgba(0, 196, 181, 0.2); }
+/* Centro - Player Info / Ticker */
+.bottom-bar-center { flex: 1 1 auto; padding: 0 3rem; gap: 1rem; justify-content: center; clip-path: polygon(20px 0, calc(100% - 20px) 0, 100% 100%, 0 100%); border-right: 1px solid rgba(0, 196, 181, 0.2); border-left: 1px solid rgba(0, 196, 181, 0.2); }
 .mini-play-btn { width: 34px; height: 34px; border-radius: 50%; background: var(--primary); color: #fff; border: none; display: grid; place-items: center; cursor: pointer; transition: transform 0.2s; box-shadow: 0 0 15px rgba(0, 196, 181, 0.3); }
 .mini-play-btn:hover { transform: scale(1.05); }
 .mini-player-info { display: flex; flex-direction: column; }

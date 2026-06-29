@@ -6,6 +6,7 @@ import { createPartnerController } from './js/public/partner-controller.js';
 import { createPlayerController } from './js/public/player-controller.js';
 import { createPrivateRoomController } from './js/public/private-room-controller.js';
 import { createScheduleController } from './js/public/schedule-controller.js';
+import { createDestaquesController } from './js/public/destaques-controller.js';
 import { createBroadcastState } from './js/public/state.js';
 import { createTickerController } from './js/public/ticker-controller.js';
 
@@ -15,6 +16,10 @@ let player;
 const schedule = createScheduleController({
     state,
     onSelectLinear: () => player.returnToLinear(),
+    onSelectProgram: (program) => player.playProgram(program),
+});
+
+const destaques = createDestaquesController({
     onSelectProgram: (program) => player.playProgram(program),
 });
 
@@ -42,6 +47,7 @@ async function initialize() {
 
     await Promise.allSettled([
         schedule.load(),
+        destaques.load(),
         navigation.load(),
         partners.load(),
         player.checkLive(),
