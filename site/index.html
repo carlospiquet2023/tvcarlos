@@ -127,18 +127,7 @@
                         </div>
                     </div>
                 </div>
-                <div class="player-info-card" aria-live="polite">
-                    <div class="now-playing">
-                        <div class="now-playing-label"><span class="on-air-pip"></span><span id="current-program-label">NO AR AGORA</span></div>
-                        <h1 id="current-program-title">Programação Linear 24h</h1>
-                        <p id="current-program-description">Conteúdo independente, notícias e entretenimento em fluxo contínuo.</p>
-                    </div>
-                    <div class="transmission-facts" aria-label="Informações do sinal">
-                        <div><strong>HD</strong><span>1280 × 720</span></div>
-                        <div><strong>24/7</strong><span>Sinal contínuo</span></div>
-                    </div>
-                </div>
-
+                <!-- O player-info-card foi movido para o rodapé conforme solicitado -->
                 <!-- Destaques para você -->
                 <div class="destaques-section">
                     <div class="destaques-header">
@@ -241,8 +230,16 @@
                 <span class="live-status-text" id="bottom-bar-status">CONECTANDO...</span>
             </div>
             
-            <div class="bottom-bar-center" style="position: relative;">
-                <div class="ticker-wrap">
+            <div class="bottom-bar-center" style="display: flex; position: relative;">
+                <div class="bottom-bar-program" style="flex: 0 0 35%; border-right: 1px solid rgba(0, 196, 181, 0.2); padding-right: 1rem; display: flex; align-items: center; gap: 0.6rem; overflow: hidden; white-space: nowrap;">
+                    <span class="on-air-pip" style="flex: 0 0 8px;"></span>
+                    <div style="display: flex; flex-direction: column; overflow: hidden; justify-content: center; min-width: 0;">
+                        <span id="current-program-label" style="font-size: 0.55rem; color: var(--primary); letter-spacing: 0.1em; font-weight: 800; text-transform: uppercase;">NO AR AGORA</span>
+                        <span id="current-program-title" style="font-size: 0.8rem; font-weight: 750; color: #fff; text-overflow: ellipsis; overflow: hidden;">Programação Linear 24h</span>
+                        <span id="current-program-description" class="hidden">Conteúdo independente</span>
+                    </div>
+                </div>
+                <div class="ticker-wrap" style="position: relative; flex: 1 1 auto; margin-left: 1rem; overflow: hidden;">
                     <div id="news-ticker" class="ticker">
                         <span>Carregando notícias e avisos...</span>
                     </div>
