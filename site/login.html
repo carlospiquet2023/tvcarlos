@@ -7,8 +7,12 @@
     <meta name="robots" content="noindex,nofollow">
     <title>Acesso administrativo · TV Carlos</title>
     <link rel="stylesheet" href="vendor/fontawesome/css/all.min.css">
-    <link rel="stylesheet" href="css/foundation.css?v=24">
-    <link rel="stylesheet" href="css/login.css?v=24">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/foundation.css?v=33">
+    <link rel="stylesheet" href="css/login.css?v=33">
+    <link rel="stylesheet" href="css/accessibility.css?v=33">
 </head>
 <body class="login-page">
     <main class="login-card">
@@ -32,5 +36,16 @@
         <a href="index.html" class="back-to-site"><i class="fa-solid fa-arrow-left"></i> Voltar para a TV</a>
     </main>
     <script type="module" src="login.js"></script>
+    <script src="js/accessibility.js"></script>
+
+    <!-- VLibras – Tradução em Libras (Governo Federal) -->
+    <div vw class="enabled">
+        <div vw-access-button class="active"></div>
+        <div vw-plugin-wrapper>
+            <div class="vw-plugin-top-wrapper"></div>
+        </div>
+    </div>
+    <script src="https://vlibras.gov.br/app/vlibras-plugin.js"></script>
+    <script>new window.VLibras.Widget('https://vlibras.gov.br/app');</script>
 </body>
 </html>

@@ -7,8 +7,11 @@
     <meta name="theme-color" content="#f2f8f7">
     <meta name="description" content="TV Carlos — sinal independente, programação contínua e transmissões ao vivo.">
     <link rel="stylesheet" href="vendor/fontawesome/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
     <script src="vendor/hls/hls.min.js"></script>
-    <link rel="stylesheet" href="style.css?v=32">
+    <link rel="stylesheet" href="style.css?v=33">
 </head>
 <body class="broadcast-page">
     <div class="app-container">
@@ -273,5 +276,16 @@
     </dialog>
 
     <script type="module" src="app.js?v=4"></script>
+    <script src="js/accessibility.js"></script>
+
+    <!-- VLibras – Tradução em Libras (Governo Federal) -->
+    <div vw class="enabled">
+        <div vw-access-button class="active"></div>
+        <div vw-plugin-wrapper>
+            <div class="vw-plugin-top-wrapper"></div>
+        </div>
+    </div>
+    <script src="https://vlibras.gov.br/app/vlibras-plugin.js"></script>
+    <script>new window.VLibras.Widget('https://vlibras.gov.br/app');</script>
 </body>
 </html>

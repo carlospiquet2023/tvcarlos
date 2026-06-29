@@ -1,0 +1,168 @@
+/* ===================================================================
+   ACESSIBILIDADE – Alto Contraste + Fonte Legível (eMAG / WCAG 2.1)
+   Ativado pela classe .a11y-high-contrast no <html>
+   =================================================================== */
+
+/* ---------- Barra de acessibilidade ---------- */
+.a11y-bar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: .5rem;
+    padding: .25rem clamp(1rem, 3.2vw, 3rem);
+    background: var(--surface-soft, #081523);
+    border-bottom: 1px solid var(--line, #1e293b);
+    font-size: .68rem;
+    z-index: 200;
+}
+.a11y-bar-label {
+    color: var(--ink-muted, #64748b);
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    margin-right: auto;
+}
+.a11y-bar-label i { margin-right: .35rem; }
+.a11y-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    padding: .3rem .65rem;
+    color: var(--ink-soft, #94a3b8);
+    background: transparent;
+    border: 1px solid var(--line, #1e293b);
+    border-radius: 4px;
+    font-size: .65rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background .15s, color .15s, border-color .15s;
+    white-space: nowrap;
+}
+.a11y-btn:hover {
+    color: var(--primary, #00c4b5);
+    border-color: var(--primary, #00c4b5);
+    background: rgba(0, 196, 181, .08);
+}
+.a11y-btn.active {
+    color: #000;
+    background: var(--primary, #00c4b5);
+    border-color: var(--primary, #00c4b5);
+}
+
+/* ---------- MODO ALTO CONTRASTE ---------- */
+html.a11y-high-contrast {
+    --surface-page: #000 !important;
+    --surface-soft: #000 !important;
+    --surface-card: #000 !important;
+    --surface-glass: rgba(0, 0, 0, .95) !important;
+    --ink: #fff !important;
+    --ink-soft: #f0f0f0 !important;
+    --ink-muted: #ccc !important;
+    --line: #fff !important;
+    --line-strong: #fff !important;
+    --primary: #ffff00 !important;
+    --primary-strong: #ffff00 !important;
+    --primary-soft: rgba(255, 255, 0, .2) !important;
+    --teal: #00ffff !important;
+    --teal-soft: rgba(0, 255, 255, .15) !important;
+    --live: #ff4444 !important;
+    --live-soft: rgba(255, 68, 68, .2) !important;
+}
+
+html.a11y-high-contrast body { background: #000 !important; }
+
+html.a11y-high-contrast .main-header,
+html.a11y-high-contrast .bottom-bar {
+    background: #000 !important;
+    border-color: #fff !important;
+}
+
+html.a11y-high-contrast .main-header::after { background: #ffff00 !important; opacity: 1 !important; }
+
+html.a11y-high-contrast .schedule-card,
+html.a11y-high-contrast .destaque-card {
+    background: #000 !important;
+    border-color: #fff !important;
+}
+
+html.a11y-high-contrast .player-wrapper {
+    border-color: #ffff00 !important;
+    box-shadow: 0 0 0 2px #ffff00 !important;
+}
+
+html.a11y-high-contrast .badge {
+    border-width: 2px !important;
+}
+
+html.a11y-high-contrast .a11y-bar {
+    background: #000 !important;
+    border-color: #fff !important;
+}
+html.a11y-high-contrast .a11y-btn {
+    color: #fff !important;
+    border-color: #fff !important;
+}
+html.a11y-high-contrast .a11y-btn.active {
+    color: #000 !important;
+    background: #ffff00 !important;
+    border-color: #ffff00 !important;
+}
+html.a11y-high-contrast .a11y-btn:hover {
+    color: #000 !important;
+    background: #ffff00 !important;
+    border-color: #ffff00 !important;
+}
+
+/* Login card em alto contraste */
+html.a11y-high-contrast .login-card {
+    background: #000 !important;
+    color: #fff !important;
+    border-color: #fff !important;
+}
+html.a11y-high-contrast .login-card label,
+html.a11y-high-contrast .login-card h1,
+html.a11y-high-contrast .login-card p {
+    color: #fff !important;
+}
+html.a11y-high-contrast .login-input {
+    background: #111 !important;
+    color: #fff !important;
+    border-color: #fff !important;
+}
+
+/* Sala privada em alto contraste */
+html.a11y-high-contrast .private-room-dialog {
+    background: #000 !important;
+    color: #fff !important;
+    border-color: #fff !important;
+}
+
+/* Links e textos gerais */
+html.a11y-high-contrast a { color: #ffff00 !important; }
+html.a11y-high-contrast a:hover { color: #fff !important; }
+
+/* ---------- MODO FONTE ACESSÍVEL ---------- */
+html.a11y-readable-font body,
+html.a11y-readable-font button,
+html.a11y-readable-font input,
+html.a11y-readable-font textarea,
+html.a11y-readable-font select {
+    font-family: "Atkinson Hyperlegible", "Verdana", "Tahoma", sans-serif !important;
+    letter-spacing: .02em !important;
+}
+html.a11y-readable-font .logo-text,
+html.a11y-readable-font .schedule-header h2,
+html.a11y-readable-font .destaques-title,
+html.a11y-readable-font .login-title,
+html.a11y-readable-font h1, html.a11y-readable-font h2, html.a11y-readable-font h3 {
+    font-family: "Atkinson Hyperlegible", "Verdana", "Tahoma", sans-serif !important;
+}
+
+/* Tamanho de texto aumentado para leitura confortável */
+html.a11y-readable-font .ticker-news-item,
+html.a11y-readable-font .schedule-program-title,
+html.a11y-readable-font .destaque-card-content h3,
+html.a11y-readable-font .destaque-card-content p {
+    font-size: 110% !important;
+    line-height: 1.5 !important;
+}
