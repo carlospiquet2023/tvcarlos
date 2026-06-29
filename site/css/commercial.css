@@ -12,7 +12,7 @@
 
 /* Barra Flutuante Poligonal (Bottom Bar) */
 .bottom-bar { position: fixed; right: 0; bottom: 0; left: 0; z-index: 110; height: var(--ticker-height); display: flex; justify-content: space-between; align-items: stretch; pointer-events: none; }
-.bottom-bar > div { pointer-events: auto; display: flex; align-items: center; background: rgba(4, 12, 20, 0.95); backdrop-filter: blur(12px); border-top: 1px solid var(--primary-soft); box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.5); }
+.bottom-bar > div { pointer-events: auto; display: flex; align-items: center; background: rgba(4, 12, 20, 0.95); backdrop-filter: blur(12px); border-top: 2px solid var(--primary); box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.5); }
 
 /* Lado Esquerdo - AO VIVO AGORA */
 .bottom-bar-left { padding: 0 2rem 0 1.5rem; gap: .6rem; clip-path: polygon(0 0, calc(100% - 20px) 0, 100% 100%, 0 100%); }
