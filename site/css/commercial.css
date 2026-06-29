@@ -23,17 +23,16 @@
 
 /* Centro - Player Info */
 .bottom-bar-center { flex: 0 1 auto; padding: 0 3rem; gap: 1rem; justify-content: center; clip-path: polygon(20px 0, calc(100% - 20px) 0, 100% 100%, 0 100%); border-right: 1px solid rgba(0, 196, 181, 0.2); border-left: 1px solid rgba(0, 196, 181, 0.2); }
-.schedule-partners-card:not(.hidden) { display: block; }
 .partner-carousel { min-width: 0; height: 60px; overflow: hidden; margin-top: .5rem; position: relative; }
 .partner-carousel::before, .partner-carousel::after { content: ''; position: absolute; top: 0; bottom: 0; width: 40px; z-index: 2; pointer-events: none; }
-.partner-carousel::before { left: 0; background: linear-gradient(to right, rgba(8, 17, 28, 1), transparent); }
-.partner-carousel::after { right: 0; background: linear-gradient(to left, rgba(8, 17, 28, 1), transparent); }
+.partner-carousel::before { left: 0; background: linear-gradient(to right, rgba(10, 15, 25, 0.9), transparent); }
+.partner-carousel::after { right: 0; background: linear-gradient(to left, rgba(10, 15, 25, 0.9), transparent); }
 .partner-carousel-track { width: max-content; height: 100%; display: flex; animation: partner-flow var(--partner-carousel-duration,24s) linear infinite; will-change: transform; }
 .partner-carousel-track:hover { animation-play-state: paused; }
 .partner-carousel-slide { flex: 0 0 120px; height: 100%; display: flex; align-items: center; justify-content: center; padding: 0 .5rem; transition: opacity 0.2s ease; opacity: 0.5; }
 .partner-carousel-slide:hover { opacity: 1; }
 .partner-carousel-link { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: inherit; text-decoration: none; }
-.partner-carousel-slide img { width: auto; max-width: 90px; max-height: 45px; object-fit: contain; filter: brightness(0) invert(1); }
+.partner-carousel-slide img { width: auto; max-width: 90px; max-height: 45px; object-fit: contain; }
 .partner-carousel-slide span, .partner-carousel-slide strong { display: none; }
 @keyframes partner-flow { to { transform: translateX(-50%); } }
 
