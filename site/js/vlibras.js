@@ -20,6 +20,7 @@
         var widget = document.createElement('div');
         widget.setAttribute('vw', '');
         widget.className = 'enabled';
+        widget.style.cssText = 'display:block !important; position:fixed !important; right:0 !important; top:50% !important; z-index:999999 !important; min-width: 50px; min-height: 50px; border: 2px solid red; background: rgba(255,0,0,0.2);';
         widget.innerHTML = [
             '<div vw-access-button class="active"></div>',
             '<div vw-plugin-wrapper>',
@@ -30,13 +31,25 @@
         document.body.appendChild(widget);
     }
 
+    function showDebugError(msg) {
+        console.warn(msg);
+        var errBox = document.createElement('div');
+        errBox.style = 'position:fixed;bottom:10px;left:10px;background:red;color:white;padding:10px;z-index:999999;border-radius:4px;';
+        errBox.innerText = 'VLibras Error: ' + msg;
+        document.body.appendChild(errBox);
+    }
+
     function createWidget() {
         if (!window.VLibras || !window.VLibras.Widget) {
-            console.warn('VLibras nao carregou. Verifique a conexao e bloqueadores de scripts.');
+            showDebugError('window.VLibras.Widget is undefined after script load.');
             return;
         }
 
-        new window.VLibras.Widget(APP_URL);
+        try {
+            new window.VLibras.Widget(APP_URL);
+        } catch (e) {
+            showDebugError(e.message);
+        }
     }
 
     function loadPlugin() {
@@ -58,7 +71,7 @@
         script.src = SCRIPT_SRC;
         script.onload = createWidget;
         script.onerror = function () {
-            console.warn('Nao foi possivel carregar o plugin VLibras em ' + SCRIPT_SRC + '.');
+            showDebugError('Failed to load plugin script from ' + SCRIPT_SRC);
         };
         document.body.appendChild(script);
     }
