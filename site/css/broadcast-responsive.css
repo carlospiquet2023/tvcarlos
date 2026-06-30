@@ -24,7 +24,7 @@
 @media (max-width: 860px) {
     .main-header { min-height: 84px; padding: .85rem 1rem; }
     .logo-kicker, .header-links, .status-container { display: none; }
-    .logo-icon.has-custom-logo { width: 134px; height: 52px; max-width: 35vw; }
+    .logo-icon.has-custom-logo { width: 116px; height: 44px; max-width: 35vw; }
     .logo-text { font-size: 1.15rem; }
     .menu-toggle { display: flex; margin-left: auto; }
     .mobile-menu:not(.hidden) { position: absolute; top: calc(100% + 1px); right: .8rem; left: .8rem; z-index: 120; display: grid; gap: .55rem; padding: .75rem; background: rgba(255,255,255,.98); border: 1px solid var(--line); border-radius: 9px; box-shadow: var(--shadow-md); }
