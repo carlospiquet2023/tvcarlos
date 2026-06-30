@@ -203,10 +203,12 @@ html.a11y-readable-font .destaque-card-content p {
 }
 
 /* Garante que o VLibras fique acima de tudo */
-div[vw] { z-index: 2147483647 !important; }
-div[vw] .vw-access-button { z-index: 2147483647 !important; }
-
+div[vw],
+div[vw] .vw-plugin-wrapper,
+div[vw] .vw-plugin-top-wrapper { 
+    z-index: 2147483647 !important; 
+    position: fixed !important;
+}
 
 /* Esconder botao nativo do VLibras pois agora ele esta na gaveta */
 div[vw] .vw-access-button { display: none !important; }
-
