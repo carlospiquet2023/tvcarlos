@@ -27,17 +27,11 @@
     bar.setAttribute('role', 'toolbar');
     bar.setAttribute('aria-label', 'Ferramentas de acessibilidade');
 
-    // Label
-    const label = document.createElement('span');
-    label.className = 'a11y-bar-label';
-    label.innerHTML = '<i class="fa-solid fa-universal-access"></i> Acessibilidade';
-    bar.appendChild(label);
-
     // Botão Alto Contraste
     const btnContrast = document.createElement('button');
     btnContrast.className = 'a11y-btn' + (root.classList.contains('a11y-high-contrast') ? ' active' : '');
     btnContrast.type = 'button';
-    btnContrast.innerHTML = '<i class="fa-solid fa-circle-half-stroke"></i> Alto Contraste';
+    btnContrast.innerHTML = '<i class="fa-solid fa-circle-half-stroke"></i>';
     btnContrast.setAttribute('aria-pressed', root.classList.contains('a11y-high-contrast') ? 'true' : 'false');
     btnContrast.title = 'Ativar/desativar modo alto contraste (preto e amarelo)';
     btnContrast.addEventListener('click', function () {
@@ -53,7 +47,7 @@
     const btnFont = document.createElement('button');
     btnFont.className = 'a11y-btn' + (root.classList.contains('a11y-readable-font') ? ' active' : '');
     btnFont.type = 'button';
-    btnFont.innerHTML = '<i class="fa-solid fa-font"></i> Fonte Legível';
+    btnFont.innerHTML = '<i class="fa-solid fa-font"></i>';
     btnFont.setAttribute('aria-pressed', root.classList.contains('a11y-readable-font') ? 'true' : 'false');
     btnFont.title = 'Ativar/desativar fonte de alta legibilidade (Atkinson Hyperlegible)';
     btnFont.addEventListener('click', function () {
