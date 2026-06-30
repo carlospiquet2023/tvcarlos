@@ -56,7 +56,6 @@
 
         var script = document.createElement('script');
         script.src = SCRIPT_SRC;
-        script.async = true;
         script.onload = createWidget;
         script.onerror = function () {
             console.warn('Nao foi possivel carregar o plugin VLibras em ' + SCRIPT_SRC + '.');
