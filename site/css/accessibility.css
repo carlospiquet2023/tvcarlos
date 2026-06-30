@@ -206,3 +206,7 @@ html.a11y-readable-font .destaque-card-content p {
 div[vw] { z-index: 2147483647 !important; }
 div[vw] .vw-access-button { z-index: 2147483647 !important; }
 
+
+/* Esconder botao nativo do VLibras pois agora ele esta na gaveta */
+div[vw] .vw-access-button { display: none !important; }
+

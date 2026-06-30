@@ -76,6 +76,22 @@
     });
     bar.appendChild(btnFont);
 
+    // Botão VLibras (Integração)
+    const btnLibras = document.createElement('button');
+    btnLibras.className = 'a11y-btn';
+    btnLibras.type = 'button';
+    btnLibras.innerHTML = '<i class="fa-solid fa-hands-asl-interpreting"></i>';
+    btnLibras.title = 'Ativar Tradutor de Libras (VLibras)';
+    btnLibras.addEventListener('click', function () {
+        const vwBtn = document.querySelector('[vw-access-button]');
+        if (vwBtn) {
+            vwBtn.click(); // Dispara o clique no botão original do VLibras
+        } else {
+            console.warn('VLibras não está carregado no momento.');
+        }
+    });
+    bar.appendChild(btnLibras);
+
     widget.appendChild(bar);
 
     // ── Inserir widget no topo do body ──
