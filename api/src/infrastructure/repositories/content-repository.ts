@@ -185,6 +185,7 @@ export class PostgresContentRepository implements ContentRepository {
     accessPasswordHash: string;
     isActive: boolean;
     expiresAt?: Date | null;
+    librasUrl: string;
   }): Promise<PrivateRoom> {
     const now = new Date();
     const row = await this.database
@@ -206,6 +207,7 @@ export class PostgresContentRepository implements ContentRepository {
         expires_at: input.expiresAt ?? null,
         created_at: now,
         updated_at: now,
+        libras_url: input.librasUrl,
       })
       .returningAll()
       .executeTakeFirstOrThrow();
@@ -224,6 +226,7 @@ export class PostgresContentRepository implements ContentRepository {
     supportMaterialCurrentPage: number;
     isActive: boolean;
     expiresAt?: Date | null;
+    librasUrl: string;
   }): Promise<PrivateRoom | undefined> {
     const row = await this.database
       .updateTable('private_rooms')
@@ -240,6 +243,7 @@ export class PostgresContentRepository implements ContentRepository {
         is_active: input.isActive,
         expires_at: input.expiresAt ?? null,
         updated_at: new Date(),
+        libras_url: input.librasUrl,
       })
       .where('id', '=', id)
       .returningAll()
@@ -655,6 +659,7 @@ export class PostgresContentRepository implements ContentRepository {
     expires_at: Date | null;
     created_at: Date;
     updated_at: Date;
+    libras_url: string;
   }): PrivateRoom {
     return {
       id: row.id,
@@ -672,6 +677,7 @@ export class PostgresContentRepository implements ContentRepository {
       expiresAt: row.expires_at,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
+      librasUrl: row.libras_url,
     };
   }
 

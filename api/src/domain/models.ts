@@ -65,6 +65,7 @@ export interface PrivateRoom {
   expiresAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
+  librasUrl: string;
 }
 
 export interface PrivateRoomAccessSession {

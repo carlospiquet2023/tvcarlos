@@ -75,6 +75,7 @@ export interface ContentRepository {
     accessPasswordHash: string;
     isActive: boolean;
     expiresAt?: Date | null;
+    librasUrl: string;
   }): Promise<PrivateRoom>;
   updatePrivateRoom(id: string, input: {
     title: string;
@@ -88,6 +89,7 @@ export interface ContentRepository {
     supportMaterialCurrentPage: number;
     isActive: boolean;
     expiresAt?: Date | null;
+    librasUrl: string;
   }): Promise<PrivateRoom | undefined>;
   updatePrivateRoomPassword(id: string, accessPasswordHash: string): Promise<PrivateRoom | undefined>;
   deletePrivateRoom(id: string): Promise<boolean>;

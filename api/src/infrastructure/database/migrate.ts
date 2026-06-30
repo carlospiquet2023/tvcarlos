@@ -346,4 +346,14 @@ export async function migrate(database: Database): Promise<void> {
       await transaction.insertInto('app_migrations').values({ version: 12, applied_at: new Date() }).execute();
     });
   }
+
+  if (!versions.has(13)) {
+    await database.transaction().execute(async (transaction) => {
+      await transaction.schema
+        .alterTable('private_rooms')
+        .addColumn('libras_url', 'varchar(2048)', (column) => column.notNull().defaultTo(''))
+        .execute();
+      await transaction.insertInto('app_migrations').values({ version: 13, applied_at: new Date() }).execute();
+    });
+  }
 }

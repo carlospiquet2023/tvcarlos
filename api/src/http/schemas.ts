@@ -127,6 +127,7 @@ export const privateRoomSchema = z.strictObject({
   supportMaterialCurrentPage: z.coerce.number().int().min(1).max(9999).default(1),
   isActive: z.boolean().default(true),
   expiresAt: privateRoomExpiresAt,
+  librasUrl: z.string().trim().max(2048).default(''),
 }).superRefine((value, context) => {
   if (value.sourceType === 'live') return;
   if (!value.sourceUrl) {

@@ -96,6 +96,7 @@ function renderRoom(room) {
 
     renderVideo(room.sourceType === 'live' ? STREAMS.live.url : normalizeVideoUrl(room.sourceUrl), room.sourceType === 'live');
     renderSupportMaterial(room);
+    renderLibras(room);
 }
 
 async function refreshRoomState(roomCode) {
@@ -261,6 +262,80 @@ function renderSupportMaterial(room, { preserveVisibility = false } = {}) {
     resetMaterialPanelPosition(panel);
     materialToggle.classList.remove('hidden');
     setSupportMaterialVisible(previousVisible);
+}
+
+let librasVisible = true;
+let librasHls = null;
+
+function renderLibras(room) {
+    const existing = roomStage.querySelector('.private-room-libras-panel');
+    existing?.remove();
+    if (librasHls) {
+        librasHls.destroy();
+        librasHls = null;
+    }
+    
+    if (!room.librasUrl) {
+        return;
+    }
+
+    const panel = element('aside', {
+        className: 'private-room-libras-panel',
+        attributes: { 'aria-label': 'Intérprete de Libras' },
+    });
+    
+    const header = element('div', { className: 'private-room-libras-header' });
+    header.title = 'Arrastar janela de Libras';
+    const closeButton = element('button', { title: 'Ocultar Libras', attributes: { type: 'button', 'aria-label': 'Ocultar Libras' } });
+    closeButton.append(icon('fa-solid fa-xmark'));
+    closeButton.addEventListener('click', () => {
+        panel.classList.add('hidden');
+        librasVisible = false;
+    });
+    header.append(element('strong', { text: 'Sinal Libras' }), closeButton);
+    header.addEventListener('pointerdown', (event) => beginMaterialPanelDrag(event, panel)); // Reutilizando a lógica de drag do material
+
+    const body = element('div', { className: 'private-room-libras-body' });
+    
+    const embedUrl = buildYouTubeEmbedUrl(room.librasUrl);
+    if (embedUrl) {
+        const frame = element('iframe', {
+            attributes: {
+                src: embedUrl + '&autoplay=1&mute=1',
+                allow: 'autoplay; encrypted-media',
+                allowfullscreen: '',
+                frameborder: '0'
+            }
+        });
+        body.append(frame);
+    } else {
+        const video = element('video', {
+            attributes: { playsinline: '', autoplay: '', muted: '', loop: '' }
+        });
+        const HlsLibrary = window.Hls;
+        if (HlsLibrary?.isSupported()) {
+            librasHls = new HlsLibrary();
+            librasHls.loadSource(room.librasUrl);
+            librasHls.attachMedia(video);
+        } else {
+            video.src = room.librasUrl;
+        }
+        body.append(video);
+    }
+
+    panel.append(header, body, renderMaterialResizeHandles(panel)); // Reusing resize logic
+    roomStage.append(panel);
+    
+    // Position Libras at bottom right by default
+    const rect = roomStage.getBoundingClientRect();
+    panel.style.width = '240px';
+    panel.style.height = '180px';
+    panel.style.left = `${rect.width - 260}px`;
+    panel.style.top = `${rect.height - 200}px`;
+    
+    if (!librasVisible) {
+        panel.classList.add('hidden');
+    }
 }
 
 function updateSupportMaterialInPlace(room) {
@@ -486,7 +561,7 @@ function supportMaterialDisplayUrl(room) {
 }
 
 function roomSourceSignature(room) {
-    return [room.title, room.description, room.sourceType, room.sourceUrl].join('|');
+    return [room.title, room.description, room.sourceType, room.sourceUrl, room.librasUrl].join('|');
 }
 
 function materialSignature(room) {

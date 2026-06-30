@@ -389,6 +389,7 @@ export function createPrivateRoomAdminController({ navigate, onMutation }) {
             description: byId('private-room-description-input').value.trim(),
             sourceType,
             sourceUrl: sourceType === 'live' ? '' : byId('private-room-source-url-input').value.trim(),
+            librasUrl: byId('private-room-libras-url-input').value.trim(),
             supportMaterialEnabled: byId('private-room-material-enabled-input').checked,
             supportMaterialTitle: byId('private-room-material-title-input').value.trim() || 'Material de apoio',
             supportMaterialType: byId('private-room-material-type-input').value,
@@ -405,6 +406,7 @@ export function createPrivateRoomAdminController({ navigate, onMutation }) {
         byId('private-room-description-input').value = room.description || '';
         byId('private-room-source-type-input').value = room.sourceType;
         byId('private-room-source-url-input').value = room.sourceUrl || '';
+        byId('private-room-libras-url-input').value = room.librasUrl || '';
         byId('private-room-material-enabled-input').checked = Boolean(room.supportMaterialEnabled);
         byId('private-room-material-title-input').value = room.supportMaterialTitle || 'Material de apoio';
         byId('private-room-material-type-input').value = room.supportMaterialType || 'url';

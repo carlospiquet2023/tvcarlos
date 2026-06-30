@@ -62,6 +62,7 @@ export interface PrivateRoomsTable {
   expires_at: NullableTimestamp;
   created_at: Timestamp;
   updated_at: Timestamp;
+  libras_url: string;
 }
 
 export interface PrivateRoomAccessSessionsTable {

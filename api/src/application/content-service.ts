@@ -114,7 +114,7 @@ export class ContentService {
     await this.record(actor, 'program.deleted', 'program', id);
   }
 
-  async createPrivateRoom(input: Pick<PrivateRoom, 'title' | 'description' | 'sourceType' | 'sourceUrl' | 'supportMaterialEnabled' | 'supportMaterialTitle' | 'supportMaterialType' | 'supportMaterialUrl' | 'supportMaterialCurrentPage' | 'isActive' | 'expiresAt'>, actor: ActorContext) {
+  async createPrivateRoom(input: Pick<PrivateRoom, 'title' | 'description' | 'sourceType' | 'sourceUrl' | 'supportMaterialEnabled' | 'supportMaterialTitle' | 'supportMaterialType' | 'supportMaterialUrl' | 'supportMaterialCurrentPage' | 'isActive' | 'expiresAt' | 'librasUrl'>, actor: ActorContext) {
     const accessPassword = generateAccessPassword();
     const room = await this.content.createPrivateRoom({
       ...input,
@@ -125,7 +125,7 @@ export class ContentService {
     return { room, accessPassword };
   }
 
-  async updatePrivateRoom(id: string, input: Pick<PrivateRoom, 'title' | 'description' | 'sourceType' | 'sourceUrl' | 'supportMaterialEnabled' | 'supportMaterialTitle' | 'supportMaterialType' | 'supportMaterialUrl' | 'supportMaterialCurrentPage' | 'isActive' | 'expiresAt'>, actor: ActorContext) {
+  async updatePrivateRoom(id: string, input: Pick<PrivateRoom, 'title' | 'description' | 'sourceType' | 'sourceUrl' | 'supportMaterialEnabled' | 'supportMaterialTitle' | 'supportMaterialType' | 'supportMaterialUrl' | 'supportMaterialCurrentPage' | 'isActive' | 'expiresAt' | 'librasUrl'>, actor: ActorContext) {
     const room = await this.content.updatePrivateRoom(id, input);
     if (!room) throw new NotFoundError('Sala privada não encontrada.');
     await this.record(actor, 'private_room.updated', 'private_room', id, { roomCode: room.roomCode, sourceType: room.sourceType });
@@ -218,6 +218,7 @@ export class ContentService {
       supportMaterialCurrentPage: input.supportMaterialCurrentPage,
       isActive: room.isActive,
       expiresAt: room.expiresAt ?? null,
+      librasUrl: room.librasUrl,
     });
     if (!updated) throw new NotFoundError('Sala privada não encontrada.');
     await this.record(actor, 'private_room.material_updated', 'private_room', roomId, {
@@ -531,5 +532,6 @@ function sanitizePrivateRoom(room: PrivateRoom) {
     expiresAt: room.expiresAt,
     createdAt: room.createdAt,
     updatedAt: room.updatedAt,
+    librasUrl: room.librasUrl,
   };
 }
