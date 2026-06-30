@@ -1,14 +1,66 @@
+@media (max-width: 480px) {
+    :root {
+        --site-gutter: .35rem;
+        --site-shell-max: 100%;
+        --player-shell-max: 100%;
+    }
+}
+
+@media (min-width: 481px) and (max-width: 768px) {
+    :root {
+        --site-gutter: .65rem;
+        --site-shell-max: 100%;
+        --player-shell-max: 100%;
+    }
+}
+
+@media (min-width: 769px) and (max-width: 1024px) {
+    :root {
+        --site-gutter: .75rem;
+        --site-shell-max: 100%;
+        --player-shell-max: 100%;
+        --schedule-column-width: 300px;
+    }
+}
+
+@media (min-width: 1025px) and (max-width: 1366px) {
+    :root {
+        --site-gutter: 1rem;
+        --site-shell-max: 1360px;
+        --player-shell-max: 960px;
+        --schedule-column-width: 350px;
+    }
+}
+
+@media (min-width: 1367px) and (max-width: 1599px) {
+    :root {
+        --site-gutter: 1.25rem;
+        --site-shell-max: 1360px;
+        --player-shell-max: 940px;
+        --schedule-column-width: 360px;
+    }
+}
+
+@media (min-width: 1600px) {
+    :root {
+        --site-gutter: 1.25rem;
+        --site-shell-max: 1360px;
+        --player-shell-max: 940px;
+        --schedule-column-width: 360px;
+    }
+}
+
 @media (max-width: 1100px) {
-    .content-grid { grid-template-columns: minmax(0,1fr) minmax(288px, 30vw); }
+    .content-grid { grid-template-columns: minmax(0,1fr) var(--schedule-column-width); }
     .transmission-facts { display: none; }
     .logo-icon.has-custom-logo { max-width: 22vw; }
 }
 
-@media (min-width: 861px) and (max-height: 700px) {
+@media (min-width: 861px) and (max-height: 820px) {
     .content-grid { padding: .55rem .9rem .35rem; }
     .section-rail { display: none; }
     .player-section { gap: .5rem; }
-    .player-wrapper { width: min(100%, calc((100dvh - var(--ticker-height) - 12.5rem) * 16 / 9)); }
+    .player-wrapper { width: min(100%, calc((100dvh - var(--ticker-height) - 15rem) * 16 / 9)); }
     .destaques-section { margin-top: .35rem; padding-left: 1.5rem; gap: .32rem; }
     .destaques-header { padding-bottom: .1rem; }
     .destaques-title { font-size: .95rem; }

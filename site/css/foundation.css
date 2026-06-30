@@ -26,6 +26,10 @@
     --radius-md: 12px;
     --radius-lg: 16px;
     --ticker-height: 52px;
+    --site-gutter: clamp(.75rem, 1.5vw, 1.25rem);
+    --site-shell-max: 1360px;
+    --player-shell-max: 960px;
+    --schedule-column-width: clamp(300px, 26vw, 360px);
 }
 
 *, *::before, *::after { box-sizing: border-box; }
