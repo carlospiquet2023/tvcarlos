@@ -211,4 +211,4 @@ div[vw] .vw-plugin-top-wrapper {
 }
 
 /* Esconder botao nativo do VLibras pois agora ele esta na gaveta */
-div[vw] .vw-access-button { display: none !important; }
+div[vw] [vw-access-button] { display: none !important; }

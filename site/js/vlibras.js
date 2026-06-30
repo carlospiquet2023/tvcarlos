@@ -10,7 +10,7 @@
 
         var style = document.createElement('style');
         style.id = STYLE_ID;
-        style.textContent = 'div[vw], div[vw] .vw-access-button { z-index: 2147483647 !important; }';
+        style.textContent = 'div[vw], div[vw] [vw-access-button] { z-index: 2147483647 !important; }';
         document.head.appendChild(style);
     }
 
