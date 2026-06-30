@@ -21,9 +21,26 @@
         root.classList.add('a11y-readable-font');
     }
 
-    // ── Criar barra de acessibilidade ──
+    // ── Criar container principal ──
+    const widget = document.createElement('div');
+    widget.className = 'a11y-widget';
+    widget.setAttribute('role', 'region');
+    widget.setAttribute('aria-label', 'Menu de acessibilidade');
+
+    // Botão de abrir/fechar
+    const toggleBtn = document.createElement('button');
+    toggleBtn.className = 'a11y-toggle';
+    toggleBtn.type = 'button';
+    toggleBtn.innerHTML = '<i class="fa-solid fa-universal-access"></i>';
+    toggleBtn.title = 'Abrir ferramentas de acessibilidade';
+    toggleBtn.addEventListener('click', () => {
+        widget.classList.toggle('open');
+    });
+    widget.appendChild(toggleBtn);
+
+    // ── Criar barra de acessibilidade (menu interno) ──
     const bar = document.createElement('div');
-    bar.className = 'a11y-bar';
+    bar.className = 'a11y-menu';
     bar.setAttribute('role', 'toolbar');
     bar.setAttribute('aria-label', 'Ferramentas de acessibilidade');
 
@@ -59,6 +76,8 @@
     });
     bar.appendChild(btnFont);
 
-    // ── Inserir barra no topo do body ──
-    document.body.insertBefore(bar, document.body.firstChild);
+    widget.appendChild(bar);
+
+    // ── Inserir widget no topo do body ──
+    document.body.insertBefore(widget, document.body.firstChild);
 })();

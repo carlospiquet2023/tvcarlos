@@ -3,12 +3,21 @@
    Ativado pela classe .a11y-high-contrast no <html>
    =================================================================== */
 
-/* ---------- Barra de acessibilidade ---------- */
-.a11y-bar {
+/* ---------- Barra de acessibilidade (Gaveta) ---------- */
+.a11y-widget {
     position: fixed;
     top: 50%;
     left: 0;
-    transform: translateY(-50%);
+    transform: translateY(-50%) translateX(-100%);
+    display: flex;
+    align-items: center;
+    z-index: 200;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.a11y-widget.open {
+    transform: translateY(-50%) translateX(0);
+}
+.a11y-menu {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -18,9 +27,37 @@
     border: 1px solid var(--line, #1e293b);
     border-left: none;
     border-radius: 0 12px 12px 0;
-    z-index: 200;
     backdrop-filter: blur(8px);
     box-shadow: 4px 0 15px rgba(0,0,0,0.3);
+}
+.a11y-toggle {
+    position: absolute;
+    right: -42px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 42px;
+    height: 48px;
+    background: rgba(8, 21, 35, 0.95);
+    color: var(--ink-soft, #94a3b8);
+    border: 1px solid var(--line, #1e293b);
+    border-left: none;
+    border-radius: 0 12px 12px 0;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    font-size: 1.2rem;
+    backdrop-filter: blur(8px);
+    box-shadow: 4px 0 15px rgba(0,0,0,0.3);
+    transition: color 0.2s, right 0.3s;
+}
+.a11y-widget.open .a11y-toggle {
+    background: var(--surface-soft, #081523);
+}
+.a11y-widget.open .a11y-toggle i::before {
+    content: "\f00d"; /* fa-xmark (close icon) */
+}
+.a11y-toggle:hover {
+    color: var(--primary, #00c4b5);
 }
 .a11y-btn {
     display: grid;
