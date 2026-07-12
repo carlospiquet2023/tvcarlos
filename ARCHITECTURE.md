@@ -1,29 +1,28 @@
 # Arquitetura do Projeto EduVault
 
 ## Visão Geral
-Plataforma full-stack de hospedagem segura de vídeos educacionais com streaming HLS adaptativo, dashboard premium do aluno com progresso, editor de blocos drag-and-drop, materiais PDF por módulo, calendário por curso, painel administrativo completo com paginação e busca, importação de alunos via Excel, **sistema de branding dinâmico** (cores, logo e nome configuráveis pelo admin), **infraestrutura de produção para 10k+ alunos** (PM2 cluster, Nginx, PostgreSQL tuning), **módulo de aulas ao vivo** (integração Zoom), **ops & observabilidade** (Uptime Kuma, rate limiting Nginx, CloudFlare CDN, k6 load tests, runbook de incidentes), **production hardening** (health check avançado, PM2 log rotation, teste automático de backup, rollback strategy, incidente DDoS), **fórum por aula com sistema de punições** (comentários, denúncias, filtro de profanidade por severidade, bans automáticos/manuais, recursos do aluno, painel de moderação e punições no admin) e **sistema de presença automática** (heartbeat de vídeo a cada 30s, tempo mínimo configurável pelo admin, listas editáveis com auditoria de justificativa).
+Plataforma full-stack de hospedagem segura de vídeos educacionais com streaming HLS adaptativo, dashboard premium do aluno com progresso, editor de blocos drag-and-drop, materiais PDF por módulo, calendário por curso, painel administrativo completo com paginação e busca, importação de alunos via Excel, **sistema de branding dinâmico** (cores, logo e nome configuráveis pelo admin), **infraestrutura de produção para 10k+ alunos** (PM2 cluster, Nginx, PostgreSQL tuning), **módulo de aulas ao vivo multiplataforma** (Meet/Teams/Zoom/Jitsi/Whereby/BBB), **ops & observabilidade** (Uptime Kuma, rate limiting Nginx, CloudFlare CDN, k6 load tests, runbook de incidentes), **production hardening** (health check avançado, PM2 log rotation, teste automático de backup, rollback strategy, incidente DDoS), **growth engine v9** (trilha inteligente, certificado verificável, quiz por aula, BI executivo e campanhas automáticas) e **growth intelligence v10** (segmentação avançada por curso/turma/quiz, BI temporal 7/30/90, ranking agressivo de risco por aluno).
 
 ```
 plataforma/
 ├── backend/                      # API Node.js/Express 5 + TypeScript
 │   ├── prisma/
-│   │   ├── schema.prisma         # Modelo do banco (PostgreSQL) — 17 modelos + índices otimizados
+│   │   ├── schema.prisma         # Modelo do banco (PostgreSQL) — 10 modelos + índices otimizados
 │   │   └── seed.ts               # Script idempotente de dados iniciais
 │   ├── src/
 │   │   ├── config/
 │   │   │   └── pgBoss.ts         # Fila de background jobs (processamento de vídeo)
 │   │   ├── lib/
 │   │   │   ├── prisma.ts         # Singleton do Prisma Client (log por ambiente)
-│   │   │   ├── logger.ts         # Pino structured logging (nivel por ambiente)
-│   │   │   └── profanityFilter.ts# Filtro de profanidade local (3 severidades: LIGHT/MEDIUM/SEVERE) com ~50 padrões
+│   │   │   └── logger.ts         # Pino structured logging (nivel por ambiente)
 │   │   ├── middleware/
 │   │   │   ├── authMiddleware.ts  # JWT: autenticação + controle de permissão por role
 │   │   │   └── uploadMiddleware.ts# Multer: upload de vídeo com filtro e limite
 │   │   ├── routes/
 │   │   │   ├── auth.ts           # Login, perfil (senha forte 8+ chars), stream-token
-│   │   │   ├── admin.ts          # CRUD paginado: users, courses, modules, enrollments, videos, PDFs, imagens, Excel, config, moderação, punições, recursos, presença
-│   │   │   ├── config.ts         # Rota pública de branding + flags do fórum + presença (cache em memória 1min)
-│   │   │   ├── student.ts        # Meus cursos (batch otimizado), aula com PDF/calendário, progresso, fórum (comentários, denúncias, status de ban, recurso), heartbeat de presença
+│   │   │   ├── admin.ts          # CRUD paginado: users, courses, modules, enrollments, videos, PDFs, imagens, Excel, config
+│   │   │   ├── config.ts         # Rota pública de branding (cache em memória 1min)
+│   │   │   ├── student.ts        # Meus cursos (batch otimizado), aula com PDF/calendário, progresso
 │   │   │   └── video.ts          # Upload + listagem de vídeos por módulo
 │   │   ├── services/
 │   │   │   └── videoProcessor.ts  # Worker FFmpeg: mp4 → HLS multi-qualidade com timeout 30min
@@ -36,9 +35,8 @@ plataforma/
 │   └── src/
 │       ├── components/
 │       │   ├── BlockEditor.tsx   # Editor de blocos drag-and-drop (texto, imagem, destaque) + 25 fontes + cor de fundo
-│       │   ├── LessonComments.tsx# Fórum de comentários por aula: polling 5s, respostas, denúncias, modal de violação, banner de ban, recurso
 │       │   ├── ProtectedRoute.tsx # Guard de rotas: redireciona por role (admin/student)
-│       │   └── VideoPlayer.tsx   # Player video.js + HLS + watermark + progresso automático + heartbeat de presença
+│       │   └── VideoPlayer.tsx   # Player video.js + HLS + watermark + progresso automático
 │       ├── context/
 │       │   ├── AuthContext.tsx    # Estado global de autenticação (React Context)
 │       │   └── ConfigContext.tsx  # Branding dinâmico: aplica cores, logo e nome via CSS vars
@@ -46,9 +44,9 @@ plataforma/
 │       │   └── api.ts            # Instância Axios configurada com baseURL
 │       ├── pages/
 │       │   ├── Login.tsx         # Tela de login (username ou e-mail) — logo e nome dinâmicos
-│       │   ├── AdminDashboard.tsx# Painel admin: users, cursos, módulos, PDFs, editor de blocos, Excel, branding, moderação, punições, presença
+│       │   ├── AdminDashboard.tsx# Painel admin: users (paginação+busca), cursos, módulos, PDFs, editor de blocos, Excel, branding
 │       │   ├── StudentDashboard.tsx# Dashboard aluno: carrossel Netflix, busca, progresso
-│       │   └── LessonPage.tsx    # Página da aula: vídeo + blocos + anotações + downloads + fórum de comentários
+│       │   └── LessonPage.tsx    # Página da aula: vídeo + blocos + anotações + downloads (PDF/calendário)
 │       ├── App.tsx               # Roteamento principal (React Router) — ConfigProvider global
 │       └── index.css             # Design system completo (CSS vars dinâmicas, 25 fontes Google)
 │
@@ -56,6 +54,19 @@ plataforma/
 │   ├── postgresql.conf           # Tuning PostgreSQL para 10k+ (SSD, shared_buffers, slow query log)
 │   ├── docker-compose.monitoring.yml # Uptime Kuma (monitoramento self-hosted)
 │   └── test-backup-restore.sh    # Teste automático de restauração de backup (cron semanal)
+├── docker-compose.yml             # Stack Docker profissional (frontend + backend + postgres)
+├── docker-compose.prod.yml        # Compose dedicado de produção (exposição mínima + frontend em :80)
+├── .env.prod.example              # Template de variáveis seguras para produção
+├── backend/Dockerfile             # Imagem backend (build TS + runtime)
+├── backend/docker-entrypoint.sh   # Migrations versionadas, seed opt-in e start
+├── frontend/Dockerfile            # Build React e serve estatico via Nginx
+├── frontend/Dockerfile.prod        # Build frontend para modo produção
+├── frontend/nginx.docker.conf     # Reverse proxy interno para /api, /hls e /uploads
+├── frontend/nginx.prod.conf        # Nginx de produção do frontend container
+├── SUBIR_PRODUCAO_DOCKER.bat       # Start de produção no Windows
+├── PARAR_PRODUCAO_DOCKER.bat       # Stop de produção no Windows
+├── SUBIR_PRODUCAO_DOCKER.sh        # Start de produção no Linux
+├── PARAR_PRODUCAO_DOCKER.sh        # Stop de produção no Linux
 ├── k6/                            # Testes de carga
 │   ├── load-test.js              # Suite completa: smoke (5 VUs), load (100), stress (300), spike (500)
 │   └── smoke-test.js             # Smoke test rápido pré-deploy (5 VUs, 15s)
@@ -73,6 +84,28 @@ plataforma/
 ## Fluxo de Dados
 
 ```
+
+## Stack Docker (v11)
+
+```
+[Browser]
+      │
+      ▼
+Frontend container (Nginx :5173)
+      ├── /api/*      -> backend:4000
+      ├── /hls/*      -> backend:4000
+      └── /uploads/*  -> backend:4000
+                                                 │
+                                                 ▼
+                               Backend container (Node/Express :4000)
+                                                 │
+                                                 ▼
+                                Postgres container (:5432)
+```
+
+Volumes persistentes:
+- `postgres_data` para banco
+- `eduvault_uploads` para vídeos HLS/imagens/pdfs
 [Admin cria curso (+ thumbnail + calendário PDF) / módulo (+ PDF material) / vídeo]
          │
          ▼
@@ -200,101 +233,6 @@ Admin → Upload .xlsx/.xls
    Retorna: tabela de credenciais para o admin distribuir
 ```
 
-## Fórum de Comentários por Aula
-
-```
-Aluno → LessonPage → LessonComments.tsx
-         │
-   GET /api/student/comments/:videoId (polling 5s)
-         │
-   POST /api/student/comments { text, parentId? }
-         │
-   ├── Verifica ban ativo (ForumBan.active + expiresAt)
-   ├── Verifica commentsEnabled no Video
-   ├── Filtro de Profanidade (profanityFilter.ts)
-   │     ├── ~50 regex patterns (palavrões, xingamentos, preconceito)
-   │     ├── 3 severidades: LIGHT, MEDIUM, SEVERE
-   │     └── Retorna { flagged, severity, word } ou null
-   │
-   ├── Se flagged:
-   │     ├── Cria ForumViolation (registra word, severity, autoAction)
-   │     ├── Conta violações do aluno
-   │     ├── Aplica punição automática (se forumPunishmentEnabled):
-   │     │     ├── LIGHT 3ª ofensa → ban 1 dia
-   │     │     ├── MEDIUM → ban 2 dias imediato
-   │     │     ├── SEVERE → ban 10 dias + "encaminhar ao comitê"
-   │     │     └── 5ª+ ofensa (qualquer) → ban permanente
-   │     └── Retorna 403 com detalhes da violação
-   │
-   └── Se limpo: cria LessonComment normalmente
-```
-
-## Sistema de Moderação e Punições (Admin)
-
-```
-Admin → AdminDashboard → Tab "Moderação"
-         │
-   GET /api/admin/comments/flagged?page=&limit=
-         │
-   Para cada comentário flagrado:
-   ├── DELETE /api/admin/comments/:id  → remove
-   └── PUT /api/admin/comments/:id/approve → desflagra
-
-Admin → AdminDashboard → Tab "Punições"
-         │
-   ├── GET /api/admin/violations  → lista violações
-   ├── GET /api/admin/bans        → lista bans (ativos/expirados)
-   ├── POST /api/admin/bans       → ban manual (userId, reason, banType)
-   ├── PUT /api/admin/bans/:id/lift → revoga ban
-   ├── GET /api/admin/appeals     → lista recursos (filtro por status)
-   ├── PUT /api/admin/appeals/:id → aprova/rejeita recurso
-   └── PUT /api/admin/punishment-toggle → ativa/desativa punições automáticas
-
-Aluno → LessonComments.tsx → Banner de Ban
-         │
-   GET /api/student/forum/my-status → violações + ban + recursos
-         │
-   POST /api/student/forum/appeal { reason } → envia recurso
-```
-
-## Sistema de Presença Automática
-
-```
-Aluno → LessonPage → VideoPlayer.tsx
-         │
-   Enquanto vídeo está em play:
-   setInterval(30s) → POST /api/student/attendance/heartbeat { moduleId }
-         │
-   Backend (student.ts):
-   ├── Verifica attendanceEnabled na PlatformConfig
-   ├── Verifica matrícula ativa no curso do módulo
-   ├── Calcula data de hoje (zerado horas/minutos)
-   ├── Upsert Attendance (userId + moduleId + date)
-   │     └── Incrementa watchTimeSeconds += 30
-   ├── Se watchTimeSeconds >= attendanceMinMinutes * 60:
-   │     └── status = PRESENT (autoDetected = true)
-   └── Retorna { tracked, watchTimeSeconds, status, threshold }
-
-Admin → AdminDashboard → Tab "Presença"
-         │
-   ├── Configuração:
-   │     ├── attendanceEnabled (toggle on/off)
-   │     ├── attendanceMinMinutes (tempo mínimo, default 20min)
-   │     └── attendanceMode (DATE_ONLY = só no dia / FREE = qualquer dia)
-   │
-   ├── Consulta: GET /api/admin/attendance?moduleId=&date=
-   │     └── Retorna lista completa (presentes + ausentes via enrollment)
-   │
-   ├── Edição: PUT /api/admin/attendance/:id
-   │     ├── Exige justificativa (texto obrigatório)
-   │     ├── Cria AttendanceEdit (audit trail)
-   │     └── Registra quem editou (editedByUserId)
-   │
-   └── Criação Manual: POST /api/admin/attendance
-         ├── Para alunos sem registro no dia
-         └── Exige justificativa + audit trail
-```
-
 ## Camadas de Segurança
 
 | Camada | Implementação | Arquivo |
@@ -318,9 +256,6 @@ Admin → AdminDashboard → Tab "Presença"
 | **FFmpeg Timeout** | 30 minutos por qualidade, kill automático | `videoProcessor.ts` |
 | **Pino Logging** | JSON estruturado + pino-http (substitui console.log) | `logger.ts`, `server.ts` |
 | **Async File System** | Todas as operações de disco via fs/promises + Promise.all | `admin.ts` |
-| **Filtro Profanidade** | ~50 regex patterns com 3 severidades (LIGHT/MEDIUM/SEVERE), bloqueia post e registra violação | `profanityFilter.ts` |
-| **Ban Automático Fórum** | LIGHT 3ª→1d, MEDIUM→2d, SEVERE→10d+comitê, 5ª+→permanente; admin pode revogar | `student.ts`, `admin.ts` |
-| **Presença Auditada** | Edições de presença exigem justificativa + audit trail (AttendanceEdit) com quem editou e quando | `admin.ts` |
 
 ## Infraestrutura de Produção (10k+ alunos)
 
@@ -340,21 +275,11 @@ Admin → AdminDashboard → Tab "Presença"
 User ──┬── CourseEnrollment ──── Course ──── Module ──── Video
        │     (@@unique          (calendarUrl)  (pdfUrl    (content JSON blocos)
        │      userId+courseId)                  @@index    @@index moduleId)
-       │                                       courseId)       │
-       ├── VideoHistory ───────────────────────────────────┘
-       │      (@@unique userId+videoId)
-       │
-       ├── Attendance ─── AttendanceEdit
-       │      (@@unique userId+moduleId+date)   (justification, editedBy)
-       │
-       ├── LessonComment ─── CommentReport
-       │      (replies auto-ref, flagged, videoId)
-       │
-       ├── ForumViolation   (word, severity: LIGHT/MEDIUM/SEVERE, autoAction)
-       ├── ForumBan         (banType: TEMP_1D/2D/10D/PERMANENT, active, expiresAt)
-       └── ForumAppeal      (reason, status: PENDING/APPROVED/REJECTED, adminNote)
+       │                                       courseId)
+       └── VideoHistory ───────────────────────────────────┘
+              (@@unique userId+videoId)
 
-PlatformConfig (singleton — branding global + flags do fórum + presença)
+PlatformConfig (singleton — branding global)
 ```
 
 ### Campos-chave por modelo:
@@ -362,19 +287,12 @@ PlatformConfig (singleton — branding global + flags do fórum + presença)
 - `Course`: id, name, description, thumbnailUrl, **calendarUrl**
 - `CourseEnrollment`: userId, courseId (@@unique)
 - `Module`: id, name, **pdfUrl**, courseId (@@index), order
-- `Video`: id, title, description, **content** (JSON blocos ou HTML legado), thumbnailUrl, hlsUrl, status, moduleId (@@index), order, **commentsEnabled**
+- `Video`: id, title, description, **content** (JSON blocos ou HTML legado), thumbnailUrl, hlsUrl, status, moduleId (@@index), order
 - `VideoHistory`: userId, videoId (@@unique), progress, completed
-- `PlatformConfig`: platformName, primaryColor, accentColor, logoUrl, bannerUrl, namePart1/2, nameColor1/2, **forumPunishmentEnabled**, **attendanceEnabled**, **attendanceMinMinutes**, **attendanceMode**
+- `PlatformConfig`: platformName, primaryColor, accentColor, logoUrl
 - `AuditLog`: userId, action, target, details, createdAt
 - `Notification`: userId, title, message, read, createdAt
-- `LiveClass`: id, courseId, moduleId?, title, description?, startAt, endAt?, zoomJoinUrl, zoomStartUrl?, zoomMeetingId?, status (SCHEDULED/LIVE/ENDED/RECORDED), recordingVideoId?
-- `LessonComment`: id, text, flagged, userId, videoId, parentId? (self-relation), replies[], reports[]
-- `CommentReport`: id, commentId, userId, reason (@@unique commentId+userId)
-- `ForumViolation`: id, userId, word, severity (enum LIGHT/MEDIUM/SEVERE), message, autoAction, createdAt
-- `ForumBan`: id, userId, reason, banType (TEMP_1D/TEMP_2D/TEMP_10D/PERMANENT), expiresAt?, active, liftedBy?, liftedAt?, createdAt
-- `ForumAppeal`: id, userId, reason, status (PENDING/APPROVED/REJECTED), adminNote?, createdAt, updatedAt
-- `Attendance`: id, userId, moduleId, date, status (PRESENT/ABSENT), watchTimeSeconds, autoDetected (@@unique userId+moduleId+date, @@index userId/moduleId/date/status)
-- `AttendanceEdit`: id, attendanceId, editedByUserId, oldStatus, newStatus, justification, createdAt
+- `LiveClass`: id, courseId, moduleId?, title, description?, startAt, endAt?, provider, meetingJoinUrl?, meetingHostUrl?, meetingCode?, zoomJoinUrl, zoomStartUrl?, zoomMeetingId?, status (SCHEDULED/LIVE/ENDED/RECORDED), recordingVideoId?
 
 ## Endpoints da API
 
@@ -389,7 +307,7 @@ PlatformConfig (singleton — branding global + flags do fórum + presença)
 ### Config (`/api/config`)
 | Método | Rota | Descrição |
 |--------|------|-----------|
-| GET | `/public` | Branding público + flags (fórum, presença) sem auth (cache 1min) |
+| GET | `/public` | Branding público sem auth (cache 1min) |
 
 ### Admin (`/api/admin`)
 | Método | Rota | Descrição |
@@ -423,25 +341,11 @@ PlatformConfig (singleton — branding global + flags do fórum + presença)
 | GET | `/reports` | Relatórios de progresso por aluno × curso |
 | PUT | `/courses/reorder` | Reordena cursos por drag-and-drop |
 | POST | `/notifications` | Envio de notificação broadcast para alunos |
-| GET | `/live-classes` | Lista todas as aulas ao vivo |
-| POST | `/live-classes` | Cria aula ao vivo (Zoom) |
+| GET | `/live-classes` | Lista aulas ao vivo (aceita `?provider=` para filtro) |
+| POST | `/live-classes` | Cria aula ao vivo multiplataforma |
 | PUT | `/live-classes/:id` | Atualiza aula ao vivo (status, dados) |
 | DELETE | `/live-classes/:id` | Remove aula ao vivo |
 | POST | `/live-classes/:id/attach-recording` | Vincula gravação (vídeo) à aula ao vivo |
-| GET | `/comments/flagged?page=&limit=` | Lista comentários flagrados (moderação) |
-| DELETE | `/comments/:id` | Remove comentário flagrado |
-| PUT | `/comments/:id/approve` | Aprova comentário flagrado |
-| PUT | `/videos/:id/comments-toggle` | Ativa/desativa comentários de uma aula |
-| PUT | `/punishment-toggle` | Ativa/desativa o sistema de punições automáticas |
-| GET | `/violations` | Lista todas as violações de profanidade |
-| GET | `/bans` | Lista todos os bans do fórum |
-| PUT | `/bans/:id/lift` | Revoga ban manualmente |
-| POST | `/bans` | Aplica ban manual (TEMP_1D/2D/10D/PERMANENT) |
-| GET | `/appeals?status=` | Lista recursos dos alunos (PENDING/APPROVED/REJECTED) |
-| PUT | `/appeals/:id` | Aprova ou rejeita recurso do aluno |
-| GET | `/attendance` | Lista presença por módulo/data (inclui ausentes via enrollment) |
-| PUT | `/attendance/:id` | Edita presença com justificativa obrigatória + audit trail |
-| POST | `/attendance` | Cria presença manual com justificativa + audit trail |
 
 ### Student (`/api/student`)
 | Método | Rota | Descrição |
@@ -456,13 +360,6 @@ PlatformConfig (singleton — branding global + flags do fórum + presença)
 | PUT | `/notifications/:id/read` | Marca uma notificação como lida |
 | GET | `/live-classes/:courseId` | Lista aulas ao vivo de um curso (valida matrícula) |
 | GET | `/my-live-classes` | Lista aulas ao vivo de todos os cursos matriculados |
-| GET | `/comments/:videoId` | Lista comentários de uma aula (com respostas aninhadas, status de ban) |
-| POST | `/comments` | Cria comentário (filtro profanidade + punição automática) |
-| DELETE | `/comments/:id` | Deleta próprio comentário |
-| POST | `/comments/:id/report` | Denuncia comentário |
-| GET | `/forum/my-status` | Violações, ban ativo e recursos do aluno |
-| POST | `/forum/appeal` | Envia recurso contra punição |
-| POST | `/attendance/heartbeat` | Heartbeat de presença (a cada 30s enquanto vídeo toca) |
 
 ### Video (`/api/video`)
 | Método | Rota | Descrição |
@@ -508,10 +405,10 @@ PlatformConfig (singleton — branding global + flags do fórum + presença)
 
 - **Rotas backend** seguem o padrão RESTful com paginação via query params
 - **Cada arquivo de rota** tem separadores visuais (`// ====`) agrupando endpoints por entidade
-- **Prisma** é o ORM único — modificar `schema.prisma` e rodar `npx prisma db push`
+- **Prisma** é o ORM único — modificar `schema.prisma`, gerar migration revisável e aplicar com `npx prisma migrate deploy`
 - **CSS** é puro vanilla — todas as variáveis estão em `:root` no `index.css`
 - **CSS Variables dinâmicas** — `ConfigContext.tsx` sobrescreve vars em runtime
-- **CSS Namespacing** — Student Dashboard: `sd-*`, Lesson Page: `lp-*`, Admin: `admin-*`, Fórum: `lc-*`, Presença: `att-*`
+- **CSS Namespacing** — Student Dashboard: `sd-*`, Lesson Page: `lp-*`, Admin: `admin-*`
 - **Conteúdo de aula** — JSON de blocos (novo) ou HTML sanitizado (legado), ambos suportados
 - **Fontes** — 25 fontes Google Fonts registradas no Quill e renderizadas no BlockRenderer
 - **PDFs** — servidos em `/uploads/pdfs` com auth middleware (token via query param)

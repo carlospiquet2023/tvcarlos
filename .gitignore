@@ -8,6 +8,8 @@ node_modules/
 # Build outputs
 backend/dist/
 frontend/dist/
+coverage/
+*.tsbuildinfo
 
 # Logs (PM2 e aplicação)
 logs/
@@ -15,14 +17,16 @@ logs/
 
 # Ambiente
 .env
+.env.*
 .env.local
+.env.prod
 .env.production
+!.env.example
+!.env.prod.example
+!backend/.env.example
 
 # Uploads (dados do usuário — não versionar)
-backend/uploads/videos/
-backend/uploads/hls/
-backend/uploads/images/
-backend/uploads/pdfs/
+backend/uploads/
 
 # PM2
 .pm2/
@@ -30,5 +34,13 @@ backend/uploads/pdfs/
 # Sistema
 .DS_Store
 Thumbs.db
+desktop.ini
 *.swp
 *.swo
+
+# Estado local de CLIs
+.railway/
+
+# Rascunhos e scripts locais de migração manual
+fix_files.js
+arque.md

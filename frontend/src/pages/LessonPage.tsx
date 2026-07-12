@@ -4,24 +4,28 @@
  * Video em tela cheia no topo → folha branca render blocos JSON do editor
  * Suporta conteúdo HTML legado (ReactQuill).
  */
-import { useState, useEffect, useMemo } from 'react';
+import { Suspense, lazy, useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useConfig } from '../context/ConfigContext';
-import VideoPlayer from '../components/VideoPlayer';
 import { BlockRenderer, parseContentField } from '../components/BlockEditor';
 import LessonComments from '../components/LessonComments';
 import {
     ChevronLeft, LayoutDashboard, Loader2, BookOpen,
-    FileText, Pause, Play, AlertCircle, MessageSquare,
+    FileText, Pause, Play, AlertCircle,
     ChevronRight, Sparkles, Layers, StickyNote, Save,
-    FileDown, CalendarDays, Award, Radio, ExternalLink
+    FileDown, CalendarDays, Award, Radio, ExternalLink, Bot, MessageSquare
 } from 'lucide-react';
 import axios from 'axios';
 import api from '../lib/api';
 import DOMPurify from 'dompurify';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+const API_BASE = import.meta.env.VITE_API_URL?.trim() || '';
+
+function assetUrl(value: string): string {
+    return /^https?:\/\//i.test(value) ? value : `${API_BASE}${value}`;
+}
+const LazyVideoPlayer = lazy(() => import('../components/VideoPlayer'));
 
 interface LessonData {
     id: string;
@@ -31,7 +35,6 @@ interface LessonData {
     thumbnailUrl: string | null;
     hlsUrl: string | null;
     status: string;
-    moduleId: string;
     module: {
         id: string;
         name: string;
@@ -42,11 +45,41 @@ interface LessonData {
     prevVideo?: { id: string; title: string } | null;
 }
 
+interface LessonQuizQuestion {
+    id: string;
+    question: string;
+    options: string[];
+    difficulty: string;
+}
+
 type TabKey = 'content' | 'notes' | 'downloads' | 'comments';
+
+function escapeCertificateHtml(value: unknown): string {
+    return String(value ?? '').replace(/[&<>'"]/g, character => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+    })[character] as string);
+}
+
+interface LiveClassData {
+    title: string;
+    status: string;
+    startAt: string;
+    meetingJoinUrl?: string | null;
+    zoomJoinUrl?: string | null;
+}
+
+function trustedQrUrl(value: unknown): string {
+    try {
+        const url = new URL(String(value));
+        return url.protocol === 'https:' && url.hostname === 'api.qrserver.com' ? url.toString() : '';
+    } catch {
+        return '';
+    }
+}
 
 export default function LessonPage() {
     const { videoId } = useParams<{ videoId: string }>();
-    const { token } = useAuth();
+    const { token, user } = useAuth();
     const { config } = useConfig();
     const navigate = useNavigate();
 
@@ -58,7 +91,12 @@ export default function LessonPage() {
     const [notesSaved, setNotesSaved] = useState(false);
     const [isPaused, setIsPaused] = useState(false);
     const [certLoading, setCertLoading] = useState(false);
-    const [liveClass, setLiveClass] = useState<any>(null);
+    const [liveClass, setLiveClass] = useState<LiveClassData | null>(null);
+    const [quiz, setQuiz] = useState<LessonQuizQuestion[]>([]);
+    const [quizAnswers, setQuizAnswers] = useState<Record<string, string>>({});
+    const [quizResult, setQuizResult] = useState<{ score: number; totalAnswers: number; percent: number; feedback: string } | null>(null);
+    const [quizLoading, setQuizLoading] = useState(false);
+    const [downloading, setDownloading] = useState<string | null>(null);
 
     useEffect(() => {
         const fetchLesson = async () => {
@@ -83,12 +121,29 @@ export default function LessonPage() {
         if (token && videoId) fetchLesson();
     }, [token, videoId]);
 
+    const notesStorageKey = user?.id && videoId ? `eduvault_notes_${user.id}_${videoId}` : null;
+
     useEffect(() => {
-        if (videoId) {
-            const saved = localStorage.getItem(`eduvault_notes_${videoId}`);
-            if (saved) setNotes(saved);
-        }
-    }, [videoId]);
+        setNotes(notesStorageKey ? localStorage.getItem(notesStorageKey) ?? '' : '');
+        setNotesSaved(false);
+        if (videoId) localStorage.removeItem(`eduvault_notes_${videoId}`);
+    }, [notesStorageKey, videoId]);
+
+    useEffect(() => {
+        const fetchQuiz = async () => {
+            try {
+                const response = await api.get(`/api/student/lesson/${videoId}/quiz`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                setQuiz(response.data || []);
+                setQuizAnswers({});
+                setQuizResult(null);
+            } catch {
+                setQuiz([]);
+            }
+        };
+        if (token && videoId) fetchQuiz();
+    }, [token, videoId]);
 
     // Fetch live class for current course
     useEffect(() => {
@@ -98,8 +153,8 @@ export default function LessonPage() {
                 const res = await api.get(`/api/student/live-classes/${lesson.module.course.id}`, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
-                const upcoming = (res.data as any[]).find(
-                    (lc: any) => lc.status === 'LIVE' || lc.status === 'SCHEDULED'
+                const upcoming = (res.data as LiveClassData[]).find(
+                    (item) => item.status === 'LIVE' || item.status === 'SCHEDULED'
                 );
                 if (upcoming) setLiveClass(upcoming);
             } catch { /* ignore */ }
@@ -108,8 +163,8 @@ export default function LessonPage() {
     }, [lesson, token]);
 
     const handleSaveNotes = () => {
-        if (videoId) {
-            localStorage.setItem(`eduvault_notes_${videoId}`, notes);
+        if (notesStorageKey) {
+            localStorage.setItem(notesStorageKey, notes);
             setNotesSaved(true);
             setTimeout(() => setNotesSaved(false), 2000);
         }
@@ -130,13 +185,22 @@ export default function LessonPage() {
             const res = await api.get(`/api/student/certificate/${lesson.module.course.id}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            const { studentName, courseName, completedAt, totalLessons } = res.data;
+            const { studentName, courseName, completedAt, totalLessons, certificateCode, verifyUrl, qrUrl } = res.data;
             const date = new Date(completedAt).toLocaleDateString('pt-BR');
+            const safeStudentName = escapeCertificateHtml(studentName);
+            const safeCourseName = escapeCertificateHtml(courseName);
+            const safeTotalLessons = escapeCertificateHtml(Number(totalLessons) || 0);
+            const safeDate = escapeCertificateHtml(date);
+            const safeCertificateCode = escapeCertificateHtml(certificateCode);
+            const safeVerifyUrl = escapeCertificateHtml(verifyUrl);
+            const safeQrUrl = escapeCertificateHtml(trustedQrUrl(qrUrl));
 
             // Generate certificate HTML and print
             const certWindow = window.open('', '_blank');
             if (certWindow) {
+                certWindow.opener = null;
                 certWindow.document.write(`<!DOCTYPE html><html><head><title>Certificado</title>
+                <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src https://api.qrserver.com; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
                 <style>
                     @page { size: landscape; margin: 0; }
                     body { margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; background: #f5f5f5; font-family: 'Georgia', serif; }
@@ -147,15 +211,23 @@ export default function LessonPage() {
                     .cert .name { font-size: 2rem; color: #1a365d; font-style: italic; border-bottom: 2px solid #c8a96e; display: inline-block; padding: 0.5rem 2rem; margin: 1rem 0; }
                     .cert .course { font-size: 1.3rem; color: #333; margin: 1.5rem 0; }
                     .cert .details { font-size: 0.95rem; color: #666; margin-top: 2rem; }
+                    .cert .verify { margin-top: 1.2rem; font-size: 0.8rem; color: #475569; }
+                    .cert .qr { margin-top: 0.75rem; }
+                    .cert .qr img { width: 120px; height: 120px; }
                 </style></head><body>
                     <div class="cert">
                         <h1>CERTIFICADO DE CONCLUSÃO</h1>
                         <h2>Este certificado é concedido a</h2>
-                        <div class="name">${studentName}</div>
-                        <div class="course">por concluir com sucesso o curso<br/><strong>${courseName}</strong></div>
-                        <div class="details">${totalLessons} aulas concluídas &bull; ${date}</div>
+                        <div class="name">${safeStudentName}</div>
+                        <div class="course">por concluir com sucesso o curso<br/><strong>${safeCourseName}</strong></div>
+                        <div class="details">${safeTotalLessons} aulas concluídas &bull; ${safeDate}</div>
+                        <div class="verify">
+                            Código: <strong>${safeCertificateCode}</strong><br/>
+                            Verificar: ${safeVerifyUrl}
+                        </div>
+                        ${safeQrUrl ? `<div class="qr"><img src="${safeQrUrl}" alt="QR de validação" /></div>` : ''}
                     </div>
-                    <script>setTimeout(()=>window.print(),500)<\/script>
+                    <script>setTimeout(()=>window.print(),500)</script>
                 </body></html>`);
                 certWindow.document.close();
             }
@@ -170,17 +242,59 @@ export default function LessonPage() {
         }
     };
 
+    const handleSubmitQuiz = async () => {
+        if (!videoId) return;
+        try {
+            setQuizLoading(true);
+            const res = await api.post(`/api/student/lesson/${videoId}/quiz-attempt`, {
+                answers: quizAnswers
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setQuizResult(res.data);
+        } catch {
+            alert('Erro ao enviar quiz.');
+        } finally {
+            setQuizLoading(false);
+        }
+    };
+
+    const handleProtectedDownload = async (resourceUrl: string, filename: string) => {
+        setDownloading(resourceUrl);
+        try {
+            const response = await api.get(resourceUrl, {
+                headers: { Authorization: `Bearer ${token}` },
+                responseType: 'blob'
+            });
+            const objectUrl = window.URL.createObjectURL(response.data as Blob);
+            const anchor = document.createElement('a');
+            anchor.href = objectUrl;
+            anchor.download = filename;
+            document.body.appendChild(anchor);
+            anchor.click();
+            anchor.remove();
+            window.setTimeout(() => window.URL.revokeObjectURL(objectUrl), 1000);
+        } catch {
+            alert('Não foi possível baixar este material. Tente novamente.');
+        } finally {
+            setDownloading(null);
+        }
+    };
+
     // Parse content — supports both JSON blocks and legacy HTML
+    const lessonContent = lesson?.content ?? null;
     const contentData = useMemo(() => {
-        if (!lesson?.content) return null;
-        const parsed = parseContentField(lesson.content);
+        if (!lessonContent) return null;
+        const parsed = parseContentField(lessonContent);
         if (parsed.isBlocks) return { type: 'blocks' as const, blocks: parsed.blocks };
-        const sanitized = DOMPurify.sanitize(lesson.content, {
+        const sanitized = DOMPurify.sanitize(lessonContent, {
             ADD_TAGS: ['figure', 'figcaption'],
             ADD_ATTR: ['class', 'style']
         });
         return { type: 'html' as const, html: sanitized };
-    }, [lesson?.content]);
+    }, [lessonContent]);
+
+    const liveJoinUrl = liveClass?.meetingJoinUrl || liveClass?.zoomJoinUrl || '';
 
     if (loading) {
         return (
@@ -217,7 +331,7 @@ export default function LessonPage() {
                         <ChevronLeft size={20} />
                     </button>
                     {config.logoUrl && (
-                        <img src={`${API_BASE}${config.logoUrl}`} alt={config.platformName} className="lp-logo-img" />
+                        <img src={assetUrl(config.logoUrl)} alt={config.platformName} className="lp-logo-img" />
                     )}
                     <div className="lp-header-info">
                         <span className="lp-header-breadcrumb">{lesson.module.course.name}</span>
@@ -226,6 +340,14 @@ export default function LessonPage() {
                     </div>
                 </div>
                 <div className="lp-header-right">
+                    <button
+                        className="lp-header-action lp-tutor-action"
+                        onClick={() => navigate(`/student/tutor?courseId=${encodeURIComponent(lesson.module.course.id)}&videoId=${encodeURIComponent(lesson.id)}`)}
+                        title="Perguntar ao Tutor IA sobre esta aula"
+                        aria-label="Abrir Tutor IA com o contexto desta aula"
+                    >
+                        <Bot size={16} /> <span>Tutor IA</span>
+                    </button>
                     <button
                         className="lp-header-action"
                         onClick={handleCertificate}
@@ -245,7 +367,7 @@ export default function LessonPage() {
             </header>
 
             {/* ===== LIVE BANNER ===== */}
-            {liveClass && (
+            {liveClass && liveJoinUrl && (
                 <div className={`lp-live-banner ${liveClass.status === 'LIVE' ? 'is-live' : ''}`}>
                     <div className="lp-live-banner-info">
                         {liveClass.status === 'LIVE' ? (
@@ -257,12 +379,12 @@ export default function LessonPage() {
                         <span>{new Date(liveClass.startAt).toLocaleString('pt-BR')}</span>
                     </div>
                     <a
-                        href={liveClass.zoomJoinUrl}
+                        href={liveJoinUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="lp-live-banner-btn"
                     >
-                        <ExternalLink size={16} /> Entrar no Zoom
+                        <ExternalLink size={16} /> Entrar na aula
                     </a>
                 </div>
             )}
@@ -271,7 +393,9 @@ export default function LessonPage() {
             <section className="lp-cinema">
                 <div className="lp-cinema-inner">
                     {lesson.status === 'READY' && lesson.hlsUrl ? (
-                        <VideoPlayer videoId={lesson.id} hlsUrl={lesson.hlsUrl} moduleId={lesson.moduleId} />
+                        <Suspense fallback={<div className="lp-video-status-msg"><Loader2 className="spinner" size={48} /><h3>Preparando player...</h3></div>}>
+                            <LazyVideoPlayer videoId={lesson.id} hlsUrl={lesson.hlsUrl} moduleId={lesson.module.id} />
+                        </Suspense>
                     ) : (
                         <div className="lp-video-status-msg">
                             {lesson.status === 'PROCESSING' ? (
@@ -326,12 +450,8 @@ export default function LessonPage() {
                             <StickyNote size={16} />
                             Minhas Anotações
                         </button>
-                        <button
-                            className={`lp-tab ${activeTab === 'comments' ? 'active' : ''}`}
-                            onClick={() => setActiveTab('comments')}
-                        >
-                            <MessageSquare size={16} />
-                            Discussão
+                        <button className={`lp-tab ${activeTab === 'comments' ? 'active' : ''}`} onClick={() => setActiveTab('comments')}>
+                            <MessageSquare size={16} /> Discussão
                         </button>
                         {(lesson.module.pdfUrl || lesson.module.course.calendarUrl) && (
                             <button
@@ -360,6 +480,42 @@ export default function LessonPage() {
                                     <Sparkles size={48} />
                                     <h3>Foco no Vídeo</h3>
                                     <p>Assista o vídeo acima. Não há material adicional para esta aula.</p>
+                                </div>
+                            )}
+
+                            {quiz.length > 0 && (
+                                <div className="admin-card" style={{ marginTop: '1.5rem' }}>
+                                    <h3 style={{ marginBottom: '0.75rem' }}>Quiz da Aula</h3>
+                                    <div style={{ display: 'grid', gap: '0.75rem' }}>
+                                        {quiz.map((q, idx) => (
+                                            <div key={q.id} style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '0.9rem' }}>
+                                                <strong>{idx + 1}. {q.question}</strong>
+                                                <div style={{ display: 'grid', gap: '0.35rem', marginTop: '0.5rem' }}>
+                                                    {q.options.map((opt, i) => (
+                                                        <label key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                                            <input
+                                                                type="radio"
+                                                                name={q.id}
+                                                                value={opt}
+                                                                checked={quizAnswers[q.id] === opt}
+                                                                onChange={(e) => setQuizAnswers(prev => ({ ...prev, [q.id]: e.target.value }))}
+                                                            />
+                                                            {opt}
+                                                        </label>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <button className="admin-btn-primary" style={{ marginTop: '0.9rem' }} onClick={handleSubmitQuiz} disabled={quizLoading}>
+                                        {quizLoading ? 'Corrigindo...' : 'Enviar quiz'}
+                                    </button>
+                                    {quizResult && (
+                                        <div style={{ marginTop: '0.75rem', fontSize: '0.95rem', color: '#334155' }}>
+                                            <strong>Resultado:</strong> {quizResult.score}/{quizResult.totalAnswers} ({quizResult.percent}%)
+                                            <div style={{ marginTop: '0.35rem' }}>{quizResult.feedback}</div>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -395,10 +551,10 @@ export default function LessonPage() {
                             </div>
                             <div className="lp-downloads-grid">
                                 {lesson.module.pdfUrl && (
-                                    <a
-                                        href={`${API_BASE}${lesson.module.pdfUrl}?token=${token}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
+                                    <button
+                                        type="button"
+                                        onClick={() => void handleProtectedDownload(lesson.module.pdfUrl!, `${lesson.module.name}-material.pdf`)}
+                                        disabled={downloading === lesson.module.pdfUrl}
                                         className="lp-download-card"
                                     >
                                         <div className="lp-download-icon material">
@@ -408,14 +564,14 @@ export default function LessonPage() {
                                             <span className="lp-download-label">Material do Módulo</span>
                                             <span className="lp-download-sub">{lesson.module.name}</span>
                                         </div>
-                                        <FileDown size={18} className="lp-download-arrow" />
-                                    </a>
+                                        {downloading === lesson.module.pdfUrl ? <Loader2 size={18} className="spinner lp-download-arrow" /> : <FileDown size={18} className="lp-download-arrow" />}
+                                    </button>
                                 )}
                                 {lesson.module.course.calendarUrl && (
-                                    <a
-                                        href={`${API_BASE}${lesson.module.course.calendarUrl}?token=${token}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
+                                    <button
+                                        type="button"
+                                        onClick={() => void handleProtectedDownload(lesson.module.course.calendarUrl!, `${lesson.module.course.name}-calendario.pdf`)}
+                                        disabled={downloading === lesson.module.course.calendarUrl}
                                         className="lp-download-card"
                                     >
                                         <div className="lp-download-icon calendar">
@@ -425,16 +581,14 @@ export default function LessonPage() {
                                             <span className="lp-download-label">Calendário de Aulas</span>
                                             <span className="lp-download-sub">{lesson.module.course.name}</span>
                                         </div>
-                                        <FileDown size={18} className="lp-download-arrow" />
-                                    </a>
+                                        {downloading === lesson.module.course.calendarUrl ? <Loader2 size={18} className="spinner lp-download-arrow" /> : <FileDown size={18} className="lp-download-arrow" />}
+                                    </button>
                                 )}
                             </div>
                         </div>
                     )}
 
-                    {activeTab === 'comments' && (
-                        <LessonComments videoId={lesson.id} />
-                    )}
+                    {activeTab === 'comments' && <LessonComments videoId={lesson.id} />}
 
                     {/* Navigation */}
                     {(lesson.prevVideo || lesson.nextVideo) && (

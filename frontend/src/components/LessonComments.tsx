@@ -11,6 +11,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { MessageSquare, Send, Reply, Flag, Trash2, ChevronDown, ChevronUp, ShieldCheck, AlertTriangle, Ban, Scale } from 'lucide-react';
+import axios from 'axios';
 import api from '../lib/api';
 
 interface CommentUser {
@@ -34,6 +35,33 @@ interface Props {
     videoId: string;
 }
 
+function errorPayload(error: unknown): Record<string, unknown> {
+    const value = axios.isAxiosError(error) ? error.response?.data : null;
+    return value && typeof value === 'object' && !Array.isArray(value)
+        ? value as Record<string, unknown>
+        : {};
+}
+
+function payloadText(payload: Record<string, unknown>, key: string, fallback = ''): string {
+    const value = payload[key];
+    return typeof value === 'string' ? value : fallback;
+}
+
+function mergeCommentRoots(current: CommentData[], incoming: CommentData[]): CommentData[] {
+    const byId = new Map(current.map((comment) => [comment.id, comment]));
+    incoming.forEach((comment) => byId.set(comment.id, comment));
+    return [...byId.values()].sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
+}
+
+function latestCommentTimestamp(comments: CommentData[], fallback: string): string {
+    let latest = Date.parse(fallback);
+    comments.forEach((comment) => {
+        latest = Math.max(latest, Date.parse(comment.createdAt) || 0);
+        comment.replies?.forEach((reply) => { latest = Math.max(latest, Date.parse(reply.createdAt) || 0); });
+    });
+    return new Date(latest).toISOString();
+}
+
 export default function LessonComments({ videoId }: Props) {
     const { token, user } = useAuth();
     const [comments, setComments] = useState<CommentData[]>([]);
@@ -47,6 +75,9 @@ export default function LessonComments({ videoId }: Props) {
     const [reportingId, setReportingId] = useState<string | null>(null);
     const [reportReason, setReportReason] = useState('');
     const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const pollingInFlightRef = useRef(false);
+    const lastSyncRef = useRef('');
+    const lastFullRefreshRef = useRef(0);
 
     // Estados do sistema de punição
     const [forumBan, setForumBan] = useState<{ banType: string; expiresAt: string | null; reason: string } | null>(null);
@@ -56,14 +87,20 @@ export default function LessonComments({ videoId }: Props) {
     const [appealSubmitting, setAppealSubmitting] = useState(false);
     const [appealSuccess, setAppealSuccess] = useState(false);
 
-    const fetchComments = useCallback(async (polling = false) => {
+    const fetchComments = useCallback(async (mode: 'full' | 'incremental' = 'full') => {
         try {
             const url = `/api/student/comments/${videoId}`;
+            const incremental = mode === 'incremental' && Boolean(lastSyncRef.current);
+            const cursorFallback = new Date(Date.now() - 30_000).toISOString();
             const res = await api.get(url, {
-                headers: { Authorization: `Bearer ${token}` }
+                headers: { Authorization: `Bearer ${token}` },
+                params: incremental ? { after: lastSyncRef.current } : undefined
             });
+            const received = Array.isArray(res.data.comments) ? res.data.comments as CommentData[] : [];
             setCommentsEnabled(res.data.commentsEnabled);
-            setComments(res.data.comments);
+            setComments((current) => incremental ? mergeCommentRoots(current, received) : received);
+            lastSyncRef.current = latestCommentTimestamp(received, cursorFallback);
+            if (!incremental) lastFullRefreshRef.current = Date.now();
             // Atualiza status do ban
             if (res.data.forumBan) {
                 setForumBan(res.data.forumBan);
@@ -77,25 +114,32 @@ export default function LessonComments({ videoId }: Props) {
 
     // Fetch inicial
     useEffect(() => {
-        fetchComments();
+        lastSyncRef.current = '';
+        lastFullRefreshRef.current = 0;
+        void fetchComments('full');
     }, [fetchComments]);
 
-    // Polling a cada 5s (pausa quando aba inativa)
+    // Polling incremental enquanto a aba está visível. Uma leitura completa
+    // periódica reconcilia exclusões e ações de moderação.
     useEffect(() => {
+        const poll = () => {
+            if (document.visibilityState !== 'visible' || pollingInFlightRef.current) return;
+            pollingInFlightRef.current = true;
+            const needsFullRefresh = Date.now() - lastFullRefreshRef.current >= 120_000;
+            void fetchComments(needsFullRefresh ? 'full' : 'incremental')
+                .finally(() => { pollingInFlightRef.current = false; });
+        };
+
         const startPolling = () => {
             if (pollingRef.current) clearInterval(pollingRef.current);
-            pollingRef.current = setInterval(() => {
-                if (document.visibilityState === 'visible') {
-                    fetchComments(true);
-                }
-            }, 5000);
+            pollingRef.current = setInterval(poll, 15_000);
         };
 
         startPolling();
 
         const handleVisibility = () => {
             if (document.visibilityState === 'visible') {
-                fetchComments(true);
+                poll();
                 startPolling();
             }
         };
@@ -132,27 +176,29 @@ export default function LessonComments({ videoId }: Props) {
 
             // Recarrega comentários
             await fetchComments();
-        } catch (err: any) {
-            const data = err.response?.data;
+        } catch (err: unknown) {
+            const data = errorPayload(err);
             // Se é violação, mostra modal especial
-            if (data?.violation) {
-                if (data.severity && data.matchedWord) {
+            if (data.violation) {
+                const severity = payloadText(data, 'severity');
+                const matchedWord = payloadText(data, 'matchedWord');
+                if (severity && matchedWord) {
                     setViolationModal({
-                        message: data.message,
-                        severity: data.severity,
-                        matchedWord: data.matchedWord,
-                        action: data.action || 'WARNING'
+                        message: payloadText(data, 'message', 'O comentário viola as regras da comunidade.'),
+                        severity,
+                        matchedWord,
+                        action: payloadText(data, 'action', 'WARNING')
                     });
                 } else {
                     // Ban existente
                     setForumBan({
-                        banType: data.banType,
-                        expiresAt: data.expiresAt,
-                        reason: data.message
+                        banType: payloadText(data, 'banType', 'UNKNOWN'),
+                        expiresAt: payloadText(data, 'expiresAt') || null,
+                        reason: payloadText(data, 'message', 'Acesso ao fórum suspenso.')
                     });
                 }
             } else {
-                setError(data?.message || 'Erro ao enviar comentário.');
+                setError(payloadText(data, 'message', 'Erro ao enviar comentário.'));
                 setTimeout(() => setError(null), 4000);
             }
         } finally {
@@ -183,8 +229,8 @@ export default function LessonComments({ videoId }: Props) {
             setReportingId(null);
             setReportReason('');
             setError(null);
-        } catch (err: any) {
-            const msg = err.response?.data?.message || 'Erro ao denunciar.';
+        } catch (err: unknown) {
+            const msg = payloadText(errorPayload(err), 'message', 'Erro ao denunciar.');
             setError(msg);
             setTimeout(() => setError(null), 3000);
         }
@@ -226,8 +272,8 @@ export default function LessonComments({ videoId }: Props) {
             setAppealSuccess(true);
             setShowAppealForm(false);
             setAppealText('');
-        } catch (err: any) {
-            setError(err.response?.data?.message || 'Erro ao enviar recurso.');
+        } catch (err: unknown) {
+            setError(payloadText(errorPayload(err), 'message', 'Erro ao enviar recurso.'));
             setTimeout(() => setError(null), 4000);
         } finally {
             setAppealSubmitting(false);

@@ -13,13 +13,14 @@ import { useConfig } from '../context/ConfigContext';
 import {
     LogOut, Search, ShieldCheck, Loader2, ChevronRight,
     ChevronLeft, PlayCircle, BookOpen, GraduationCap, TrendingUp,
-    Flag, CheckSquare, Bell, Moon, Sun, Radio, ExternalLink
+    Flag, CheckSquare, Bell, Moon, Sun, Radio, ExternalLink, KeyRound, Bot
     // GraduationCap kept for empty state
 } from 'lucide-react';
 import api from '../lib/api';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import axios from 'axios';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+const API_BASE = import.meta.env.VITE_API_URL?.trim() || '';
 
 interface Video {
     id: string;
@@ -56,8 +57,39 @@ interface CourseWithProgress {
     lastWatchedAt: string | null;
 }
 
+interface Recommendation {
+    courseId: string;
+    courseName: string;
+    videoId: string;
+    videoTitle: string;
+    reason: string;
+    moduleName: string;
+    priorityScore: number;
+    riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+}
+
+interface StudentNotification {
+    id: string;
+    title: string;
+    message: string;
+    createdAt: string;
+    read: boolean;
+}
+
+interface StudentLiveClass {
+    id: string;
+    title: string;
+    status: string;
+    startAt: string;
+    provider?: string | null;
+    meetingJoinUrl?: string | null;
+    zoomJoinUrl?: string | null;
+    course?: { name: string } | null;
+    module?: { name: string } | null;
+}
+
 export default function StudentDashboard() {
-    const { user, token, logout } = useAuth();
+    const { user, token, logout, login: doLogin } = useAuth();
     const { config } = useConfig();
     const [courses, setCourses] = useState<CourseWithProgress[]>([]);
     const [loading, setLoading] = useState(true);
@@ -65,27 +97,44 @@ export default function StudentDashboard() {
     const navigate = useNavigate();
 
     // Notifications
-    const [notifications, setNotifications] = useState<any[]>([]);
+    const [notifications, setNotifications] = useState<StudentNotification[]>([]);
     const [showNotifs, setShowNotifs] = useState(false);
 
     // Dark mode
     const [darkMode, setDarkMode] = useState(() => localStorage.getItem('darkMode') === 'true');
 
     // Live classes
-    const [liveClasses, setLiveClasses] = useState<any[]>([]);
+    const [liveClasses, setLiveClasses] = useState<StudentLiveClass[]>([]);
+    const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+    const [forcePasswordError, setForcePasswordError] = useState('');
+    const [forcePasswordLoading, setForcePasswordLoading] = useState(false);
+    const [forcePasswordForm, setForcePasswordForm] = useState({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+    });
+    const prefetchedLessonsRef = useRef<Set<string>>(new Set());
+    const prefetchedChunksRef = useRef(false);
 
     useEffect(() => {
         const fetchData = async () => {
             try {
+                if (user?.mustChangePassword) {
+                    setLoading(false);
+                    return;
+                }
+
                 const headers = { Authorization: `Bearer ${token}` };
-                const [myRes, notifRes, liveRes] = await Promise.all([
+                const [myRes, notifRes, liveRes, recRes] = await Promise.all([
                     api.get('/api/student/my-courses', { headers }),
                     api.get('/api/student/notifications', { headers }),
-                    api.get('/api/student/my-live-classes', { headers })
+                    api.get('/api/student/my-live-classes', { headers }),
+                    api.get('/api/student/recommendations', { headers })
                 ]);
                 setCourses(myRes.data);
                 setNotifications(notifRes.data);
                 setLiveClasses(liveRes.data);
+                setRecommendations(recRes.data || []);
             } catch (error) {
                 console.error('Erro ao buscar cursos', error);
             } finally {
@@ -93,7 +142,39 @@ export default function StudentDashboard() {
             }
         };
         if (token) fetchData();
-    }, [token]);
+    }, [token, user?.mustChangePassword]);
+
+    const handleForcePasswordChange = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setForcePasswordError('');
+
+        if (forcePasswordForm.newPassword !== forcePasswordForm.confirmPassword) {
+            setForcePasswordError('As senhas não coincidem.');
+            return;
+        }
+
+        setForcePasswordLoading(true);
+        try {
+            const res = await api.put('/api/auth/profile', {
+                currentPassword: forcePasswordForm.currentPassword,
+                newPassword: forcePasswordForm.newPassword
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            doLogin(res.data.token, res.data.user);
+            setForcePasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+            window.location.reload();
+        } catch (err: unknown) {
+            if (axios.isAxiosError(err)) {
+                setForcePasswordError(err.response?.data?.message || 'Erro ao atualizar senha.');
+            } else {
+                setForcePasswordError('Erro ao atualizar senha.');
+            }
+        } finally {
+            setForcePasswordLoading(false);
+        }
+    };
 
     // Dark mode toggle
     useEffect(() => {
@@ -101,7 +182,7 @@ export default function StudentDashboard() {
         localStorage.setItem('darkMode', String(darkMode));
     }, [darkMode]);
 
-    const unreadCount = notifications.filter((n: any) => !n.read).length;
+    const unreadCount = notifications.filter((notification) => !notification.read).length;
 
     const handleMarkAllRead = async () => {
         try {
@@ -113,7 +194,32 @@ export default function StudentDashboard() {
     };
 
     const handleLessonClick = (videoId: string) => {
+        prefetchLessonResources(videoId);
         navigate(`/student/lesson/${videoId}`);
+    };
+
+    const getPreferredVideoId = (course: CourseWithProgress): string | null => {
+        if (course.lastWatchedVideo?.id) return course.lastWatchedVideo.id;
+        const allVideos = course.modules.flatMap(m => m.videos);
+        const readyVideo = allVideos.find(v => v.status === 'READY');
+        return readyVideo?.id || allVideos[0]?.id || null;
+    };
+
+    const prefetchLessonResources = (videoId?: string | null) => {
+        if (!prefetchedChunksRef.current) {
+            prefetchedChunksRef.current = true;
+            import('./LessonPage');
+            import('../components/VideoPlayer');
+        }
+
+        if (!videoId || !token || prefetchedLessonsRef.current.has(videoId)) return;
+        prefetchedLessonsRef.current.add(videoId);
+
+        api.get(`/api/student/lesson/${videoId}`, {
+            headers: { Authorization: `Bearer ${token}` }
+        }).catch(() => {
+            prefetchedLessonsRef.current.delete(videoId);
+        });
     };
 
     const handleCourseClick = (course: CourseWithProgress) => {
@@ -191,6 +297,73 @@ export default function StudentDashboard() {
 
     return (
         <div className="sd-root">
+            {user?.mustChangePassword && (
+                <div style={{
+                    position: 'fixed',
+                    inset: 0,
+                    background: 'rgba(2, 6, 23, 0.85)',
+                    zIndex: 3000,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '1rem'
+                }}>
+                    <form
+                        onSubmit={handleForcePasswordChange}
+                        style={{
+                            width: '100%',
+                            maxWidth: '460px',
+                            background: 'rgba(15, 23, 42, 0.96)',
+                            border: '1px solid rgba(148, 163, 184, 0.3)',
+                            borderRadius: '16px',
+                            padding: '1.5rem',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '0.85rem'
+                        }}
+                    >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#f8fafc' }}>
+                            <KeyRound size={18} />
+                            <strong>Troca obrigatória de senha</strong>
+                        </div>
+                        <p style={{ margin: 0, color: '#cbd5e1', fontSize: '0.9rem' }}>
+                            Por segurança, altere sua senha temporária antes de acessar os cursos.
+                        </p>
+                        <input
+                            type="password"
+                            placeholder="Senha atual"
+                            value={forcePasswordForm.currentPassword}
+                            onChange={(e) => setForcePasswordForm(prev => ({ ...prev, currentPassword: e.target.value }))}
+                            className="admin-input"
+                            required
+                        />
+                        <input
+                            type="password"
+                            placeholder="Nova senha (mínimo 8 caracteres)"
+                            value={forcePasswordForm.newPassword}
+                            onChange={(e) => setForcePasswordForm(prev => ({ ...prev, newPassword: e.target.value }))}
+                            className="admin-input"
+                            required
+                        />
+                        <input
+                            type="password"
+                            placeholder="Confirmar nova senha"
+                            value={forcePasswordForm.confirmPassword}
+                            onChange={(e) => setForcePasswordForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                            className="admin-input"
+                            required
+                        />
+                        {forcePasswordError && <small style={{ color: '#fca5a5' }}>{forcePasswordError}</small>}
+                        <button type="submit" className="admin-btn-primary" disabled={forcePasswordLoading}>
+                            {forcePasswordLoading ? 'Atualizando...' : 'Salvar nova senha'}
+                        </button>
+                        <button type="button" onClick={logout} className="admin-btn-ghost">
+                            Sair
+                        </button>
+                    </form>
+                </div>
+            )}
+
             {/* ===== HEADER ===== */}
             <header className="sd-header">
                 <div className="sd-header-left">
@@ -199,11 +372,17 @@ export default function StudentDashboard() {
                     ) : (
                         <ShieldCheck size={28} color="var(--primary)" />
                     )}
-                    <span className="sd-logo">
-                        <span style={{ color: config.nameColor1 }}>{config.namePart1}</span>
-                        <span style={{ color: config.nameColor2 }}>{config.namePart2}</span>
-                    </span>
+                    <span className="sd-logo"><span style={{ color: config.nameColor1 }}>{config.namePart1}</span><span style={{ color: config.nameColor2 }}>{config.namePart2}</span></span>
                 </div>
+
+                <nav className="sd-product-nav" aria-label="Áreas da plataforma">
+                    <Link to="/campus/ao-vivo">
+                        <Radio size={16} aria-hidden="true" /> Campus ao Vivo
+                    </Link>
+                    <Link to="/student/tutor">
+                        <Bot size={16} aria-hidden="true" /> Tutor IA
+                    </Link>
+                </nav>
 
                 <div className="sd-search-bar">
                     <Search size={18} color="var(--text-muted)" />
@@ -246,7 +425,7 @@ export default function StudentDashboard() {
                                 <div className="sd-notif-list">
                                     {notifications.length === 0 ? (
                                         <p style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Nenhuma notificação.</p>
-                                    ) : notifications.map((n: any) => (
+                                    ) : notifications.map((n) => (
                                         <div key={n.id} className={`sd-notif-item ${n.read ? '' : 'unread'}`}>
                                             <strong>{n.title}</strong>
                                             <p>{n.message}</p>
@@ -273,76 +452,7 @@ export default function StudentDashboard() {
             {/* ===== MAIN ===== */}
             <main className="sd-main">
 
-                {/* ─── BANNER HORIZONTAL ─── */}
-                {config.bannerUrl && (
-                    <div className="sd-banner">
-                        <img
-                            src={getThumbUrl(config.bannerUrl) || ''}
-                            alt="Banner"
-                            className="sd-banner-img"
-                        />
-                    </div>
-                )}
-
-                {/* ─── CONTINUE DE ONDE PAROU ─── */}
-                {(() => {
-                    const last = continueCourses.length > 0 ? continueCourses[0] : null;
-                    // Fallback: se nunca assistiu nada, sugere a primeira aula do primeiro curso
-                    if (!last && courses.length > 0) {
-                        const firstCourse = courses[0];
-                        const allVids = firstCourse.modules.flatMap(m => m.videos);
-                        const firstVid = allVids.find(v => v.status === 'READY') || allVids[0];
-                        if (firstVid) {
-                            const thumbUrl = getThumbUrl(firstCourse.thumbnailUrl);
-                            const modName = firstCourse.modules.find(m => m.videos.some(v => v.id === firstVid.id))?.name || 'Módulo';
-                            return (
-                                <section className="sd-resume-section" onClick={() => handleLessonClick(firstVid.id)}>
-                                    <div className="sd-resume-thumb" style={thumbUrl ? { backgroundImage: `url(${thumbUrl})` } : undefined} />
-                                    <div className="sd-resume-overlay">
-                                        <span className="sd-resume-label">Comece agora</span>
-                                        <h3 className="sd-resume-title">{firstVid.title}</h3>
-                                        <div className="sd-resume-meta">
-                                            <span className="sd-resume-course">{firstCourse.name}</span>
-                                            <span className="sd-resume-sep">•</span>
-                                            <span>{modName}</span>
-                                            <span className="sd-resume-sep">•</span>
-                                            <span>{firstCourse.totalVideos} aulas</span>
-                                        </div>
-                                    </div>
-                                    <div className="sd-resume-play">
-                                        <PlayCircle size={36} />
-                                    </div>
-                                </section>
-                            );
-                        }
-                    }
-                    if (!last) return null;
-                    const lessonNum = getLessonNumber(last);
-                    const thumbUrl = getThumbUrl(last.lastWatchedVideo?.thumbnailUrl || last.thumbnailUrl);
-                    return (
-                        <section className="sd-resume-section" onClick={() => handleCourseClick(last)}>
-                            <div className="sd-resume-thumb" style={thumbUrl ? { backgroundImage: `url(${thumbUrl})` } : undefined} />
-                            <div className="sd-resume-overlay">
-                                <span className="sd-resume-label">Continue de onde parou</span>
-                                <h3 className="sd-resume-title">{last.lastWatchedVideo?.title || last.name}</h3>
-                                <div className="sd-resume-meta">
-                                    <span className="sd-resume-course">{last.name}</span>
-                                    <span className="sd-resume-sep">•</span>
-                                    <span>{last.lastWatchedVideo?.moduleName || 'Módulo'}</span>
-                                    <span className="sd-resume-sep">•</span>
-                                    <span>Aula {lessonNum} de {last.totalVideos}</span>
-                                </div>
-                                <div className="sd-resume-progress-bar">
-                                    <div className="sd-resume-progress-fill" style={{ width: `${last.progressPercent}%` }} />
-                                </div>
-                                <span className="sd-resume-percent">{last.progressPercent}% concluído</span>
-                            </div>
-                            <div className="sd-resume-play">
-                                <PlayCircle size={36} />
-                            </div>
-                        </section>
-                    );
-                })()}
+                {config.bannerUrl && <div className="sd-banner"><img src={getThumbUrl(config.bannerUrl) || ''} alt="" className="sd-banner-img" /></div>}
 
                 {/* ─── SEÇÃO: AULAS AO VIVO ─── */}
                 {liveClasses.length > 0 && (
@@ -354,15 +464,16 @@ export default function StudentDashboard() {
                             </div>
                         </div>
                         <div className="sd-live-cards">
-                            {liveClasses.map((lc: any) => {
+                            {liveClasses.map((lc) => {
                                 const isLive = lc.status === 'LIVE';
+                                const joinUrl = lc.meetingJoinUrl || lc.zoomJoinUrl;
                                 const dateStr = new Date(lc.startAt).toLocaleString('pt-BR', {
                                     day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
                                 });
                                 return (
                                     <a
                                         key={lc.id}
-                                        href={lc.zoomJoinUrl}
+                                        href={joinUrl || '#'}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         className={`sd-live-card ${isLive ? 'is-live' : ''}`}
@@ -377,6 +488,7 @@ export default function StudentDashboard() {
                                         <h3 className="sd-live-card-title">{lc.title}</h3>
                                         <span className="sd-live-card-course">{lc.course?.name}</span>
                                         {lc.module && <span className="sd-live-card-module">{lc.module.name}</span>}
+                                        <span className="sd-live-card-module">Plataforma: {String(lc.provider || 'CUSTOM').replace(/_/g, ' ')}</span>
                                         <span className="sd-live-card-join">
                                             <ExternalLink size={14} /> Entrar na aula
                                         </span>
@@ -387,8 +499,42 @@ export default function StudentDashboard() {
                     </section>
                 )}
 
+                {recommendations.length > 0 && (
+                    <section className="sd-section">
+                        <div className="sd-section-header">
+                            <div className="sd-section-title">
+                                <Flag size={22} color="var(--primary)" />
+                                <h2>Trilha Inteligente</h2>
+                            </div>
+                        </div>
+                        <div className="sd-live-cards">
+                            {recommendations.map((rec) => (
+                                <button
+                                    key={`${rec.courseId}_${rec.videoId}`}
+                                    className="sd-live-card"
+                                    onClick={() => handleLessonClick(rec.videoId)}
+                                    onMouseEnter={() => prefetchLessonResources(rec.videoId)}
+                                    onFocus={() => prefetchLessonResources(rec.videoId)}
+                                    style={{ textAlign: 'left', border: '1px solid var(--glass-border)' }}
+                                >
+                                    <div className="sd-live-card-badge">
+                                        <BookOpen size={14} /> {rec.moduleName}
+                                    </div>
+                                    <h3 className="sd-live-card-title">{rec.videoTitle}</h3>
+                                    <span className="sd-live-card-course">{rec.courseName}</span>
+                                    <span className="sd-live-card-module">{rec.reason}</span>
+                                    <span className="sd-live-card-module">Prioridade: {rec.priorityScore} • Risco: {rec.riskLevel}</span>
+                                    <span className="sd-live-card-join">
+                                        <PlayCircle size={14} /> Assistir agora
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
+                    </section>
+                )}
+
                 {/* ─── SEÇÃO 1: CONTINUAR ESTUDANDO ─── */}
-                {continueCourses.length > 1 && (
+                {continueCourses.length > 0 && (
                     <section className="sd-section">
                         <div className="sd-section-header">
                             <div className="sd-section-title">
@@ -398,7 +544,7 @@ export default function StudentDashboard() {
                             <CarouselNav id="continue" />
                         </div>
                         <Carousel carouselId="continue">
-                            {continueCourses.slice(1).map(course => {
+                            {continueCourses.map(course => {
                                 const lessonNum = getLessonNumber(course);
                                 const thumbUrl = getThumbUrl(course.lastWatchedVideo?.thumbnailUrl || course.thumbnailUrl);
                                 return (
@@ -406,6 +552,7 @@ export default function StudentDashboard() {
                                         key={course.id}
                                         className="sd-card-hero"
                                         onClick={() => handleCourseClick(course)}
+                                        onMouseEnter={() => prefetchLessonResources(getPreferredVideoId(course))}
                                     >
                                         <div
                                             className="sd-card-hero-bg"
@@ -462,6 +609,7 @@ export default function StudentDashboard() {
                                         key={course.id}
                                         className="sd-card-medium"
                                         onClick={() => handleCourseClick(course)}
+                                        onMouseEnter={() => prefetchLessonResources(getPreferredVideoId(course))}
                                     >
                                         <div
                                             className="sd-card-medium-bg"

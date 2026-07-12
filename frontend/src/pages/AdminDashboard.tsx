@@ -1,14 +1,15 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useConfig } from '../context/ConfigContext';
-import { Users, BookOpen, Activity, Plus, Trash2, Settings, Save, Eye, EyeOff, CheckCircle, AlertCircle, Upload, Edit3, RefreshCw, Image, Monitor, X, FileSpreadsheet, FileDown, CalendarDays, ClipboardList, BarChart3, Download, Bell, ChevronUp, ChevronDown, Video, ExternalLink, MessageSquare, ShieldCheck, Flag, Ban, Scale, AlertTriangle } from 'lucide-react';
+import { Users, BookOpen, Activity, Plus, Trash2, Settings, Save, Eye, EyeOff, CheckCircle, AlertCircle, Upload, Edit3, RefreshCw, Monitor, X, FileSpreadsheet, FileDown, CalendarDays, ClipboardList, BarChart3, Download, Bell, ChevronUp, ChevronDown, Video, ExternalLink, ShieldCheck, Flag, Ban, Scale, AlertTriangle, RadioTower, Key, School, Activity as ActivityIcon } from 'lucide-react';
 import axios from 'axios';
 import api from '../lib/api';
-import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 import DOMPurify from 'dompurify';
 import BlockEditor, { BlockRenderer, type ContentBlock, parseContentField } from '../components/BlockEditor';
 import ConfirmModal from '../components/ConfirmModal';
+import BroadcastAdminPanel from '../components/BroadcastAdminPanel';
+import PrivateRoomAdminPanel from '../components/PrivateRoomAdminPanel';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
@@ -34,9 +35,12 @@ interface ModuleData {
     id: string;
     name: string;
     pdfUrl: string | null;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    videos: any[];
+    videos: VideoData[];
+    order?: number;
 }
+
+interface VideoData { id: string; title: string; description: string | null; content: string | null; thumbnailUrl?: string | null; status: string; order: number; }
+interface EnrollmentData { id: string; enrollmentRole: 'STUDENT' | 'TEACHER'; user: { id: string; name: string; email: string }; }
 
 interface CourseData {
     id: string;
@@ -45,8 +49,23 @@ interface CourseData {
     thumbnailUrl: string | null;
     calendarUrl: string | null;
     modules: ModuleData[];
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    enrollments: any[];
+    enrollments: EnrollmentData[];
+    order?: number;
+}
+
+interface HealthData { uptime: number; memory: { process: number }; services: { database: string; storage: string }; }
+interface AuditLogData { id: string; action: string; target?: string | null; details?: string | null; createdAt: string; user?: { name: string } | null; }
+interface CourseReport { id: string; name: string; totalStudents: number; totalVideos: number; completionRate: number; completedLessons: number; totalPossibleLessons: number; }
+interface LiveClassData { id: string; title: string; status: string; startAt: string; endAt?: string | null; zoomJoinUrl?: string | null; course?: { name: string } | null; module?: { name: string } | null; }
+interface FlaggedComment { id: string; text: string; flagged: boolean; createdAt: string; user: { name: string; role: string }; video: { title: string; module: { course: { name: string } } }; reports: { id: string; reason: string; user: { name: string } }[]; }
+interface ViolationData { id: string; word: string; severity: string; autoAction?: string | null; createdAt: string; user: { name: string }; }
+interface BanData { id: string; active: boolean; banType: string; reason: string; createdAt: string; expiresAt?: string | null; user: { name: string }; }
+interface AppealData { id: string; status: string; reason: string; adminNote?: string | null; createdAt: string; user: { name: string; email: string }; }
+interface AttendanceEditData { oldStatus: string; newStatus: string; justification: string; editedBy?: { name: string } | null; }
+interface AttendanceData { id?: string; userId: string; status: string; watchTimeSeconds?: number; autoDetected?: boolean; user?: { name: string; email: string }; edits?: AttendanceEditData[]; }
+
+function roleLabel(role: string): string {
+    return ({ ADMIN: 'Administrador', TEACHER: 'Professor', STUDENT: 'Aluno', STAFF: 'Equipe escolar', GUARDIAN: 'Responsável' } as Record<string, string>)[role] || role;
 }
 
 export default function AdminDashboard() {
@@ -82,7 +101,7 @@ export default function AdminDashboard() {
     const [editVideoData, setEditVideoData] = useState({ title: '', description: '', content: '' });
     const [editBlocks, setEditBlocks] = useState<ContentBlock[]>([]);
     const [uploadingImage, setUploadingImage] = useState(false);
-    const [showPreview, setShowPreview] = useState(false);
+
     const [editorModalMode, setEditorModalMode] = useState<'edit' | 'preview'>('edit');
 
     // Excel upload state
@@ -91,45 +110,45 @@ export default function AdminDashboard() {
 
     // Confirm modal state
     const [confirmAction, setConfirmAction] = useState<{ message: string; action: () => void } | null>(null);
-
     // Upload progress
     const [uploadProgress, setUploadProgress] = useState(0);
 
     // Audit log state
-    const [auditLogs, setAuditLogs] = useState<any[]>([]);
+    const [healthData, setHealthData] = useState<HealthData | null>(null);
+    const [auditLogs, setAuditLogs] = useState<AuditLogData[]>([]);
     const [auditPage, setAuditPage] = useState(1);
     const [auditTotalPages, setAuditTotalPages] = useState(1);
 
     // Reports state
-    const [reports, setReports] = useState<any[]>([]);
+    const [reports, setReports] = useState<CourseReport[]>([]);
 
     // Notification broadcast state
     const [notifForm, setNotifForm] = useState({ title: '', message: '' });
 
     // Live Classes state
-    const [liveClasses, setLiveClasses] = useState<any[]>([]);
+    const [liveClasses, setLiveClasses] = useState<LiveClassData[]>([]);
     const [liveForm, setLiveForm] = useState({ courseId: '', moduleId: '', title: '', description: '', startAt: '', endAt: '', zoomJoinUrl: '', zoomStartUrl: '', zoomMeetingId: '' });
     const [editingLiveId, setEditingLiveId] = useState<string | null>(null);
     const [editingLiveStatus, setEditingLiveStatus] = useState('');
 
     // Moderation state
-    const [flaggedComments, setFlaggedComments] = useState<any[]>([]);
+    const [flaggedComments, setFlaggedComments] = useState<FlaggedComment[]>([]);
     const [flaggedTotal, setFlaggedTotal] = useState(0);
     const [flaggedPage, setFlaggedPage] = useState(1);
     const [flaggedTotalPages, setFlaggedTotalPages] = useState(1);
 
     // Punishment state
-    const [violations, setViolations] = useState<any[]>([]);
-    const [bans, setBans] = useState<any[]>([]);
-    const [appeals, setAppeals] = useState<any[]>([]);
+    const [violations, setViolations] = useState<ViolationData[]>([]);
+    const [bans, setBans] = useState<BanData[]>([]);
+    const [appeals, setAppeals] = useState<AppealData[]>([]);
     const [appealFilter, setAppealFilter] = useState('PENDING');
     const [punishmentEnabled, setPunishmentEnabled] = useState(false);
     const [manualBanForm, setManualBanForm] = useState({ userId: '', reason: '', banType: 'TEMP_1D' });
 
     // Attendance state
-    const [attendanceData, setAttendanceData] = useState<any[]>([]);
+    const [attendanceData, setAttendanceData] = useState<AttendanceData[]>([]);
     const [attendanceFilter, setAttendanceFilter] = useState({ courseId: '', moduleId: '', date: new Date().toISOString().split('T')[0] });
-    const [attendanceModules, setAttendanceModules] = useState<any[]>([]);
+    const [attendanceModules, setAttendanceModules] = useState<ModuleData[]>([]);
     const [attendanceEditModal, setAttendanceEditModal] = useState<{ id: string; userId: string; moduleId: string; date: string; currentStatus: string } | null>(null);
     const [attendanceEditForm, setAttendanceEditForm] = useState({ status: '', justification: '' });
     const [attendanceConfig, setAttendanceConfig] = useState({ attendanceEnabled: false, attendanceMinMinutes: 20, attendanceMode: 'FREE' });
@@ -152,7 +171,7 @@ export default function AdminDashboard() {
         namePart1: '',
         namePart2: '',
         nameColor1: '#e50914',
-        nameColor2: '#ffffff',
+        nameColor2: '#172033',
         primaryColor: '#6366f1',
         accentColor: '#ec4899',
         logoUrl: '',
@@ -191,16 +210,20 @@ export default function AdminDashboard() {
                     namePart1: res.data.namePart1 || 'Edu',
                     namePart2: res.data.namePart2 || 'Vault',
                     nameColor1: res.data.nameColor1 || '#e50914',
-                    nameColor2: res.data.nameColor2 || '#ffffff',
+                    nameColor2: res.data.nameColor2 || '#172033',
                     primaryColor: res.data.primaryColor || '#6366f1',
                     accentColor: res.data.accentColor || '#ec4899',
                     logoUrl: res.data.logoUrl || '',
                     bannerUrl: res.data.bannerUrl || ''
                 });
             } else if (activeTab === 'audit') {
-                const res = await api.get('/api/admin/audit-log', { headers, params: { page: auditPage, limit: 50 } });
-                setAuditLogs(res.data.data);
-                setAuditTotalPages(res.data.totalPages);
+                const [auditRes, healthRes] = await Promise.all([
+                    api.get('/api/admin/audit-log', { headers, params: { page: auditPage, limit: 50 } }),
+                    api.get('/api/admin/health', { headers })
+                ]);
+                setAuditLogs(auditRes.data.data);
+                setAuditTotalPages(auditRes.data.totalPages);
+                setHealthData(healthRes.data);
             } else if (activeTab === 'reports') {
                 const res = await api.get('/api/admin/reports', { headers });
                 setReports(res.data);
@@ -251,7 +274,7 @@ export default function AdminDashboard() {
                 }
             }
         } catch (error) { console.error('Error fetching admin data', error); }
-    }, [token, activeTab, userPage, userSearch, auditPage, flaggedPage, appealFilter, isTeacher]);
+    }, [token, activeTab, userPage, userSearch, auditPage, flaggedPage, appealFilter, isTeacher, attendanceFilter.moduleId, attendanceFilter.date]);
 
     useEffect(() => {
         if (!token) return;
@@ -547,54 +570,7 @@ export default function AdminDashboard() {
         }
     };
 
-    // Insert image tag into content editor
-    const handleInsertImageInContent = async (file: File) => {
-        const url = await handleImageUpload(file);
-        if (url) {
-            const imgTag = `<img src="${API_BASE}${url}" alt="Imagem do conteúdo" style="max-width:100%;border-radius:8px;margin:1rem 0" />`;
-            setEditVideoData(prev => ({ ...prev, content: prev.content + '\n' + imgTag }));
-        }
-    };
-
-    // Insert HTML template block into content
-    const insertTemplate = (template: string) => {
-        setEditVideoData(prev => ({ ...prev, content: prev.content + '\n' + template }));
-    };
-
-    const CONTENT_TEMPLATES = {
-        heading: '<h2>Título da Seção</h2>\n<p>Texto do parágrafo aqui...</p>',
-        highlight: '<div class="highlight-box">\n  <h4>📌 Regras Importantes</h4>\n  <ul>\n    <li>Item 1</li>\n    <li>Item 2</li>\n    <li>Item 3</li>\n  </ul>\n</div>',
-        example: '<div class="example-box">\n  <h4>📘 Exemplo</h4>\n  <p>Descrição do exemplo...</p>\n</div>',
-        solution: '<div class="solution-box">\n  <h4>✅ Resolução</h4>\n  <p>Calcule:</p>\n  <div class="formula">f(x) = x² + 2x</div>\n  <p><strong>Resultado: 42</strong></p>\n</div>',
-        tip: '<div class="tip-box">\n  <h4>💡 Dica</h4>\n  <p>Texto da dica aqui...</p>\n</div>',
-        warning: '<div class="warning-box">\n  <h4>⚠️ Atenção</h4>\n  <p>Texto de aviso aqui...</p>\n</div>',
-        table: '<table>\n  <thead>\n    <tr><th>Função</th><th>Derivada</th></tr>\n  </thead>\n  <tbody>\n    <tr><td>f(x) = x²</td><td>f\'(x) = 2x</td></tr>\n    <tr><td>f(x) = sen(x)</td><td>f\'(x) = cos(x)</td></tr>\n  </tbody>\n</table>',
-        formula: '<div class="formula">f(x) = ax² + bx + c</div>',
-        twoCols: '<div class="two-cols">\n  <div>\n    <h3>Coluna 1</h3>\n    <p>Conteúdo da esquerda...</p>\n  </div>\n  <div>\n    <h3>Coluna 2</h3>\n    <p>Conteúdo da direita...</p>\n  </div>\n</div>',
-        sidebarCard: '<div class="sidebar-card">\n  <h4>Título do Card</h4>\n  <p>Conteúdo que aparece na sidebar ao lado do texto principal.</p>\n</div>',
-    };
-
-    // Quill editor – modules & formats
-    const quillModules = useMemo(() => ({
-        toolbar: {
-            container: [
-                [{ 'header': [1, 2, 3, false] }],
-                ['bold', 'italic', 'underline', 'strike'],
-                [{ 'color': [] }, { 'background': [] }],
-                [{ 'list': 'ordered' }, { 'list': 'bullet' }],
-                ['blockquote', 'code-block'],
-                [{ 'align': [] }],
-                ['link', 'image'],
-                ['clean']
-            ],
-        },
-    }), []);
-
-    const quillFormats = [
-        'header', 'bold', 'italic', 'underline', 'strike',
-        'color', 'background', 'list', 'blockquote', 'code-block',
-        'align', 'link', 'image'
-    ];
+    // Unused variables removed
 
     const handleExportStudents = async () => {
         try {
@@ -662,7 +638,7 @@ export default function AdminDashboard() {
     };
 
     const handleReorderCourse = async (courseId: string, direction: 'up' | 'down') => {
-        const sorted = [...courses].sort((a, b) => ((a as any).order || 0) - ((b as any).order || 0));
+        const sorted = [...courses].sort((a, b) => (a.order || 0) - (b.order || 0));
         const idx = sorted.findIndex(c => c.id === courseId);
         if ((direction === 'up' && idx <= 0) || (direction === 'down' && idx >= sorted.length - 1)) return;
         const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
@@ -881,6 +857,9 @@ export default function AdminDashboard() {
                     <button onClick={() => setActiveTab('courses')} className={`admin-nav-btn ${activeTab === 'courses' ? 'active' : ''}`}>
                         <BookOpen size={20} /> {isTeacher ? 'Meus Cursos' : 'Cursos e Módulos'}
                     </button>
+                    <button onClick={() => window.location.assign('/school')} className="admin-nav-btn">
+                        <School size={20} /> Escola 360
+                    </button>
                     {!isTeacher && (
                     <>
                     <button onClick={() => setActiveTab('audit')} className={`admin-nav-btn ${activeTab === 'audit' ? 'active' : ''}`}>
@@ -905,14 +884,21 @@ export default function AdminDashboard() {
                     <button onClick={() => setActiveTab('attendance')} className={`admin-nav-btn ${activeTab === 'attendance' ? 'active' : ''}`}>
                         <CheckCircle size={20} /> Presença
                     </button>
+                    <button onClick={() => setActiveTab('broadcast')} className={`admin-nav-btn ${activeTab === 'broadcast' ? 'active' : ''}`}>
+                        <RadioTower size={20} /> Campus ao Vivo
+                    </button>
+                    </>
+                    )}
+
+                    <button onClick={() => setActiveTab('privaterooms')} className={`admin-nav-btn ${activeTab === 'privaterooms' ? 'active' : ''}`}>
+                        <Key size={20} /> Salas Privadas
+                    </button>
 
                     <div className="admin-sidebar-divider" />
 
                     <button onClick={() => setActiveTab('settings')} className={`admin-nav-btn ${activeTab === 'settings' ? 'active' : ''}`}>
                         <Settings size={20} /> Configurações
                     </button>
-                    </>
-                    )}
                 </aside>
 
                 {/* Main Content Area */}
@@ -955,6 +941,8 @@ export default function AdminDashboard() {
                                         <option value="STUDENT">Aluno</option>
                                         <option value="TEACHER">Professor</option>
                                         <option value="ADMIN">Admin</option>
+                                        <option value="STAFF">Equipe escolar</option>
+                                        <option value="GUARDIAN">Responsável</option>
                                     </select>
                                     <button type="submit" className="admin-btn-primary">
                                         <Plus size={16} /> Salvar
@@ -1069,8 +1057,10 @@ export default function AdminDashboard() {
                                                         <option value="STUDENT">Aluno</option>
                                                         <option value="TEACHER">Professor</option>
                                                         <option value="ADMIN">Admin</option>
+                                                        <option value="STAFF">Equipe escolar</option>
+                                                        <option value="GUARDIAN">Responsável</option>
                                                     </select>
-                                                ) : <span className={`admin-role-badge ${u.role.toLowerCase()}`}>{u.role === 'TEACHER' ? 'Professor' : u.role === 'ADMIN' ? 'Admin' : 'Aluno'}</span>}
+                                                ) : <span className={`admin-role-badge ${u.role.toLowerCase()}`}>{roleLabel(u.role)}</span>}
                                             </td>
                                             <td style={{ display: 'flex', gap: '0.5rem' }}>
                                                 {editingUserId === u.id ? (
@@ -1087,8 +1077,10 @@ export default function AdminDashboard() {
                                                                     fetchData();
                                                                 }
                                                                 setEditingUserId(null);
-                                                            } catch (err: any) {
-                                                                alert(err.response?.data?.message || 'Erro ao atualizar usuário.');
+                                                            } catch (error: unknown) {
+                                                                alert(axios.isAxiosError<{ message?: string }>(error)
+                                                                    ? error.response?.data?.message || 'Erro ao atualizar usuário.'
+                                                                    : 'Erro ao atualizar usuário.');
                                                             }
                                                         }} className="admin-btn-icon" style={{ color: '#22c55e' }} title="Salvar">
                                                             <Save size={18} />
@@ -1431,7 +1423,7 @@ export default function AdminDashboard() {
                                                 {/* Enrollments List */}
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                                     {c.enrollments && c.enrollments.length > 0 ? (
-                                                        c.enrollments.map((e: any) => (
+                                                        c.enrollments.map((e) => (
                                                             <div key={e.id} className="admin-enrollment-item">
                                                                 <div>
                                                                     <strong style={{ fontSize: '0.95rem' }}>{e.user.name}</strong>
@@ -1463,6 +1455,41 @@ export default function AdminDashboard() {
                     {/* TAB: AUDIT LOG */}
                     {activeTab === 'audit' && (
                         <div className="admin-fade-in">
+                            {healthData && (
+                                <div style={{ marginBottom: '2rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                                    <div className="stat-card" style={{ flex: 1, minWidth: '200px' }}>
+                                        <div className="stat-icon"><ActivityIcon size={24} /></div>
+                                        <div className="stat-info">
+                                            <h3>Uptime do Servidor</h3>
+                                            <div className="stat-value">{Math.floor(healthData.uptime / 3600)}h {Math.floor((healthData.uptime % 3600) / 60)}m</div>
+                                        </div>
+                                    </div>
+                                    <div className="stat-card" style={{ flex: 1, minWidth: '200px' }}>
+                                        <div className="stat-icon"><Monitor size={24} /></div>
+                                        <div className="stat-info">
+                                            <h3>Uso de Memória</h3>
+                                            <div className="stat-value">{Math.round(healthData.memory.process / 1024 / 1024)} MB</div>
+                                        </div>
+                                    </div>
+                                    <div className="stat-card" style={{ flex: 1, minWidth: '200px' }}>
+                                        <div className="stat-icon"><Settings size={24} /></div>
+                                        <div className="stat-info">
+                                            <h3>Status dos Serviços</h3>
+                                            <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem' }}>
+                                                <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.85rem' }}>
+                                                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: healthData.services.database === 'up' ? '#10b981' : '#ef4444' }}></span>
+                                                    DB
+                                                </span>
+                                                <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.85rem' }}>
+                                                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: healthData.services.storage === 'up' ? '#10b981' : '#ef4444' }}></span>
+                                                    Storage
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
                             <h2 className="admin-page-title">Audit Log</h2>
                             <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>Registro de todas as ações administrativas na plataforma.</p>
 
@@ -1672,7 +1699,7 @@ export default function AdminDashboard() {
                                     <div className="admin-empty-box">Nenhuma aula ao vivo agendada.</div>
                                 ) : (
                                     <div className="live-class-list">
-                                        {liveClasses.map((lc: any) => (
+                                        {liveClasses.map((lc) => (
                                             <div key={lc.id} className={`live-class-item status-${lc.status.toLowerCase()}`}>
                                                 <div className="live-class-info">
                                                     <div className="live-class-header">
@@ -1758,7 +1785,7 @@ export default function AdminDashboard() {
                                 </div>
                             ) : (
                                 <div className="admin-moderation-list">
-                                    {flaggedComments.map((c: any) => (
+                                    {flaggedComments.map((c) => (
                                         <div key={c.id} className="admin-mod-card">
                                             <div className="admin-mod-header">
                                                 <div className="admin-mod-user">
@@ -1779,7 +1806,7 @@ export default function AdminDashboard() {
                                             {c.reports.length > 0 && (
                                                 <div className="admin-mod-reports">
                                                     <strong><Flag size={12} /> {c.reports.length} denúncia(s):</strong>
-                                                    {c.reports.map((r: any) => (
+                                                    {c.reports.map((r) => (
                                                         <div key={r.id} className="admin-mod-report-item">
                                                             <span>{r.user.name}:</span> {r.reason}
                                                         </div>
@@ -1884,7 +1911,7 @@ export default function AdminDashboard() {
                                     <p className="punishment-empty">Nenhum recurso {appealFilter === 'PENDING' ? 'pendente' : appealFilter === 'APPROVED' ? 'aprovado' : 'rejeitado'}.</p>
                                 ) : (
                                     <div className="punishment-list">
-                                        {appeals.map((a: any) => (
+                                        {appeals.map((a) => (
                                             <div key={a.id} className="punishment-card appeal-card">
                                                 <div className="punishment-card-header">
                                                     <strong>{a.user.name}</strong>
@@ -1940,7 +1967,7 @@ export default function AdminDashboard() {
                                     <p className="punishment-empty">Nenhum ban registrado.</p>
                                 ) : (
                                     <div className="punishment-list">
-                                        {bans.map((b: any) => (
+                                        {bans.map((b) => (
                                             <div key={b.id} className={`punishment-card ban-card ${b.active ? 'ban-active' : 'ban-expired'}`}>
                                                 <div className="punishment-card-header">
                                                     <strong>{b.user.name}</strong>
@@ -2045,7 +2072,7 @@ export default function AdminDashboard() {
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {violations.map((v: any) => (
+                                                {violations.map((v) => (
                                                     <tr key={v.id}>
                                                         <td>{v.user.name}</td>
                                                         <td className="punishment-word">{v.word}</td>
@@ -2063,6 +2090,18 @@ export default function AdminDashboard() {
                                     </div>
                                 )}
                             </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'broadcast' && user?.role === 'ADMIN' && (
+                        <div className="admin-fade-in">
+                            <BroadcastAdminPanel token={token || ''} />
+                        </div>
+                    )}
+
+                    {activeTab === 'privaterooms' && (
+                        <div className="admin-fade-in">
+                            <PrivateRoomAdminPanel token={token || ''} />
                         </div>
                     )}
 
@@ -2399,7 +2438,7 @@ export default function AdminDashboard() {
                                             disabled={!attendanceFilter.courseId}
                                         >
                                             <option value="">Selecione um módulo...</option>
-                                            {attendanceModules.map((m: any) => (
+                                            {attendanceModules.map((m) => (
                                                 <option key={m.id} value={m.id}>{m.name}</option>
                                             ))}
                                         </select>
@@ -2430,10 +2469,10 @@ export default function AdminDashboard() {
                                         <h3>Lista de Presença — {attendanceData.length} aluno(s)</h3>
                                         <div style={{ display: 'flex', gap: '1rem', fontSize: '0.9rem' }}>
                                             <span style={{ color: '#22c55e', fontWeight: 600 }}>
-                                                ✓ Presentes: {attendanceData.filter((a: any) => a.status === 'PRESENT').length}
+                                                ✓ Presentes: {attendanceData.filter((a) => a.status === 'PRESENT').length}
                                             </span>
                                             <span style={{ color: '#ef4444', fontWeight: 600 }}>
-                                                ✗ Ausentes: {attendanceData.filter((a: any) => a.status === 'ABSENT').length}
+                                                ✗ Ausentes: {attendanceData.filter((a) => a.status === 'ABSENT').length}
                                             </span>
                                         </div>
                                     </div>
@@ -2451,7 +2490,7 @@ export default function AdminDashboard() {
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {attendanceData.map((att: any, idx: number) => (
+                                                {attendanceData.map((att, idx) => (
                                                     <tr key={att.id || `absent-${att.userId}`} style={{ borderBottom: '1px solid var(--glass-border)', background: idx % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)' }}>
                                                         <td style={{ padding: '0.75rem', fontWeight: 500 }}>{att.user?.name || 'N/A'}</td>
                                                         <td style={{ padding: '0.75rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>{att.user?.email || 'N/A'}</td>
@@ -2495,7 +2534,7 @@ export default function AdminDashboard() {
                                                             </button>
                                                             {/* Show edit history */}
                                                             {att.edits && att.edits.length > 0 && (
-                                                                <span title={att.edits.map((ed: any) => `${ed.editedBy?.name}: ${ed.oldStatus}→${ed.newStatus} - ${ed.justification}`).join('\n')} style={{ marginLeft: '0.5rem', cursor: 'help', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                                                <span title={att.edits.map((ed) => `${ed.editedBy?.name}: ${ed.oldStatus}→${ed.newStatus} - ${ed.justification}`).join('\n')} style={{ marginLeft: '0.5rem', cursor: 'help', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                                                                     📝 {att.edits.length} edição(ões)
                                                                 </span>
                                                             )}

@@ -10,35 +10,59 @@
  *
  * Porta padrão: 4000 (configurável via .env PORT)
  */
-import express from 'express';
+import express, { NextFunction, Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
+import multer from 'multer';
 import authRoutes from './routes/auth';
 import videoRoutes from './routes/video';
 import adminRoutes from './routes/admin';
 import studentRoutes from './routes/student';
 import configRoutes from './routes/config';
+import aiRoutes from './routes/ai';
+import {
+    adminBroadcastRouter,
+    internalBroadcastRouter,
+    publicBroadcastRouter,
+} from './routes/broadcast';
+import { privateRoomsRouter, adminPrivateRoomsRouter } from './routes/privateRooms';
+import schoolRouter from './modules/school/schoolRouter';
 import boss, { initQueue } from './config/pgBoss';
 import { processVideoJob } from './services/videoProcessor';
-import { authenticateToken } from './middleware/authMiddleware';
+import { authenticateStreamToken, authenticateToken, requireRole } from './middleware/authMiddleware';
+import { requireCsrf } from './lib/sessionCookies';
 import prisma from './lib/prisma';
 import logger from './lib/logger';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import pinoHttp from 'pino-http';
+import { publicPdfPathFromMountedRequest } from './lib/mediaPaths';
 
 dotenv.config();
 
-// Validação crítica: JWT_SECRET DEVE existir
-if (!process.env.JWT_SECRET) {
-    logger.fatal('JWT_SECRET não definido no .env. Abortando.');
+// Validacao critica: segredo curto/default nao pode chegar a producao.
+const jwtSecret = process.env.JWT_SECRET?.trim();
+if (!jwtSecret || (process.env.NODE_ENV === 'production'
+    && (jwtSecret.length < 32 || /troque|change|secret-em-producao/i.test(jwtSecret)))) {
+    logger.fatal('JWT_SECRET ausente ou inseguro para o ambiente atual. Abortando.');
     process.exit(1);
 }
 
 const app = express();
 const PORT = process.env.PORT || 4000;
+let shuttingDown = false;
+let startupReady = false;
+app.set('trust proxy', trustProxySetting(process.env.TRUST_PROXY));
+
+const corsOptions: cors.CorsOptions = {
+    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-XSRF-TOKEN'],
+    credentials: true
+};
 
 // ========================================
 // CAMADA DE SEGURANÇA (OWASP Compliance)
@@ -50,41 +74,89 @@ app.use(helmet({
     crossOriginResourcePolicy: { policy: 'cross-origin' }
 }));
 
+// CORS precisa ser aplicado antes de rate limits para cobrir preflight (OPTIONS)
+app.use(cors(corsOptions));
+app.options('*path', cors(corsOptions));
+
 // Rate Limiting: proteção contra brute force e DDoS básico
 const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutos
     max: 10, // Limite rígido: 10 tentativas de login por IP a cada 15 min
+    skip: (req) => req.method === 'OPTIONS',
     message: { message: 'Muitas tentativas de login. Aguarde 15 minutos.' }
 });
 app.use('/api/auth/login', loginLimiter);
 
+// A troca de credenciais também executa bcrypt e precisa de um orçamento
+// próprio para que uma conta comprometida não seja usada para exaurir CPU.
+const credentialChangeLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    skip: (req) => req.method !== 'PUT',
+    message: { message: 'Muitas tentativas de alteração de credenciais. Aguarde 15 minutos.' }
+});
+app.use('/api/auth/profile', credentialChangeLimiter);
+
 const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 1000,
+    skip: (req) => req.method === 'OPTIONS',
     message: { message: 'Muitas requisições deste IP. Tente novamente mais tarde.' }
 });
+
+const privateRoomAuthLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    skip: (req) => req.method === 'OPTIONS',
+    message: { error: 'Muitas tentativas de acesso. Aguarde 15 minutos.' }
+});
+app.use('/api/private-rooms', privateRoomAuthLimiter);
 app.use('/api/', apiLimiter);
 
 // Rate limit separado para /progress (chamado a cada 10s por aluno ativo)
 const progressLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 300, // ~3.3/s — suficiente para 1 req/10s com margem
+    skip: (req) => req.method === 'OPTIONS',
     message: { message: 'Muitas atualizações de progresso.' }
 });
 app.use('/api/student/progress', progressLimiter);
 
-// CORS configurado restritivamente
-app.use(cors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: true
-}));
+// Multipart uploads are intentionally larger than JSON commands. Keeping the
+// global JSON budget small prevents a cheap memory-exhaustion path without
+// affecting video/PDF/image uploads handled by Multer.
+app.use(express.json({ limit: jsonBodyLimit(process.env.JSON_BODY_LIMIT) }));
 
-app.use(express.json({ limit: '10mb' }));
+const videoUploadLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 20,
+    skip: (req) => req.method === 'OPTIONS',
+    message: { message: 'Limite de uploads de vídeo atingido. Tente novamente mais tarde.' }
+});
+app.use('/api/videos/upload', videoUploadLimiter);
+
+const assetUploadLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 200,
+    skip: (req) => req.method === 'OPTIONS',
+    message: { message: 'Limite de uploads atingido. Tente novamente mais tarde.' }
+});
+app.use(['/api/admin/upload-image', '/api/admin/upload-pdf', '/api/admin/upload-students-excel'], assetUploadLimiter);
 
 // Request logging estruturado
-app.use(pinoHttp({ logger, autoLogging: { ignore: (req) => (req.url === '/' || req.url === '/api/metrics') } }));
+app.use(pinoHttp({
+    logger,
+    genReqId: (req, res) => {
+        const incoming = req.headers['x-request-id'];
+        const requestId = typeof incoming === 'string' && /^[a-zA-Z0-9._:-]{8,128}$/.test(incoming)
+            ? incoming
+            : crypto.randomUUID();
+        res.setHeader('X-Request-ID', requestId);
+        return requestId;
+    },
+    autoLogging: { ignore: (req) => (req.url === '/' || req.url === '/api/metrics') }
+}));
+app.use('/api', requireCsrf);
 
 // ========================================
 // DIRETÓRIOS DE ARMAZENAMENTO
@@ -105,60 +177,34 @@ const imageStoragePath = process.env.IMAGE_STORAGE_PATH || './uploads/images';
 // ========================================
 
 // Health check — verifica DB, pg-boss, disco e fila de vídeos
-app.get('/', async (_req, res) => {
-    try {
-        const warnings: string[] = [];
+app.get('/health/live', (_req, res) => {
+    res.json({ status: 'ok' });
+});
 
-        // 1. Database latency
-        const dbStart = Date.now();
-        await prisma.$queryRaw`SELECT 1`;
-        const dbLatency = Date.now() - dbStart;
-        if (dbLatency > 100) warnings.push('Slow database');
-
-        // 2. pg-boss state
-        const bossState = boss.started ? 'running' : 'stopped';
-        if (!boss.started) warnings.push('pg-boss stopped');
-
-        // 3. Video queue size
-        const [queueSize] = await prisma.$queryRaw<[{ count: bigint }]>`
-            SELECT COUNT(*) as count FROM pgboss.job WHERE name = 'video-process' AND state < 'completed'
-        `.catch(() => [{ count: 0n }]);
-        const pendingJobs = Number(queueSize?.count ?? 0);
-        if (pendingJobs > 50) warnings.push('Large video queue');
-
-        // 4. Disk space (uploads directory)
-        const uploadsPath = path.resolve(process.env.VIDEO_STORAGE_PATH || './uploads/videos');
-        let diskFreeGB = 'N/A';
-        try {
-            const stats = fs.statfsSync(uploadsPath);
-            const freeBytes = stats.bfree * stats.bsize;
-            diskFreeGB = (freeBytes / 1e9).toFixed(1);
-            if (freeBytes < 5_000_000_000) warnings.push('Low disk space');
-        } catch {
-            diskFreeGB = 'unavailable';
-        }
-
-        // 5. Status
-        const status = warnings.length > 0 ? 'degraded' : 'healthy';
-
-        res.status(status === 'healthy' ? 200 : 503).json({
-            status,
-            warnings,
-            checks: {
-                database: { connected: true, latency: `${dbLatency}ms` },
-                queue: { state: bossState, pending: pendingJobs },
-                disk: { free: `${diskFreeGB}GB` },
-            },
-            uptime: Math.floor(process.uptime()),
-        });
-    } catch {
-        res.status(503).json({ status: 'unhealthy', db: 'disconnected' });
+app.get('/health/ready', async (_req, res) => {
+    if (shuttingDown || !startupReady) {
+        res.status(503).json({ status: shuttingDown ? 'shutting-down' : 'starting' });
+        return;
     }
+    try {
+        const startedAt = Date.now();
+        await prisma.$queryRaw`SELECT 1`;
+        res.json({ status: 'ready', databaseLatencyMs: Date.now() - startedAt });
+    } catch {
+        res.status(503).json({ status: 'not-ready' });
+    }
+});
+
+app.get('/', (_req, res) => {
+    // Do not expose queue size, disk capacity, DB latency or process details on
+    // an unauthenticated endpoint. /health/ready and ADMIN /api/metrics cover
+    // orchestration and operations respectively.
+    res.json({ service: 'eduvault-api', status: 'ok' });
 });
 
 // Métricas operacionais (para monitoramento/alertas)
 const startTime = Date.now();
-app.get('/api/metrics', async (_req, res) => {
+app.get('/api/metrics', authenticateToken, requireRole(['ADMIN']), async (_req, res) => {
     try {
         const mem = process.memoryUsage();
         const [queueSize] = await prisma.$queryRaw<[{ count: bigint }]>`
@@ -186,6 +232,18 @@ app.use('/api/auth', authRoutes);
 // Upload e Listagem de Vídeos (Admin/Professor)
 app.use('/api/videos', videoRoutes);
 
+// Professor virtual com contexto pedagogico e historico por aluno
+app.use('/api/ai', aiRoutes);
+
+// Campus ao vivo: leitura publica, administracao protegida e autorizacao RTMP interna
+app.use('/api/broadcast', publicBroadcastRouter);
+app.use('/api/admin/broadcast', adminBroadcastRouter);
+app.use('/internal', internalBroadcastRouter);
+
+// Salas Privadas (Masterclass com senha)
+app.use('/api/private-rooms', privateRoomsRouter);
+app.use('/api/admin/private-rooms', adminPrivateRoomsRouter);
+
 // Painel Administrativo Completo (CRUD)
 app.use('/api/admin', adminRoutes);
 
@@ -195,24 +253,71 @@ app.use('/api/student', studentRoutes);
 // Configurações Globais (Nome, Cor, Logo - Rota Pública)
 app.use('/api/config', configRoutes);
 
+// Sistema operacional escolar versionado (SIS + diário + gradebook)
+app.use('/api/v1/school', schoolRouter);
+
 // Servir imagens de uploads/images (thumbnails, conteúdo rico)
-app.use('/uploads/images', express.static(path.resolve(imageStoragePath)));
+app.use('/uploads/images', express.static(path.resolve(imageStoragePath), { dotfiles: 'deny' }));
 
 // Servir PDFs de uploads/pdfs (material de módulo + calendário)
 const pdfStoragePath = process.env.PDF_STORAGE_PATH || './uploads/pdfs';
-app.use('/uploads/pdfs', authenticateToken, express.static(path.resolve(pdfStoragePath)));
+app.use('/uploads/pdfs', authenticateToken, async (req: Request, res: Response, next: NextFunction) => {
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+        res.status(405).json({ message: 'Método não permitido.' });
+        return;
+    }
+
+    const publicPath = publicPdfPathFromMountedRequest(req.path);
+    if (!publicPath) {
+        res.status(404).json({ message: 'Material não encontrado.' });
+        return;
+    }
+
+    // Administrators need access to a newly uploaded file before attaching it.
+    if (req.user!.role === 'ADMIN') {
+        next();
+        return;
+    }
+
+    try {
+        const courseAccess = req.user!.role === 'STUDENT'
+            ? { enrollments: { some: { userId: req.user!.id, enrollmentRole: 'STUDENT' as const } } }
+            : { teacherAssignments: { some: { userId: req.user!.id } } };
+
+        const [moduleReference, courseReference] = await Promise.all([
+            prisma.module.findFirst({
+                where: { pdfUrl: publicPath, course: courseAccess },
+                select: { id: true }
+            }),
+            prisma.course.findFirst({
+                where: { calendarUrl: publicPath, ...courseAccess },
+                select: { id: true }
+            })
+        ]);
+
+        if (!moduleReference && !courseReference) {
+            // 404 avoids turning UUID filenames into an authorization oracle.
+            res.status(404).json({ message: 'Material não encontrado.' });
+            return;
+        }
+        next();
+    } catch (error) {
+        logger.error({ error, userId: req.user!.id, publicPath }, 'Falha ao autorizar material PDF');
+        res.status(503).json({ message: 'Serviço de materiais temporariamente indisponível.' });
+    }
+});
+app.use('/uploads/pdfs', express.static(path.resolve(pdfStoragePath), { dotfiles: 'deny' }));
 
 // HLS Streaming Route
-// Segurança: Os caminhos HLS contêm UUIDs aleatórios que só são revelados
-// via endpoints autenticados (/api/student/lesson/:id). Autenticação por request
-// individual é incompatível com streaming HLS (sub-playlists e segmentos .ts
-// não propagam token), então a proteção é feita na camada de API.
-app.use('/hls', express.static(path.resolve(hlsStoragePath), {
+// Cada playlist e segmento exige token curto, com purpose=stream e videoId.
+// O VideoPlayer injeta o header Authorization em todas as requisições VHS.
+app.use('/hls', authenticateStreamToken, express.static(path.resolve(hlsStoragePath), {
+    dotfiles: 'deny',
     setHeaders: (res, filePath) => {
         // Segmentos .ts são imutáveis (conteúdo fixo), cache longo
         // Playlists .m3u8 precisam ser fresh para adaptive switching
         if (filePath.endsWith('.ts')) {
-            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+            res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
         } else {
             res.setHeader('Cache-Control', 'no-cache');
         }
@@ -221,9 +326,56 @@ app.use('/hls', express.static(path.resolve(hlsStoragePath), {
     }
 }));
 
-app.listen(PORT, async () => {
+// API/static misses and middleware errors (Multer, malformed JSON, size limits)
+// must be deterministic JSON and must never leak framework stack traces.
+app.use((_req: Request, res: Response) => {
+    res.status(404).json({ message: 'Recurso não encontrado.' });
+});
+
+app.use((error: unknown, req: Request, res: Response, _next: NextFunction) => {
+    if (res.headersSent) return;
+
+    if (error instanceof multer.MulterError) {
+        const status = error.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+        res.status(status).json({
+            message: error.code === 'LIMIT_FILE_SIZE'
+                ? 'Arquivo excede o limite permitido.'
+                : 'Upload inválido.'
+        });
+        return;
+    }
+
+    const httpError = error as { status?: number; statusCode?: number; type?: string };
+    const status = httpError.statusCode ?? httpError.status;
+    if (status === 413 || httpError.type === 'entity.too.large') {
+        res.status(413).json({ message: 'Corpo da requisição excede o limite permitido.' });
+        return;
+    }
+    if ((status === 400 || error instanceof SyntaxError) && httpError.type === 'entity.parse.failed') {
+        res.status(400).json({ message: 'JSON inválido.' });
+        return;
+    }
+    if (typeof status === 'number' && status >= 400 && status < 500) {
+        res.status(status).json({ message: 'Requisição inválida.' });
+        return;
+    }
+
+    logger.error({ error, method: req.method, path: req.path }, 'Erro não tratado na requisição');
+    res.status(500).json({ message: 'Erro interno do servidor.' });
+});
+
+const httpServer = app.listen(PORT, () => {
     logger.info({ port: PORT, pid: process.pid }, 'Server started');
 
+    void startBackgroundServices()
+        .then(() => { startupReady = true; })
+        .catch((error) => {
+            logger.fatal({ error }, 'Falha ao iniciar serviços de background');
+            void shutdown('STARTUP_FAILURE', 1);
+        });
+});
+
+async function startBackgroundServices(): Promise<void> {
     const isWorker = process.env.PGBOSS_WORKER === 'true' || process.env.NODE_ENV !== 'production';
 
     if (isWorker) {
@@ -233,19 +385,67 @@ app.listen(PORT, async () => {
     } else {
         logger.info('Instância HTTP-only (pg-boss worker desabilitado).');
     }
-});
+}
 
 // Graceful Shutdown
-const shutdown = async (signal: string) => {
+const shutdown = async (signal: string, exitCode = 0) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
     logger.info({ signal }, 'Encerrando graciosamente...');
+
+    const forceExit = setTimeout(() => {
+        logger.fatal({ signal }, 'Timeout no encerramento gracioso');
+        process.exit(1);
+    }, 35_000);
+    forceExit.unref();
+
     try {
-        await boss.stop({ graceful: true, timeout: 30000 });
-        const { default: prisma } = await import('./lib/prisma');
-        await prisma.$disconnect();
+        httpServer.closeIdleConnections?.();
+        const httpClosed = new Promise<void>((resolve) => {
+            httpServer.close((error) => {
+                if (error) logger.error({ error }, 'Erro ao fechar servidor HTTP');
+                resolve();
+            });
+        });
+
+        const results = await Promise.allSettled([
+            httpClosed,
+            boss.stop({ graceful: true, timeout: 30_000 }),
+            prisma.$disconnect(),
+        ]);
+        for (const result of results) {
+            if (result.status === 'rejected') logger.error({ error: result.reason }, 'Falha durante shutdown');
+        }
     } catch (err) {
         logger.error(err, 'Erro durante shutdown');
     }
-    process.exit(0);
+    clearTimeout(forceExit);
+    process.exit(exitCode);
 };
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('uncaughtException', (error) => {
+    logger.fatal({ error }, 'Exceção não capturada');
+    void shutdown('UNCAUGHT_EXCEPTION', 1);
+});
+process.on('unhandledRejection', (reason) => {
+    logger.fatal({ reason }, 'Promise rejeitada sem tratamento');
+    void shutdown('UNHANDLED_REJECTION', 1);
+});
+
+function trustProxySetting(value: string | undefined): number | boolean {
+    if (!value || value === '0' || value.toLowerCase() === 'false') return false;
+    if (value.toLowerCase() === 'true') return true;
+    const hops = Number(value);
+    if (Number.isInteger(hops) && hops >= 0 && hops <= 10) return hops;
+    logger.fatal({ value }, 'TRUST_PROXY invalido. Use false, true ou um numero de saltos entre 0 e 10.');
+    process.exit(1);
+}
+
+function jsonBodyLimit(value: string | undefined): string {
+    const normalized = value?.trim().toLowerCase();
+    if (!normalized) return '2mb';
+    if (/^[1-9]\d{0,3}(kb|mb)$/.test(normalized)) return normalized;
+    logger.warn({ value }, 'JSON_BODY_LIMIT inválido; usando 2mb.');
+    return '2mb';
+}

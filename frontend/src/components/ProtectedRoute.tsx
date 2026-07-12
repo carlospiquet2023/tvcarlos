@@ -8,13 +8,14 @@
  * - Com token e role autorizada: renderiza o Outlet (rota filha)
  * - Exibe spinner durante validação do token (isLoading)
  */
-import { Navigate, Outlet } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Loader2 } from 'lucide-react';
 
 // ISSUE-13: Redireciona para dashboard adequado ao invés de login quando role não autorizada
 export const ProtectedRoute = ({ allowedRoles }: { allowedRoles?: string[] }) => {
     const { user, token, isLoading } = useAuth();
+    const location = useLocation();
 
     if (isLoading) {
         return (
@@ -28,6 +29,10 @@ export const ProtectedRoute = ({ allowedRoles }: { allowedRoles?: string[] }) =>
         return <Navigate to="/login" replace />;
     }
 
+    if (user.mustChangePassword && location.pathname !== '/account/security') {
+        return <Navigate to="/account/security" replace />;
+    }
+
     if (allowedRoles && !allowedRoles.includes(user.role)) {
         // Redirecionar para o dashboard correto baseado no role
         if (user.role === 'STUDENT') {
@@ -36,6 +41,8 @@ export const ProtectedRoute = ({ allowedRoles }: { allowedRoles?: string[] }) =>
         if (user.role === 'ADMIN' || user.role === 'TEACHER') {
             return <Navigate to="/admin" replace />;
         }
+        if (user.role === 'STAFF') return <Navigate to="/school" replace />;
+        if (user.role === 'GUARDIAN') return <Navigate to="/family" replace />;
         return <Navigate to="/" replace />;
     }
 

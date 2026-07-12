@@ -1,11 +1,17 @@
 # EduVault - Plataforma Premium de Hospedagem de Vídeos Institucional
+
+> Governança do projeto: consulte a [auditoria técnica](docs/TECHNICAL_AUDIT.md), os [gates de produção](docs/PRODUCTION_READINESS.md), a [estratégia de produto](docs/PRODUCT_AND_PROCUREMENT_STRATEGY.md), a [matriz de evidências](docs/PROCUREMENT_EVIDENCE_MATRIX.md), a [governança LGPD](docs/LGPD_AND_DATA_GOVERNANCE.md), a [governança de IA](docs/AI_GOVERNANCE.md) e os [SLOs](docs/SLO.md).
+
+Validação local completa: `npm run install:all` e `npm run quality` na raiz.
 **Desenvolvido sob rígido escopo de segurança para: Carlos Antonio de Oliveira Piquet**
 **Contato Administrativo:** carlospiquet.projetos@gmail.com
 
 ---
 
 ## 🛡️ Visão Geral e Auditoria QA
-O EduVault é uma plataforma full-stack arquitetada em formato de camadas (Node/Express 5 + React 19 + PostgreSQL) voltada à entrega segura de vídeos privados de altíssima qualidade. O sistema passou por rigorosa **Auditoria de Qualidade (QA)**, **Redesign v3.0**, **Hardening de Produção v4.0**, **Infraestrutura de Produção v5.0**, **Módulo de Aulas ao Vivo v6.0**, **Ops & Observabilidade v7.0**, **Production Hardening v8.0**, **Fórum com Sistema de Punições v9.0** e **Sistema de Presença Automática v10.0** — abrangendo editor de blocos drag-and-drop, materiais PDF, paginação com busca, importação Excel, 25 fontes Google, **branding dinâmico completo**, PM2 cluster mode, Nginx reverse proxy, suporte a **10.000+ alunos simultâneos**, integração Zoom para aulas ao vivo, **monitoramento Uptime Kuma**, **rate limiting Nginx**, **CloudFlare CDN/DDoS**, **testes de carga k6**, **runbook operacional**, **health check avançado**, **PM2 log rotation**, **teste automático de backup**, **estratégia de rollback**, **fórum de comentários por aula**, **sistema de punições automáticas com moderação admin** e **sistema de presença automática com heartbeat de vídeo e listas editáveis com auditoria**.
+O EduVault é uma plataforma full-stack arquitetada em formato de camadas (Node/Express 5 + React 19 + PostgreSQL) voltada à entrega segura de vídeos privados de altíssima qualidade. O sistema passou por rigorosa **Auditoria de Qualidade (QA)**, **Redesign v3.0**, **Hardening de Produção v4.0**, **Infraestrutura de Produção v5.0**, **Módulo de Aulas ao Vivo v6.0**, **Ops & Observabilidade v7.0** e **Production Hardening v8.0** — abrangendo editor de blocos drag-and-drop, materiais PDF, paginação com busca, importação Excel, 25 fontes Google, **branding dinâmico completo**, PM2 cluster mode, Nginx reverse proxy, suporte a **10.000+ alunos simultâneos**, aulas ao vivo **multiplataforma** (Meet/Teams/Zoom/Jitsi/Whereby/BBB), **monitoramento Uptime Kuma**, **rate limiting Nginx**, **CloudFlare CDN/DDoS**, **testes de carga k6**, **runbook operacional**, **health check avançado**, **PM2 log rotation**, **teste automático de backup** e **estratégia de rollback**.
+
+> A cifra de 10.000 alunos é uma meta arquitetural, não uma garantia do Compose em um único host. Ela exige dimensionamento, storage externo, cache/rate limit distribuído e teste de carga no ambiente final; veja `UNIFIED_PLATFORM.md`.
 
 **Evolução completa:**
 
@@ -88,27 +94,26 @@ O EduVault é uma plataforma full-stack arquitetada em formato de camadas (Node/
 64. **Incidente DDoS no Runbook:** Novo cenário de ataque DDoS com diagnóstico, ativação de Under Attack Mode no CloudFlare, bloqueio por país e prevenção.
 65. **Auto-Update IPs CloudFlare:** Script cron que atualiza automaticamente os ranges de IP do CloudFlare no Nginx via API oficial.
 
-### v9.0 — Fórum de Comentários + Sistema de Punições
-66. **Fórum por Aula:** Comentários em cada vídeo com respostas aninhadas, polling 5s tempo real, toggle de comentários por aula pelo admin.
-67. **Filtro de Profanidade:** ~50 regex patterns locais com 3 níveis de severidade (LIGHT/MEDIUM/SEVERE) — detecta palavrões, xingamentos e preconceito.
-68. **Punições Automáticas:** LIGHT 3ª ofensa → ban 1d, MEDIUM → ban 2d imediato, SEVERE → ban 10d + "encaminhar ao comitê", 5ª+ → permanente. Toggle global pelo admin.
-69. **Denúncias de Comentários:** Alunos denunciam comentários (unique por comentário+usuário), 3+ denúncias → flag automático para moderação.
-70. **Painel de Moderação Admin:** Nova aba no admin lista comentários flagrados com opção de aprovar ou remover.
-71. **Painel de Punições Admin:** Nova aba com 4 sub-abas: violações, bans ativos, ban manual, recursos de alunos (aprovar/rejeitar).
-72. **Recursos do Aluno:** Aluno banido pode enviar recurso textual; admin aprova (revoga ban) ou rejeita com nota.
-73. **Banner de Ban:** LessonComments exibe banner visual quando aluno está banido, com prazo de expiração e botão de recurso.
-74. **Modal de Violação:** Feedback visual ao aluno quando comentário é bloqueado pelo filtro (severidade, palavra, ação aplicada).
-75. **5 Novos Modelos Prisma:** LessonComment, CommentReport, ForumViolation, ForumBan, ForumAppeal + enum ViolationSeverity.
+### v9.0 — Growth Engine (Inveja Mode)
+66. **Trilha Inteligente:** endpoint de recomendações por progresso (`GET /api/student/recommendations`) e seção dedicada no dashboard do aluno.
+67. **Certificado Verificável:** emissão com código único + QR de validação e rota pública de consulta (`GET /api/config/certificate/verify/:code`).
+68. **Banco de Questões por Aula:** CRUD de quiz no admin e aplicação/correção para aluno com feedback automático.
+69. **Automação de Reengajamento:** campanha por inatividade com notificação interna + e-mail opcional (`POST /api/admin/campaigns/reengagement`).
+70. **BI Executivo:** novos indicadores de retenção, conclusão, média de quiz e risco de churn (`GET /api/admin/bi`).
+71. **PWA Offline Melhorado:** fallback offline dedicado e cache com estratégia mais resiliente no service worker.
 
-### v10.0 — Sistema de Presença Automática
-76. **Heartbeat de Presença:** VideoPlayer envia `POST /api/student/attendance/heartbeat` a cada 30s enquanto o vídeo toca, incrementando `watchTimeSeconds` no registro de presença do aluno.
-77. **Detecção Automática:** Quando o tempo assistido atinge o mínimo configurável (default 20min), o sistema marca presença automaticamente (`autoDetected = true`).
-78. **Configuração pelo Admin:** Toggle on/off, tempo mínimo em minutos e modo (DATE_ONLY = só no dia / FREE = qualquer dia) — tudo via aba Presença no painel admin.
-79. **Lista de Presença Completa:** Admin consulta presença por módulo + data, vendo presentes e ausentes (alunos matriculados sem registro recebem status ABSENT).
-80. **Edição com Auditoria:** Admin pode alterar presença/falta com justificativa obrigatória. Cada edição gera `AttendanceEdit` (audit trail) com quem editou, status anterior/novo e justificativa.
-81. **Criação Manual:** Admin pode marcar presença manualmente para alunos sem registro no dia, com justificativa obrigatória.
-82. **2 Novos Modelos Prisma:** Attendance (@@unique userId+moduleId+date), AttendanceEdit + enum AttendanceStatus (PRESENT/ABSENT).
-83. **3 Novos Campos PlatformConfig:** attendanceEnabled, attendanceMinMinutes, attendanceMode.
+### v10.0 — Inveja Total
+72. **Segmentação Avançada de Campanhas:** filtros por curso, turma (`classGroup`), faixa de nota de quiz e opção "apenas alto risco".
+73. **BI Temporal Executivo:** séries de 7/30/90 dias para alunos ativos, aulas concluídas, tentativas de quiz e novos alunos.
+74. **Ranking de Prioridade por Aluno:** score de risco com classificação (LOW/MEDIUM/HIGH/CRITICAL) para ação proativa.
+75. **Trilha Inteligente Agressiva:** recomendações com `priorityScore` e `riskLevel` no dashboard do aluno.
+76. **Code Splitting Avançado:** páginas e vendors críticos separados em chunks dedicados (React lazy + manualChunks no Vite).
+77. **Prefetch Inteligente de Aula:** pré-carregamento de chunk e dados de aula por hover/foco no dashboard para navegação quase instantânea.
+
+### v11.0 — Live Classes Multiplataforma
+78. **Provider explícito no banco:** `LiveClass.provider` + campos genéricos `meetingJoinUrl`, `meetingHostUrl`, `meetingCode` (mantendo compatibilidade com campos legados).
+79. **Filtro por plataforma no admin:** listagem de aulas ao vivo agora filtra por provedor (ALL, Meet, Teams, Zoom, Jitsi, Whereby, BBB, Custom).
+80. **Template de convite por plataforma:** backend gera texto pronto por aula (`invitationTemplate`) e o admin copia com um clique.
 
 ---
 
@@ -193,7 +198,6 @@ O sistema automaticamente:
 *   **Conteúdo em Blocos:** Renderização de blocos JSON (texto com fontes, imagens, destaques) + HTML legado sanitizado.
 *   **Aba Downloads:** Cards para download de PDF do módulo e calendário do curso (com auth token).
 *   **Sidebar:** Card "Resumo" com descrição da aula.
-*   **Fórum de Comentários:** Comentários por aula com respostas aninhadas, denúncias, polling 5s, banner de ban e recurso.
 
 ### Login
 *   **Logo e Nome Dinâmicos** do branding configurado pelo admin.
@@ -205,9 +209,6 @@ O sistema automaticamente:
 *   **Cursos:** CRUD de cursos (com calendário PDF), módulos (com material PDF), vídeos, thumbnails, editor de blocos fullscreen.
 *   **Matrículas:** Individual + matricular todos os alunos em um curso + importação via Excel.
 *   **Configurações:** Credenciais + Aparência da Plataforma (nome, cores, logo).
-*   **Moderação:** Lista de comentários flagrados com ações de aprovar ou remover.
-*   **Punições:** Violações de profanidade, bans ativos, ban manual, recursos de alunos (aprovar/rejeitar), toggle de punições automáticas.
-*   **Presença:** Configuração (toggle, tempo mínimo, modo), consulta por módulo+data, tabela com presentes/ausentes, edição com justificativa obrigatória e histórico de edições.
 
 ---
 
@@ -225,9 +226,6 @@ O sistema automaticamente:
 10. **PDFs Autenticados:** Servidos com middleware de auth (token via query param).
 11. **Pino Structured Logging:** Logs JSON estruturados (substitui console.log). Auto-logging HTTP com pino-http.
 12. **HLS Immutable Cache:** Segmentos `.ts` com `Cache-Control: immutable`; `.m3u8` com `no-cache`.
-13. **Filtro de Profanidade:** ~50 regex patterns locais com 3 severidades (LIGHT/MEDIUM/SEVERE) — bloqueia comentário e registra violação.
-14. **Ban Automático de Fórum:** Punições progressivas (1d/2d/10d/permanente) com toggle global; admin pode revogar e gerenciar recursos.
-15. **Presença Auditada:** Edições de presença exigem justificativa obrigatória + `AttendanceEdit` como audit trail (quem editou, quando, status anterior/novo).
 
 ---
 
@@ -237,29 +235,18 @@ O sistema automaticamente:
 User ──┬── CourseEnrollment ──── Course ──── Module ──── Video
        │     (@@unique           (calendarUrl)  (pdfUrl    (content JSON blocos)
        │      userId+courseId)                   @@index    @@index moduleId)
-       │                                        courseId)       │
-       ├── VideoHistory ───────────────────────────────────┘
-       │      (@@unique userId+videoId)
-       │
-       ├── Attendance ─── AttendanceEdit
-       │      (@@unique userId+moduleId+date)   (justification, editedBy)
-       │
-       ├── LessonComment ─── CommentReport
-       │      (replies auto-ref, flagged, videoId)
-       │
-       ├── ForumViolation   (word, severity, autoAction)
-       ├── ForumBan         (banType, active, expiresAt)
-       └── ForumAppeal      (reason, status, adminNote)
+       │                                        courseId)
+       └── VideoHistory ───────────────────────────────────┘
+              (@@unique userId+videoId)
 
-PlatformConfig (singleton — branding global + flags do fórum + presença)
-├── platformName, primaryColor, accentColor, logoUrl
-├── bannerUrl, namePart1/2, nameColor1/2
-├── forumPunishmentEnabled
-└── attendanceEnabled, attendanceMinMinutes, attendanceMode
+PlatformConfig (singleton — branding global)
+├── platformName  (default: "EduVault")
+├── primaryColor  (default: "#6366f1")
+├── accentColor   (default: "#ec4899")
+└── logoUrl       (opcional)
 ```
 
-**Modelos**: User, Course, CourseEnrollment, Module, Video, VideoHistory, PlatformConfig, AuditLog, Notification, LiveClass, LessonComment, CommentReport, ForumViolation, ForumBan, ForumAppeal, Attendance, AttendanceEdit
-**Enums**: ViolationSeverity (LIGHT, MEDIUM, SEVERE), AttendanceStatus (PRESENT, ABSENT)
+**Modelos**: User, Course, CourseEnrollment, Module, Video, VideoHistory, PlatformConfig
 **Status do vídeo**: PENDING → PROCESSING → READY | ERROR
 **Índices**: `@@index([courseId])` em Module, `@@index([moduleId])` em Video
 
@@ -267,15 +254,64 @@ PlatformConfig (singleton — branding global + flags do fórum + presença)
 
 ## 🚀 Como Iniciar (Setup)
 
-**Método Rápido (Windows):** Duplo clique em `INICIAR_PROJETO.bat` na raiz do projeto.
+### Modo Profissional (Docker - recomendado)
+
+Pré-requisito único: Docker Desktop (Windows) ou Docker Engine + Compose (Linux).
+
+Copie `.env.example` para `.env` na raiz e personalize segredos/SMTP.
+
+```bash
+cp .env.example .env
+docker compose up -d --build
+```
+
+Acessos:
+- App: `http://localhost:5173`
+- API: `http://localhost:4000`
+- PostgreSQL: `localhost:5432`
+
+Comandos úteis:
+
+```bash
+docker compose ps
+docker compose logs -f
+docker compose down
+```
+
+### Operacao Docker de Producao
+
+Arquivos de producao:
+- `docker-compose.prod.yml`
+- `.env.prod.example`
+
+Passo rapido:
+
+```bash
+cp .env.prod.example .env.prod
+# ajuste secrets e dominio
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+```
+
+Consulte `UNIFIED_PLATFORM.md` para TLS, primeiro administrador, broadcast/OBS, Groq, migração de bases legadas e checklist de corte.
+
+### Banco de dados
+
+Use as migrations versionadas; não execute `db push` em produção:
+
+```bash
+cd backend
+npx prisma generate
+npx prisma migrate deploy
+```
 
 **Método Manual:**
 
 1. **Terminal 1 — Backend:**
     ```bash
     cd backend
-    npm install
-    npx prisma db push
+    npm ci
+    npx prisma migrate deploy
+    # Configure ADMIN_INITIAL_* antes do primeiro seed.
     npx ts-node prisma/seed.ts
     npm run dev
     ```
@@ -324,6 +360,7 @@ Para deploy em produção com suporte a 10.000+ alunos simultâneos, consulte:
 
 | Arquivo | Descrição |
 |---------|----------|
+| **`UNIFIED_PLATFORM.md`** | Operação Docker unificada: ensino, Groq, OBS, RTMP/HLS, segurança e healthchecks |
 | **`DEPLOY.md`** | Guia completo passo a passo (servidor, DB, PM2, Nginx, SSL, backup, monitoramento) |
 | **`ecosystem.config.js`** | PM2 cluster mode (N instâncias por core) + 1 worker dedicado FFmpeg/pg-boss |
 | **`nginx.conf`** | Nginx reverse proxy (SSL, gzip, HLS direto do disco, cache immutable) |

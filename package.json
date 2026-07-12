@@ -1,0 +1,16 @@
+{
+  "name": "eduvault-platform",
+  "private": true,
+  "version": "1.0.0",
+  "packageManager": "npm@10.9.3",
+  "engines": { "node": ">=22 <23" },
+  "scripts": {
+    "install:all": "npm ci --prefix backend && npm ci --prefix frontend",
+    "typecheck": "npm run typecheck --prefix backend && npm run build --prefix frontend",
+    "lint": "npm run lint --prefix frontend",
+    "test": "npm test --prefix backend",
+    "build": "npm run build --prefix backend && npm run build --prefix frontend",
+    "audit": "npm audit --omit=dev --prefix backend && npm audit --omit=dev --prefix frontend",
+    "quality": "npm run lint && npm run test && npm run build && npm run audit"
+  }
+}

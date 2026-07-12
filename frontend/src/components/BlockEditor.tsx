@@ -31,14 +31,15 @@ import { CSS } from '@dnd-kit/utilities';
 import {
     GripVertical, Trash2, Type, ImageIcon, Columns2,
     Lightbulb, AlertTriangle, BookOpen, Calculator,
-    Plus, ChevronDown, ChevronUp, Eye, Pencil
+    Plus, ChevronDown, ChevronUp, Eye, Pencil, Code2
 } from 'lucide-react';
 import ReactQuill, { Quill } from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 import api from '../lib/api';
+import DOMPurify from 'dompurify';
 
 // ─── Register custom fonts with Quill ───
-const Font = Quill.import('formats/font') as any;
+const Font = Quill.import('formats/font') as { whitelist: string[] };
 const FONT_LIST = [
     'arial', 'georgia', 'impact', 'tahoma', 'verdana',
     'courier-new', 'times-new-roman', 'trebuchet-ms', 'comic-sans-ms',
@@ -47,12 +48,12 @@ const FONT_LIST = [
     'source-sans-pro', 'pt-sans', 'ubuntu', 'oswald', 'rubik',
 ];
 Font.whitelist = FONT_LIST;
-Quill.register(Font, true);
+Quill.register('formats/font', Font, true);
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+const API_BASE = import.meta.env.VITE_API_URL?.trim() || '';
 
 // ─── Block Types ───
-export type BlockType = 'text' | 'image' | 'two-columns' | 'highlight' | 'example' | 'solution' | 'tip' | 'warning' | 'formula' | 'heading';
+export type BlockType = 'text' | 'image' | 'two-columns' | 'highlight' | 'example' | 'solution' | 'tip' | 'warning' | 'formula' | 'heading' | 'html-css';
 
 export interface ContentBlock {
     id: string;
@@ -124,6 +125,7 @@ const BLOCK_PALETTE: { type: BlockType; icon: typeof Type; label: string; color:
     { type: 'tip', icon: Lightbulb, label: 'Dica', color: '#06b6d4' },
     { type: 'warning', icon: AlertTriangle, label: 'Aviso', color: '#ef4444' },
     { type: 'formula', icon: Calculator, label: 'Fórmula', color: '#7c3aed' },
+    { type: 'html-css', icon: Code2, label: 'HTML + CSS', color: '#0ea5e9' },
 ];
 
 function createDefaultData(type: BlockType): Record<string, string> {
@@ -138,6 +140,11 @@ function createDefaultData(type: BlockType): Record<string, string> {
         case 'tip': return { title: 'Dica', html: '<p>Texto da dica...</p>' };
         case 'warning': return { title: 'Atenção', html: '<p>Texto do aviso...</p>' };
         case 'formula': return { text: 'f(x) = ax² + bx + c' };
+        case 'html-css':
+            return {
+                html: '<div class="card">\n  <h3>Bloco livre</h3>\n  <p>Você pode montar seu próprio layout aqui.</p>\n</div>',
+                css: '.card { border: 1px solid #cbd5e1; border-radius: 10px; padding: 1rem; background: #f8fafc; }\n.card h3 { margin: 0 0 0.5rem 0; }'
+            };
         default: return {};
     }
 }
@@ -356,6 +363,27 @@ function FormulaEditor({ data, onChange }: { data: Record<string, string>; onCha
     );
 }
 
+function HtmlCssEditor({ data, onChange }: { data: Record<string, string>; onChange: (d: Record<string, string>) => void }) {
+    return (
+        <div className="be-html-css-editor">
+            <label className="be-col-label">HTML</label>
+            <textarea
+                className="be-code-area"
+                value={data.html || ''}
+                onChange={(e) => onChange({ ...data, html: e.target.value })}
+                placeholder="<div>Seu HTML aqui</div>"
+            />
+            <label className="be-col-label">CSS (escopo local do bloco)</label>
+            <textarea
+                className="be-code-area"
+                value={data.css || ''}
+                onChange={(e) => onChange({ ...data, css: e.target.value })}
+                placeholder=".classe { color: #0f172a; }"
+            />
+        </div>
+    );
+}
+
 // ─── Main BlockEditor Component ───
 export default function BlockEditor({ blocks, onChange, token }: BlockEditorProps) {
     const [showPalette, setShowPalette] = useState(false);
@@ -411,6 +439,8 @@ export default function BlockEditor({ blocks, onChange, token }: BlockEditorProp
                 return <BoxEditor data={block.data} onChange={d => updateBlock(block.id, d)} accent="#ef4444" />;
             case 'formula':
                 return <FormulaEditor data={block.data} onChange={d => updateBlock(block.id, d)} />;
+            case 'html-css':
+                return <HtmlCssEditor data={block.data} onChange={d => updateBlock(block.id, d)} />;
             default:
                 return <p>Bloco desconhecido</p>;
         }
@@ -504,19 +534,29 @@ const BOX_LABELS: Record<string, string> = {
 };
 
 function renderBlock(block: ContentBlock) {
-    const bgStyle = block.data.bgColor ? { background: block.data.bgColor, borderRadius: '10px', padding: '1.25rem' } : undefined;
+    const background = /^#[0-9a-f]{3,8}$/i.test(block.data.bgColor || '') ? block.data.bgColor : undefined;
+    const bgStyle = background ? { background, borderRadius: '10px', padding: '1.25rem' } : undefined;
+    const blockScopeClass = `br-custom-${block.id.replace(/[^a-zA-Z0-9_-]/g, '')}`;
+    const safeHtml = (value?: string) => DOMPurify.sanitize(value || '', {
+        USE_PROFILES: { html: true },
+        FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'form', 'base', 'meta'],
+        FORBID_ATTR: ['srcdoc']
+    });
 
     switch (block.type) {
         case 'heading':
             return <h2 className="br-heading" style={bgStyle}>{block.data.text}</h2>;
         case 'text':
-            return <div className="br-text" style={bgStyle} dangerouslySetInnerHTML={{ __html: block.data.html || '' }} />;
+            return <div className="br-text" style={bgStyle} dangerouslySetInnerHTML={{ __html: safeHtml(block.data.html) }} />;
         case 'image': {
-            const src = block.data.url?.startsWith('http') ? block.data.url : `${API_BASE}${block.data.url}`;
+            const rawUrl = block.data.url || '';
+            const isRelativeUpload = /^\/uploads\/images\/[a-zA-Z0-9._-]+$/.test(rawUrl);
+            const isHttpImage = /^https?:\/\//i.test(rawUrl);
+            const src = isRelativeUpload ? `${API_BASE}${rawUrl}` : isHttpImage ? rawUrl : '';
             const align = block.data.align || 'center';
             return (
                 <figure className={`br-image align-${align}`} style={bgStyle}>
-                    <img src={src} alt={block.data.caption || ''} />
+                    {src && <img src={src} alt={block.data.caption || ''} loading="lazy" referrerPolicy="no-referrer" />}
                     {block.data.caption && <figcaption className="br-image-caption">{block.data.caption}</figcaption>}
                 </figure>
             );
@@ -524,8 +564,8 @@ function renderBlock(block: ContentBlock) {
         case 'two-columns':
             return (
                 <div className="br-two-cols" style={bgStyle}>
-                    <div dangerouslySetInnerHTML={{ __html: block.data.left || '' }} />
-                    <div dangerouslySetInnerHTML={{ __html: block.data.right || '' }} />
+                    <div dangerouslySetInnerHTML={{ __html: safeHtml(block.data.left) }} />
+                    <div dangerouslySetInnerHTML={{ __html: safeHtml(block.data.right) }} />
                 </div>
             );
         case 'highlight':
@@ -539,12 +579,36 @@ function renderBlock(block: ContentBlock) {
             return (
                 <div className={`br-box ${block.type}`} style={boxStyle}>
                     <div className="br-box-label">{BOX_LABELS[block.type] || block.data.title}</div>
-                    <div className="br-box-content" dangerouslySetInnerHTML={{ __html: block.data.html || '' }} />
+                    <div className="br-box-content" dangerouslySetInnerHTML={{ __html: safeHtml(block.data.html) }} />
                 </div>
             );
         }
         case 'formula':
             return <div className="br-formula" style={bgStyle}>{block.data.text}</div>;
+        case 'html-css': {
+            const css = (block.data.css || '')
+                .replace(/:host/g, `.${blockScopeClass}`)
+                .replace(/:scope/g, `.${blockScopeClass}`)
+                .replace(/@import[^;]+;?/gi, '')
+                .replace(/url\s*\([^)]*\)/gi, '')
+                .replace(/expression\s*\([^)]*\)/gi, '')
+                .replace(/[<>]/g, '')
+                .slice(0, 20_000);
+            const document = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src https: data:; style-src 'unsafe-inline'; font-src data:"><style>html,body{margin:0;background:transparent;color:inherit;font-family:system-ui,sans-serif}${css}</style></head><body><div class="${blockScopeClass}">${safeHtml(block.data.html)}</div></body></html>`;
+
+            return (
+                <div style={bgStyle}>
+                    <iframe
+                        title="Conteúdo personalizado da aula"
+                        sandbox=""
+                        srcDoc={document}
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                        style={{ width: '100%', minHeight: '240px', border: 0, background: 'transparent' }}
+                    />
+                </div>
+            );
+        }
         default:
             return null;
     }

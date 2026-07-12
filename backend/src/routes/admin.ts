@@ -26,7 +26,8 @@ import { enqueueVideoProcessing } from '../config/pgBoss';
 import prisma from '../lib/prisma';
 import { invalidateConfigCache } from './config';
 import logger from '../lib/logger';
-import XLSX from 'xlsx';
+import { uploadFileToStorage } from '../lib/storage';
+import ExcelJS from 'exceljs';
 
 // ============================================================
 // HELPER: Registrar ação no Audit Log
@@ -39,7 +40,7 @@ async function auditLog(userId: string, action: string, target: string, details?
     }
 }
 
-const VALID_ROLES = ['ADMIN', 'TEACHER', 'STUDENT'] as const;
+const VALID_ROLES = ['ADMIN', 'TEACHER', 'STUDENT', 'STAFF', 'GUARDIAN'] as const;
 
 // ============================================================
 // HELPER: Verificar se TEACHER tem acesso ao curso
@@ -107,8 +108,8 @@ const uploadExcel = multer({
     storage: excelStorage,
     fileFilter: (_req, file, cb) => {
         const ext = path.extname(file.originalname).toLowerCase();
-        if (['.xlsx', '.xls'].includes(ext)) cb(null, true);
-        else cb(new Error('Formato inválido. Apenas arquivos .xlsx ou .xls são aceitos.'));
+        if (ext === '.xlsx') cb(null, true);
+        else cb(new Error('Formato inválido. Apenas arquivos .xlsx são aceitos.'));
     },
     limits: { fileSize: 10 * 1024 * 1024 }
 });
@@ -777,7 +778,7 @@ router.post('/upload-image', authenticateToken, requireRole(['ADMIN', 'TEACHER']
             res.status(400).json({ message: 'Nenhuma imagem enviada.' });
             return;
         }
-        const imageUrl = `/uploads/images/${file.filename}`;
+        const imageUrl = await uploadFileToStorage(file.path, 'images', file.filename, file.mimetype);
         res.json({ url: imageUrl, filename: file.filename });
     } catch (error) {
         console.error(error);
@@ -796,7 +797,7 @@ router.post('/upload-pdf', authenticateToken, requireRole(['ADMIN', 'TEACHER']),
             res.status(400).json({ message: 'Nenhum PDF enviado.' });
             return;
         }
-        const pdfUrl = `/uploads/pdfs/${file.filename}`;
+        const pdfUrl = await uploadFileToStorage(file.path, 'pdfs', file.filename, file.mimetype);
         res.json({ url: pdfUrl, filename: file.filename });
     } catch (error) {
         console.error(error);
@@ -1029,7 +1030,7 @@ router.get('/config', authenticateToken, requireRole(['ADMIN']), async (req: Req
                     namePart1: 'Edu',
                     namePart2: 'Vault',
                     nameColor1: '#e50914',
-                    nameColor2: '#ffffff',
+                    nameColor2: '#172033',
                     primaryColor: '#6366f1',
                     accentColor: '#ec4899',
                     logoUrl: null,
@@ -1077,7 +1078,7 @@ router.put('/config', authenticateToken, requireRole(['ADMIN']), async (req: Req
                     namePart1: namePart1 || 'Edu',
                     namePart2: namePart2 || 'Vault',
                     nameColor1: nameColor1 || '#e50914',
-                    nameColor2: nameColor2 || '#ffffff',
+                    nameColor2: nameColor2 || '#172033',
                     primaryColor: primaryColor || '#6366f1',
                     accentColor: accentColor || '#ec4899',
                     logoUrl: logoUrl || null,
@@ -1133,10 +1134,34 @@ router.post('/upload-students-excel', authenticateToken, requireRole(['ADMIN']),
             return;
         }
 
-        const workbook = XLSX.readFile(filePath);
-        const sheetName = workbook.SheetNames[0];
-        const sheet = workbook.Sheets[sheetName];
-        const rawRows: Record<string, string>[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.readFile(filePath);
+        const sheet = workbook.worksheets[0];
+        if (!sheet) {
+            res.status(400).json({ message: 'A planilha não possui abas.' });
+            return;
+        }
+
+        const headerRow = sheet.getRow(1);
+        const headers: string[] = [];
+        for (let column = 1; column <= headerRow.cellCount; column += 1) {
+            headers.push(excelCellText(headerRow.getCell(column).value));
+        }
+        const rawRows: Record<string, string>[] = [];
+        const maxRows = Math.min(sheet.actualRowCount, 5_001);
+        for (let rowNumber = 2; rowNumber <= maxRows; rowNumber += 1) {
+            const row = sheet.getRow(rowNumber);
+            const record: Record<string, string> = {};
+            headers.forEach((header, index) => {
+                if (header) record[header] = row.getCell(index + 1).text.trim();
+            });
+            if (Object.values(record).some(Boolean)) rawRows.push(record);
+        }
+
+        if (sheet.actualRowCount > 5_001) {
+            res.status(400).json({ message: 'A planilha excede o limite de 5.000 alunos por importação.' });
+            return;
+        }
 
         if (rawRows.length === 0) {
             res.status(400).json({ message: 'Planilha vazia.' });
@@ -1299,19 +1324,78 @@ router.get('/export-students', authenticateToken, requireRole(['ADMIN']), async 
             'Data Cadastro': s.createdAt.toISOString().split('T')[0]
         }));
 
-        const wb = XLSX.utils.book_new();
-        const ws = XLSX.utils.json_to_sheet(rows);
-        // Auto-width colunas
-        ws['!cols'] = Object.keys(rows[0] || {}).map(k => ({ wch: Math.max(k.length, 15) }));
-        XLSX.utils.book_append_sheet(wb, ws, 'Alunos');
+        const workbook = new ExcelJS.Workbook();
+        workbook.creator = 'EduVault';
+        workbook.created = new Date();
+        const worksheet = workbook.addWorksheet('Alunos', {
+            views: [{ state: 'frozen', ySplit: 1 }]
+        });
+        const keys = Object.keys(rows[0] || { Nome: '', Email: '', Cursos: '' });
+        worksheet.columns = keys.map((key) => ({
+            header: key,
+            key,
+            width: Math.max(15, Math.min(45, key.length + 4)),
+        }));
+        worksheet.addRows(rows);
+        worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        worksheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
+        worksheet.autoFilter = { from: 'A1', to: `${worksheet.getColumn(keys.length).letter}1` };
 
-        const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+        const buffer = await workbook.xlsx.writeBuffer();
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.setHeader('Content-Disposition', `attachment; filename=alunos-${new Date().toISOString().split('T')[0]}.xlsx`);
-        res.send(buffer);
+        res.send(Buffer.from(buffer));
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Erro ao exportar alunos.' });
+    }
+});
+
+function excelCellText(value: ExcelJS.CellValue): string {
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'object') {
+        if ('text' in value && typeof value.text === 'string') return value.text.trim();
+        if ('result' in value) return String(value.result ?? '').trim();
+        if ('richText' in value) return value.richText.map((part) => part.text).join('').trim();
+    }
+    return String(value).trim();
+}
+
+// ============================================================
+// MONITORING & HEALTH
+// ============================================================
+import os from 'os';
+
+router.get('/health', authenticateToken, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<void> => {
+    try {
+        const uptime = process.uptime();
+        const memory = process.memoryUsage();
+        const cpus = os.cpus();
+
+        const [dbStatus, storageStatus] = await Promise.all([
+            prisma.$queryRaw`SELECT 1`.then(() => 'up').catch(() => 'down'),
+            fsp.access(path.resolve(process.env.IMAGE_STORAGE_PATH || './uploads/images'))
+                .then(() => 'up')
+                .catch(() => 'down')
+        ]);
+
+        res.json({
+            status: 'ok',
+            uptime,
+            memory: {
+                total: os.totalmem(),
+                free: os.freemem(),
+                process: memory.rss
+            },
+            cpu: cpus.length,
+            services: {
+                database: dbStatus,
+                storage: storageStatus
+            }
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Erro ao coletar métricas de saúde.' });
     }
 });
 

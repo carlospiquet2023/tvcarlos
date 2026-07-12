@@ -1,7 +1,8 @@
-import React, { createContext, useState, useEffect, useContext } from 'react';
+import React, { createContext, useState, useEffect, useContext, useCallback } from 'react';
 import axios from 'axios';
 
 interface PlatformConfig {
+    appTimezone: string;
     platformName: string;
     namePart1: string;
     namePart2: string;
@@ -22,11 +23,12 @@ interface ConfigContextType {
 }
 
 const defaultConfig: PlatformConfig = {
+    appTimezone: 'America/Sao_Paulo',
     platformName: 'EduVault',
     namePart1: 'Edu',
     namePart2: 'Vault',
     nameColor1: '#e50914',
-    nameColor2: '#ffffff',
+    nameColor2: '#172033',
     primaryColor: '#6366f1',
     accentColor: '#ec4899',
     logoUrl: null,
@@ -41,7 +43,7 @@ const ConfigContext = createContext<ConfigContextType>({
     refreshConfig: async () => { }
 });
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+const API_BASE_URL = import.meta.env.VITE_API_URL?.trim() || '';
 
 /**
  * Converte hex (#rrggbb) para { r, g, b }
@@ -82,35 +84,34 @@ function lightenHex(hex: string, amount: number): string {
     return `#${nr.toString(16).padStart(2, '0')}${ng.toString(16).padStart(2, '0')}${nb.toString(16).padStart(2, '0')}`;
 }
 
+function applyTheme(currentConfig: PlatformConfig) {
+    const root = document.documentElement;
+    const primary = currentConfig.primaryColor || '#6366f1';
+    const accent = currentConfig.accentColor || '#ec4899';
+    const { r, g, b } = hexToRgb(primary);
+    const accentRgb = hexToRgb(accent);
+
+    root.style.setProperty('--primary', primary);
+    root.style.setProperty('--primary-color', primary);
+    root.style.setProperty('--primary-hover', darkenHex(primary, 0.15));
+    root.style.setProperty('--primary-color-dark', darkenHex(primary, 0.15));
+    root.style.setProperty('--primary-glow', `rgba(${r}, ${g}, ${b}, 0.4)`);
+    root.style.setProperty('--primary-soft', `rgba(${r}, ${g}, ${b}, 0.12)`);
+    root.style.setProperty('--primary-color-light', `rgba(${r}, ${g}, ${b}, 0.12)`);
+    root.style.setProperty('--primary-light', lightenHex(primary, 0.3));
+    root.style.setProperty('--accent-pink', accent);
+    root.style.setProperty('--accent-pink-glow', `rgba(${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}, 0.3)`);
+    document.title = currentConfig.platformName || 'EduVault';
+}
+
 export const ConfigProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [config, setConfig] = useState<PlatformConfig>(defaultConfig);
 
-    const applyTheme = (currentConfig: PlatformConfig) => {
-        const root = document.documentElement;
-        const primary = currentConfig.primaryColor || '#6366f1';
-        const accent = currentConfig.accentColor || '#ec4899';
-        const { r, g, b } = hexToRgb(primary);
-        const accentRgb = hexToRgb(accent);
-
-        // Cor primária e derivadas
-        root.style.setProperty('--primary', primary);
-        root.style.setProperty('--primary-hover', darkenHex(primary, 0.15));
-        root.style.setProperty('--primary-glow', `rgba(${r}, ${g}, ${b}, 0.4)`);
-        root.style.setProperty('--primary-soft', `rgba(${r}, ${g}, ${b}, 0.12)`);
-        root.style.setProperty('--primary-light', lightenHex(primary, 0.3));
-
-        // Cor de destaque
-        root.style.setProperty('--accent-pink', accent);
-        root.style.setProperty('--accent-pink-glow', `rgba(${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}, 0.3)`);
-
-        // Título da aba do navegador
-        document.title = currentConfig.platformName || 'EduVault';
-    };
-
-    const fetchConfig = async () => {
+    const fetchConfig = useCallback(async () => {
         try {
             const response = await axios.get(`${API_BASE_URL}/api/config/public`);
-            const data: PlatformConfig = {
+            const data = {
+                appTimezone: response.data.appTimezone || defaultConfig.appTimezone,
                 platformName: response.data.platformName || defaultConfig.platformName,
                 namePart1: response.data.namePart1 || defaultConfig.namePart1,
                 namePart2: response.data.namePart2 || defaultConfig.namePart2,
@@ -124,20 +125,19 @@ export const ConfigProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                 attendanceEnabled: response.data.attendanceEnabled ?? false
             };
             setConfig(data);
-            applyTheme(data);
         } catch (error) {
             console.error('Erro ao carregar configurações de branding:', error);
-            applyTheme(defaultConfig);
+            setConfig(defaultConfig);
         }
-    };
-
-    useEffect(() => {
-        fetchConfig();
     }, []);
 
     useEffect(() => {
+        void fetchConfig();
+    }, [fetchConfig]);
+
+    useEffect(() => {
         applyTheme(config);
-    }, [config.primaryColor, config.platformName, config.accentColor]);
+    }, [config]);
 
     return (
         <ConfigContext.Provider value={{ config, setConfig, refreshConfig: fetchConfig }}>

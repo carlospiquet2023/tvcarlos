@@ -9,9 +9,10 @@
  */
 import { Router, Request, Response } from 'express';
 import { authenticateToken, requireRole } from '../middleware/authMiddleware';
-import { uploadVideo } from '../middleware/uploadMiddleware';
+import { removeUploadedFile, uploadVideo, validateUploadedVideo } from '../middleware/uploadMiddleware';
 import { enqueueVideoProcessing } from '../config/pgBoss';
 import prisma from '../lib/prisma';
+import logger from '../lib/logger';
 
 const router = Router();
 
@@ -21,6 +22,8 @@ router.post('/upload',
     requireRole(['ADMIN', 'TEACHER']),
     uploadVideo.single('video'),
     async (req: Request, res: Response): Promise<void> => {
+        let persisted = false;
+        let persistedVideoId: string | null = null;
         try {
             const { title, description, moduleId } = req.body;
             const file = req.file;
@@ -30,20 +33,41 @@ router.post('/upload',
                 return;
             }
 
-            if (!title || !moduleId) {
-                res.status(400).json({ message: `Título e ID do módulo são obrigatórios. Recebido: title=${title}, moduleId=${moduleId}` });
+            if (typeof title !== 'string' || typeof moduleId !== 'string'
+                || !title.trim() || title.trim().length > 200 || moduleId.length > 64) {
+                await removeUploadedFile(file.path);
+                res.status(400).json({ message: 'Título e ID do módulo são obrigatórios e devem estar em formato válido.' });
+                return;
+            }
+            if (description !== undefined && (typeof description !== 'string' || description.length > 5000)) {
+                await removeUploadedFile(file.path);
+                res.status(400).json({ message: 'Descrição inválida (máximo de 5.000 caracteres).' });
                 return;
             }
 
-            // TEACHER: verificar acesso ao módulo via enrollment
+            if (!await validateUploadedVideo(file.path)) {
+                await removeUploadedFile(file.path);
+                res.status(415).json({ message: 'O conteúdo do arquivo não corresponde a um formato de vídeo aceito.' });
+                return;
+            }
+
+            const targetModule = await prisma.module.findUnique({
+                where: { id: moduleId },
+                select: { id: true, courseId: true }
+            });
+            if (!targetModule) {
+                await removeUploadedFile(file.path);
+                res.status(404).json({ message: 'Módulo não encontrado.' });
+                return;
+            }
             if (req.user!.role === 'TEACHER') {
-                const mod = await prisma.module.findUnique({ where: { id: moduleId }, select: { courseId: true } });
-                if (!mod) { res.status(404).json({ message: 'Módulo não encontrado.' }); return; }
-                const enrollment = await prisma.courseEnrollment.findUnique({
-                    where: { userId_courseId: { userId: req.user!.id, courseId: mod.courseId } }
+                const assignment = await prisma.teacherCourseAssignment.findUnique({
+                    where: { userId_courseId: { userId: req.user!.id, courseId: targetModule.courseId } },
+                    select: { id: true }
                 });
-                if (enrollment?.enrollmentRole !== 'TEACHER') {
-                    res.status(403).json({ message: 'Acesso negado a este módulo.' });
+                if (!assignment) {
+                    await removeUploadedFile(file.path);
+                    res.status(403).json({ message: 'Professor não está atribuído ao curso deste módulo.' });
                     return;
                 }
             }
@@ -51,13 +75,15 @@ router.post('/upload',
             // 1. Criar registro do vídeo no banco com status PENDING
             const video = await prisma.video.create({
                 data: {
-                    title,
-                    description,
+                    title: title.trim(),
+                    description: typeof description === 'string' ? description.trim() || null : null,
                     moduleId,
                     originalUrl: file.path,
                     status: 'PENDING'
                 }
             });
+            persisted = true;
+            persistedVideoId = video.id;
 
             // 2. Colocar na fila do pg-boss
             await enqueueVideoProcessing(video.id, file.path);
@@ -67,7 +93,14 @@ router.post('/upload',
                 video
             });
         } catch (error) {
-            console.error('Upload Error:', error);
+            if (!persisted) await removeUploadedFile(req.file?.path);
+            if (persistedVideoId) {
+                await prisma.video.update({
+                    where: { id: persistedVideoId },
+                    data: { status: 'ERROR' }
+                }).catch(() => undefined);
+            }
+            logger.error({ error, userId: req.user?.id }, 'Falha no upload de vídeo');
             res.status(500).json({ message: 'Erro ao realizar upload do vídeo.' });
         }
     });
@@ -79,7 +112,6 @@ router.get('/module/:moduleId', authenticateToken, async (req: Request, res: Res
         const userId = req.user!.id;
         const userRole = req.user!.role;
 
-        // Admin e Teacher podem acessar qualquer módulo
         if (userRole === 'STUDENT') {
             // Verificar se o aluno está matriculado no curso que contém este módulo
             const moduleWithCourse = await prisma.module.findUnique({
@@ -98,6 +130,23 @@ router.get('/module/:moduleId', authenticateToken, async (req: Request, res: Res
 
             if (!enrollment) {
                 res.status(403).json({ message: 'Acesso negado. Você não está matriculado neste curso.' });
+                return;
+            }
+        } else if (userRole === 'TEACHER') {
+            const moduleWithCourse = await prisma.module.findUnique({
+                where: { id: moduleId },
+                select: { courseId: true }
+            });
+            if (!moduleWithCourse) {
+                res.status(404).json({ message: 'Módulo não encontrado.' });
+                return;
+            }
+            const assignment = await prisma.teacherCourseAssignment.findUnique({
+                where: { userId_courseId: { userId, courseId: moduleWithCourse.courseId } },
+                select: { id: true }
+            });
+            if (!assignment) {
+                res.status(403).json({ message: 'Professor não está atribuído a este curso.' });
                 return;
             }
         }

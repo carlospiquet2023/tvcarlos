@@ -18,7 +18,11 @@ import { motion } from 'framer-motion';
 import axios from 'axios';
 import api from '../lib/api';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+const API_BASE = import.meta.env.VITE_API_URL?.trim() || '';
+
+function assetUrl(value: string): string {
+    return /^https?:\/\//i.test(value) ? value : `${API_BASE}${value}`;
+}
 
 export default function Login() {
     const [login, setLogin] = useState('');
@@ -40,6 +44,10 @@ export default function Login() {
 
             if (response.data.user.role === 'ADMIN' || response.data.user.role === 'TEACHER') {
                 navigate('/admin');
+            } else if (response.data.user.role === 'STAFF') {
+                navigate('/school');
+            } else if (response.data.user.role === 'GUARDIAN') {
+                navigate('/family');
             } else {
                 navigate('/student/dashboard');
             }
@@ -66,14 +74,11 @@ export default function Login() {
             >
                 <div className="login-header">
                     {config.logoUrl ? (
-                        <img src={`${API_BASE}${config.logoUrl}`} alt={config.platformName} className="login-logo-img" />
+                        <img src={assetUrl(config.logoUrl)} alt={config.platformName} className="login-logo-img" />
                     ) : (
                         <ShieldCheck size={48} className="logo-icon" />
                     )}
-                    <h1>
-                        <span style={{ color: config.nameColor1 }}>{config.namePart1}</span>
-                        <span style={{ color: config.nameColor2 }}>{config.namePart2}</span>
-                    </h1>
+                    <h1>{config.platformName}</h1>
                     <p>Acesso Restrito Institucional</p>
                 </div>
 

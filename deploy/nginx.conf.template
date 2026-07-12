@@ -1,0 +1,164 @@
+include /etc/nginx/modules/*.conf;
+
+user nginx;
+worker_processes auto;
+worker_rlimit_nofile 65535;
+pid /run/nginx/nginx.pid;
+error_log /dev/stderr warn;
+
+events {
+    worker_connections 4096;
+    multi_accept on;
+}
+
+rtmp {
+    access_log off;
+
+    server {
+        listen 1935;
+        chunk_size 4096;
+        ping 30s;
+        ping_timeout 10s;
+        max_message 8M;
+
+        application live {
+            live on;
+            record off;
+            idle_streams off;
+            drop_idle_publisher 10s;
+            notify_method post;
+            # A rota de autorização RTMP na plataforma:
+            on_publish http://127.0.0.1:4000/api/broadcast/rtmp/auth;
+
+            hls on;
+            hls_path /var/cache/nginx/hls;
+            hls_fragment 2s;
+            hls_playlist_length 12s;
+            hls_cleanup on;
+            hls_continuous off;
+            hls_nested off;
+        }
+    }
+}
+
+http {
+    access_log /dev/stdout;
+    server_tokens off;
+    default_type application/octet-stream;
+    include /etc/nginx/mime.types;
+    sendfile on;
+    tcp_nopush on;
+    keepalive_timeout 30;
+    client_max_body_size 550m;
+    client_body_timeout 300s;
+    client_body_temp_path /var/lib/nginx/tmp/body;
+    proxy_temp_path /var/lib/nginx/tmp/proxy;
+
+    limit_req_zone $binary_remote_addr zone=api_limit:10m rate=30r/s;
+    limit_conn_zone $binary_remote_addr zone=per_ip:10m;
+
+    map $http_upgrade $connection_upgrade {
+        default upgrade;
+        '' close;
+    }
+
+    map $http_x_forwarded_proto $upstream_forwarded_proto {
+        default $http_x_forwarded_proto;
+        '' $scheme;
+    }
+
+    server {
+        listen ${PORT} default_server;
+        listen [::]:${PORT} default_server;
+        server_name _;
+        root /var/www/eduvault;
+        index index.html;
+        charset utf-8;
+
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+
+        location ~ /\. {
+            deny all;
+            return 404;
+        }
+
+        location / {
+            try_files $uri $uri/ /index.html;
+        }
+
+        location /api/ {
+            limit_req zone=api_limit burst=60 nodelay;
+            limit_conn per_ip 20;
+            proxy_pass http://127.0.0.1:4000;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $upstream_forwarded_proto;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
+            proxy_read_timeout 600s;
+            proxy_send_timeout 600s;
+        }
+
+        location /health/ {
+            proxy_pass http://127.0.0.1:4000;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-Proto $upstream_forwarded_proto;
+            access_log off;
+        }
+
+        location = /stat {
+            allow 127.0.0.1;
+            allow ::1;
+            deny all;
+            rtmp_stat all;
+            access_log off;
+        }
+
+        # Para transmissões RTMP do OBS:
+        location /hls/live/ {
+            alias /var/cache/nginx/hls/;
+            add_header Cache-Control "no-store" always;
+            add_header X-Content-Type-Options "nosniff" always;
+            add_header Access-Control-Allow-Origin "*" always;
+            types {
+                application/vnd.apple.mpegurl m3u8;
+                video/mp2t ts;
+            }
+        }
+
+        # Servir os uploads locais (fallback caso não use R2)
+        location /uploads/images/ {
+            alias /data/images/;
+            add_header Cache-Control "public, max-age=31536000, immutable" always;
+            access_log off;
+        }
+
+        location /hls/ {
+            alias /data/hls/;
+            add_header Access-Control-Allow-Origin "*" always;
+            location ~* \.ts$ {
+                expires 1y;
+                add_header Cache-Control "public, immutable";
+            }
+            location ~* \.m3u8$ {
+                expires -1;
+                add_header Cache-Control "no-cache";
+            }
+        }
+
+        location /uploads/pdfs/ {
+            proxy_pass http://127.0.0.1:4000;
+        }
+
+        location /uploads/videos/ {
+            deny all;
+            return 403;
+        }
+    }
+}

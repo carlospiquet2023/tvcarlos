@@ -3,12 +3,12 @@
  *
  * Provê para toda a aplicação:
  * - user: dados do usuario logado (id, name, email, role)
- * - token: JWT armazenado no localStorage
- * - login(): salva token + user no state e localStorage
- * - logout(): limpa tudo (state + localStorage)
+ * - token: marcador de sessão; o JWT real permanece em cookie HttpOnly
+ * - login(): atualiza o usuário autenticado em memória
+ * - logout(): limpa o estado e encerra a sessão no servidor
  * - isLoading: true enquanto valida o token armazenado via GET /api/auth/me
  *
- * Persistência: Token sobrevive ao refresh da página via localStorage
+ * Persistência: cookie HttpOnly/SameSite validado em GET /api/auth/me
  */
 import { createContext, useContext, useState, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
@@ -20,7 +20,9 @@ export interface User {
     username?: string;
     name: string;
     email: string;
-    role: 'ADMIN' | 'TEACHER' | 'STUDENT';
+    role: 'ADMIN' | 'TEACHER' | 'STUDENT' | 'STAFF' | 'GUARDIAN';
+    mustChangePassword?: boolean;
+    passwordChangedAt?: string | null;
 }
 
 interface AuthContextType {
@@ -49,31 +51,37 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (hasCheckedRef.current) return;
         hasCheckedRef.current = true;
 
-        const storedToken = localStorage.getItem('eduvault_token');
-        if (storedToken) {
-            api.get('/api/auth/me', {
-                headers: { Authorization: `Bearer ${storedToken}` }
-            }).then(response => {
+        localStorage.removeItem('eduvault_token');
+        api.get('/api/auth/me')
+            .then(response => {
                 setUser(response.data);
-                setToken(storedToken);
-            }).catch(() => {
-                localStorage.removeItem('eduvault_token');
-            }).finally(() => {
+                setToken('cookie-session');
+            })
+            .catch(() => {
+                setUser(null);
+                setToken(null);
+            })
+            .finally(() => {
                 setIsLoading(false);
             });
-        } else {
-            setIsLoading(false);
-        }
     }, []);
 
-    const login = (newToken: string, newUser: User) => {
-        localStorage.setItem('eduvault_token', newToken);
-        setToken(newToken);
+    useEffect(() => {
+        const expire = () => {
+            setToken(null);
+            setUser(null);
+        };
+        window.addEventListener('eduvault:session-expired', expire);
+        return () => window.removeEventListener('eduvault:session-expired', expire);
+    }, []);
+
+    const login = (_newToken: string, newUser: User) => {
+        setToken('cookie-session');
         setUser(newUser);
     };
 
     const logout = () => {
-        localStorage.removeItem('eduvault_token');
+        void api.post('/api/auth/logout').catch(() => undefined);
         setToken(null);
         setUser(null);
     };

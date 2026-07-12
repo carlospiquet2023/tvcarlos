@@ -7,17 +7,32 @@
  * - Salva progresso a cada 10 segundos (POST /api/student/progress)
  * - Renova stream token automaticamente a cada 4 minutos (expira em 5)
  *
- * Proteções Anti-Pirataria:
+ * Proteções e rastreabilidade:
  * - Marca d'água dinâmica (nome + email) flutuando a cada 15s
- * - Bloqueio de right-click no vídeo
- * - Bloqueio de F12 / DevTools (Ctrl+Shift+I)
+ * - Token HLS curto e vinculado à aula
+ * - Presença opcional por heartbeat durante reprodução real
  */
 import { useEffect, useRef } from 'react';
 import videojs from 'video.js';
 import 'video.js/dist/video-js.css';
 import { useAuth } from '../context/AuthContext';
+import { useConfig } from '../context/ConfigContext';
 import api from '../lib/api';
 import type Player from 'video.js/dist/types/player';
+
+interface VhsRequestOptions {
+    headers?: Record<string, string>;
+    [key: string]: unknown;
+}
+
+interface VhsXhrHooks {
+    onRequest: (hook: (options: VhsRequestOptions) => VhsRequestOptions) => void;
+    offRequest: (hook: (options: VhsRequestOptions) => VhsRequestOptions) => void;
+}
+
+interface VhsTech {
+    vhs?: { xhr?: VhsXhrHooks };
+}
 
 interface VideoPlayerProps {
     videoId: string;
@@ -25,13 +40,14 @@ interface VideoPlayerProps {
     moduleId?: string;
 }
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+const API_BASE_URL = import.meta.env.VITE_API_URL?.trim() || '';
 
 export default function VideoPlayer({ videoId, hlsUrl, moduleId }: VideoPlayerProps) {
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const playerRef = useRef<Player | null>(null);
     const watermarkRef = useRef<HTMLDivElement | null>(null);
     const { user, token } = useAuth();
+    const { config } = useConfig();
 
     useEffect(() => {
         if (!videoRef.current) return;
@@ -39,12 +55,50 @@ export default function VideoPlayer({ videoId, hlsUrl, moduleId }: VideoPlayerPr
         const videoElement = videoRef.current;
         let progressInterval: ReturnType<typeof setInterval> | undefined;
         let attendanceInterval: ReturnType<typeof setInterval> | undefined;
+        let tokenRefreshInterval: ReturnType<typeof setInterval> | undefined;
+        let flushOnPageHide: (() => void) | undefined;
         const abortController = new AbortController();
-        let handleBeforeUnload: (() => void) | undefined;
+        let streamToken = '';
+        let requestHookRegistered = false;
+        let lastSentPosition = -1;
+
+        const saveProgress = (player: Player, keepalive = false) => {
+            if (player.isDisposed()) return;
+            const current = Math.max(0, player.currentTime() || 0);
+            if (!keepalive && Math.abs(current - lastSentPosition) < 0.75) return;
+            lastSentPosition = current;
+            const payload = JSON.stringify({ videoId, progress: current });
+
+            if (keepalive) {
+                const csrf = document.cookie
+                    .split('; ')
+                    .find((item) => item.startsWith('XSRF-TOKEN='))
+                    ?.split('=').slice(1).join('=');
+                void fetch(`${API_BASE_URL}/api/student/progress`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    keepalive: true,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(csrf ? { 'X-XSRF-TOKEN': decodeURIComponent(csrf) } : {})
+                    },
+                    body: payload
+                }).catch(() => undefined);
+                return;
+            }
+
+            void api.post('/api/student/progress', { videoId, progress: current })
+                .catch(() => undefined);
+        };
 
         const initPlayer = async () => {
-            // HLS é servido sem auth por request (proteção via UUID no path)
-            const hlsSrc = `${API_BASE_URL}${hlsUrl}`;
+            const hlsSrc = hlsUrl.startsWith('http') ? hlsUrl : `${API_BASE_URL}${hlsUrl}`;
+            const sourceType = hlsSrc.includes('.m3u8') ? 'application/x-mpegURL' : 'video/mp4';
+            const hlsTarget = new URL(hlsSrc, window.location.origin);
+            const apiOrigin = new URL(API_BASE_URL || window.location.origin, window.location.origin).origin;
+            const requiresStreamToken = sourceType === 'application/x-mpegURL'
+                && hlsTarget.origin === apiOrigin
+                && hlsTarget.pathname.startsWith('/hls/');
 
             // 1. Fetch initial progress
             let initialTime = 0;
@@ -62,14 +116,38 @@ export default function VideoPlayer({ videoId, hlsUrl, moduleId }: VideoPlayerPr
 
             if (abortController.signal.aborted) return;
 
+            if (requiresStreamToken) {
+                const streamResponse = await api.get('/api/auth/stream-token', {
+                    params: { videoId },
+                    signal: abortController.signal
+                });
+                streamToken = streamResponse.data.streamToken;
+            }
+
             // 2. Initialize video.js
             const player = playerRef.current = videojs(videoElement, {
                 controls: true,
                 fluid: true,
                 playbackRates: [0.5, 1, 1.25, 1.5, 2],
-                sources: [{ src: hlsSrc, type: 'application/x-mpegURL' }],
                 html5: { vhs: { overrideNative: true } }
             });
+
+            const requestHook = (options: VhsRequestOptions): VhsRequestOptions => ({
+                ...options,
+                headers: {
+                    ...options.headers,
+                    ...(streamToken ? { Authorization: `Bearer ${streamToken}` } : {})
+                }
+            });
+            const registerRequestHook = () => {
+                const xhr = (player.tech() as unknown as VhsTech)?.vhs?.xhr;
+                if (xhr && !requestHookRegistered) {
+                    xhr.onRequest(requestHook);
+                    requestHookRegistered = true;
+                }
+            };
+            player.on('xhr-hooks-ready', registerRequestHook);
+            player.src({ src: hlsSrc, type: sourceType });
 
             player.ready(() => {
                 if (initialTime > 0) {
@@ -77,64 +155,44 @@ export default function VideoPlayer({ videoId, hlsUrl, moduleId }: VideoPlayerPr
                 }
             });
 
-            // 3. Helper to save progress
-            const saveProgress = () => {
-                if (!player || player.isDisposed()) return;
-                const current = player.currentTime() || 0;
-                const dur = player.duration() || 1;
-                const isCompleted = (current / dur) > 0.95;
-                if (current <= 0) return;
-                api.post('/api/student/progress', {
-                    videoId,
-                    progress: current,
-                    completed: isCompleted
-                }, {
-                    headers: { Authorization: `Bearer ${token}` },
-                    signal: abortController.signal
-                }).catch(() => { /* aborted or network error */ });
-            };
-
-            // Save on play (marks the video as watched immediately)
-            player.on('play', saveProgress);
-            // Save on pause
-            player.on('pause', saveProgress);
-
-            // Save progress periodically
+            // 3. Save progress periodically
             progressInterval = setInterval(() => {
                 if (player && !player.paused()) {
-                    saveProgress();
+                    saveProgress(player);
                 }
             }, 10000);
 
-            // Save on page unload
-            handleBeforeUnload = () => saveProgress();
-            window.addEventListener('beforeunload', handleBeforeUnload);
+            player.on('pause', () => saveProgress(player));
+            player.on('ended', () => saveProgress(player));
+            flushOnPageHide = () => saveProgress(player, true);
+            window.addEventListener('pagehide', flushOnPageHide);
 
-            // 4. Attendance heartbeat — envia a cada 30s se vídeo está tocando
-            if (moduleId) {
+            if (config.attendanceEnabled && moduleId) {
                 attendanceInterval = setInterval(() => {
-                    if (player && !player.paused() && !player.isDisposed()) {
-                        api.post('/api/student/attendance/heartbeat', { moduleId }, {
-                            headers: { Authorization: `Bearer ${token}` },
-                            signal: abortController.signal
-                        }).catch(() => { /* ignore */ });
+                    if (!player.isDisposed() && !player.paused()) {
+                        void api.post('/api/student/attendance/heartbeat', { moduleId }, { signal: abortController.signal })
+                            .catch(() => undefined);
                     }
-                }, 30000);
+                }, 30_000);
+            }
+
+            if (requiresStreamToken) {
+                tokenRefreshInterval = setInterval(() => {
+                    void api.get('/api/auth/stream-token', { params: { videoId } })
+                        .then(response => { streamToken = response.data.streamToken; })
+                        .catch(() => undefined);
+                }, 4 * 60 * 1000);
             }
 
         };
 
-        initPlayer();
+        void initPlayer().catch((error) => {
+            if (!abortController.signal.aborted) console.error('Falha ao inicializar player seguro', error);
+        });
 
-        // --- PROTEÇÕES DE SEGURANÇA NO PLAYER ---
-
-        // 1. Prevenir right-click
-        const preventContext = (e: Event) => e.preventDefault();
-        videoElement.addEventListener('contextmenu', preventContext);
-
-        // 2. Marca d'água dinâmica
+        // Marca d'água dinâmica; movimento desabilitado para reduced-motion.
         let moveInterval: ReturnType<typeof setInterval> | undefined;
-        if (watermarkRef.current) {
+        if (watermarkRef.current && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
             moveInterval = setInterval(() => {
                 if (watermarkRef.current) {
                     const top = Math.random() * 80;
@@ -146,6 +204,7 @@ export default function VideoPlayer({ videoId, hlsUrl, moduleId }: VideoPlayerPr
         }
 
         return () => {
+            if (playerRef.current && !playerRef.current.isDisposed()) saveProgress(playerRef.current, true);
             abortController.abort();
             if (playerRef.current && !playerRef.current.isDisposed()) {
                 playerRef.current.dispose();
@@ -153,22 +212,10 @@ export default function VideoPlayer({ videoId, hlsUrl, moduleId }: VideoPlayerPr
             clearInterval(moveInterval);
             clearInterval(progressInterval);
             clearInterval(attendanceInterval);
-            if (handleBeforeUnload) window.removeEventListener('beforeunload', handleBeforeUnload);
-            videoElement.removeEventListener('contextmenu', preventContext);
+            clearInterval(tokenRefreshInterval);
+            if (flushOnPageHide) window.removeEventListener('pagehide', flushOnPageHide);
         };
-    }, [hlsUrl, token, videoId, moduleId]);
-
-    // Previne F12 e atalhos de devtools
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && e.key === 'I')) {
-                e.preventDefault();
-                alert("Por motivos de direitos autorais, ferramentas de desenvolvedor são desativadas nesta página.");
-            }
-        };
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, []);
+    }, [config.attendanceEnabled, hlsUrl, moduleId, token, videoId]);
 
     return (
         <div style={{ position: 'relative', width: '100%', borderRadius: '0', overflow: 'hidden' }}>

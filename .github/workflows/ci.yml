@@ -1,0 +1,74 @@
+name: Quality Gate
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  application:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+      - run: npm ci --prefix backend
+      - run: npm ci --prefix frontend
+      - name: Validate Prisma schema
+        run: npx --prefix backend prisma validate --schema backend/prisma/schema.prisma
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+      - run: npm run lint --prefix frontend
+      - name: Backend tests
+        run: npm test --prefix backend
+        env:
+          JWT_SECRET: ci-only-secret-with-at-least-32-characters
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+      - run: npm run build
+      - run: npm run audit
+
+  migrations:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ci -d ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci --prefix backend
+      - name: Apply migrations to empty PostgreSQL
+        run: npx --prefix backend prisma migrate deploy --schema backend/prisma/schema.prisma
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+      - name: Detect migration drift
+        run: npx --prefix backend prisma migrate diff --exit-code --from-schema-datasource backend/prisma/schema.prisma --to-schema-datamodel backend/prisma/schema.prisma
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci

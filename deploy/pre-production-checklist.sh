@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================
-# pre-production-checklist.sh — Validação Pré-Produção EduVault v10.0
+# pre-production-checklist.sh — Validação Pré-Produção EduVault
 # ============================================================
 #
 # Rode no servidor ANTES de liberar para produção.
@@ -43,7 +43,7 @@ warn() {
 
 echo ""
 echo "=========================================="
-echo "  EduVault v10.0 — Checklist Pré-Produção"
+echo "  EduVault — Checklist Pré-Produção"
 echo "=========================================="
 echo ""
 
@@ -59,8 +59,8 @@ echo ""
 
 # --- Aplicação ---
 echo "🚀 Aplicação"
-check "Backend respondendo"          "curl -sf http://localhost:4000/ | grep -q 'status'"
-check "Health check avançado"        "curl -sf http://localhost:4000/ | grep -qE '\"(healthy|degraded)\"'"
+check "Backend respondendo"          "curl -sf http://localhost:4000/health/live | grep -q '\"status\":\"ok\"'"
+check "Readiness com banco"          "curl -sf http://localhost:4000/health/ready | grep -q '\"status\":\"ready\"'"
 check "Frontend build existe"        "test -d /var/www/eduvault && test -f /var/www/eduvault/index.html"
 check "PM2 eduvault-api online"      "pm2 show eduvault-api 2>/dev/null | grep -q 'online'"
 check "PM2 eduvault-worker online"   "pm2 show eduvault-worker 2>/dev/null | grep -q 'online'"
@@ -72,6 +72,7 @@ check "SSL certificado válido"       "certbot certificates 2>/dev/null | grep -
 check "Firewall UFW ativo"           "ufw status | grep -q 'active'"
 check "Rate limiting no Nginx"       "grep -q 'limit_req_zone' /etc/nginx/sites-available/eduvault 2>/dev/null || grep -q 'limit_req_zone' /etc/nginx/sites-enabled/eduvault 2>/dev/null"
 check "JWT_SECRET definido"          "pm2 env 0 2>/dev/null | grep -q 'JWT_SECRET'"
+check "Cookie seguro habilitado"     "pm2 env 0 2>/dev/null | grep -q 'COOKIE_SECURE.*true'"
 echo ""
 
 # --- Backups ---

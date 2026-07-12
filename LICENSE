@@ -1,253 +1,33 @@
 # LICENÇA DE USO PROPRIETÁRIO E TERMO DE PROTEÇÃO DE SOFTWARE
 
-**Versão da Licença:** 2.0 (atualizada para EduVault v10.0)  
-**PROPRIETÁRIO E ÚNICO DETENTOR DOS DIREITOS:** Carlos Antonio de Oliveira Piquet  
-**CPF/CNPJ DO TITULAR:** (inserir quando aplicável)  
-**PRODUTO/SISTEMA:** EduVault — Plataforma Premium de Hospedagem de Vídeos Institucional  
-**DATA DE VIGÊNCIA:** A partir do momento do primeiro acesso, download, cópia, instalação ou hospedagem do código-fonte, total ou parcial.  
-**CONTATO DO TITULAR:** carlospiquet.projetos@gmail.com
+**PROPRIETÁRIO E ÚNICO DETENTOR DOS DIREITOS:** Carlos Antonio de Oliveira Piquet
+**PRODUTO/SISTEMA:** EduVault (Plataforma Premium de Hospedagem de Vídeos Institucional)
+**DATA DE VIGÊNCIA:** A partir do momento do primeiro acesso ou cópia do código-fonte.
 
 ---
 
-## 1. DEFINIÇÕES
+## 1. DA PROPRIEDADE INTELECTUAL
+Este software, doravante denominado "EduVault" (incluindo, mas não se limitando a: código-fonte, arquitetura de banco de dados, fluxos de *streaming* HLS, design de interface, scripts de processamento em *background*, logotipos, e documentação), é propriedade intelectual e material **exclusiva e intransferível** de **Carlos Antonio de Oliveira Piquet**.
 
-Para os efeitos desta Licença, consideram-se:
+O sistema é protegido por leis internacionais de Direitos Autorais (Copyright), Tratados de Propriedade Intelectual e Proteção de Software. O proprietário retém todos os direitos não concedidos expressamente neste documento jurídico.
 
-- **"Sistema"**: Todo o software EduVault, incluindo, sem limitação: código-fonte (backend e frontend), esquemas de banco de dados (Prisma/PostgreSQL), algoritmos de processamento de vídeo (FFmpeg/HLS), interfaces gráficas (React/CSS), rotas de API, middlewares, scripts de automação, arquivos de configuração (Nginx, PM2, k6, Docker), documentação técnica (.md), scripts de deploy e seed, e quaisquer ativos digitais produzidos no âmbito deste projeto.
-- **"Módulos Funcionais"**: Os subsistemas que compõem o EduVault, incluindo: streaming HLS adaptativo, editor de blocos drag-and-drop, sistema de branding dinâmico, importação Excel, sistema de matrículas, aulas ao vivo (Zoom), fórum de comentários com filtro de profanidade, sistema de punições automáticas, sistema de presença automática por heartbeat, sistema de papéis (ADMIN/TEACHER/STUDENT), e quaisquer funcionalidades futuras.
-- **"Proprietário"** ou **"Titular"**: Carlos Antonio de Oliveira Piquet, pessoa física detentora de todos os direitos patrimoniais e morais sobre o Sistema.
-- **"Operador"**: Qualquer pessoa física ou jurídica, instituição educacional ou entidade que opere, administre ou utilize o Sistema sob autorização expressa do Proprietário.
-- **"Usuário Final"**: Alunos, professores (TEACHER) e administradores cadastrados na plataforma que interagem com o Sistema via interface web.
-- **"Dados Pessoais"**: Quaisquer informações relacionadas a pessoa natural identificada ou identificável, conforme definido pela Lei Geral de Proteção de Dados (Lei nº 13.709/2018 — LGPD), incluindo: nome, e-mail, CPF, dados de matrícula, registros de presença, histórico de progresso, comentários do fórum, violações, punições e logs de auditoria.
-- **"Dados Sensíveis do Sistema"**: Registros de presença (Attendance/AttendanceEdit), violações de fórum (ForumViolation), punições (ForumBan), recursos (ForumAppeal), logs de auditoria (AuditLog) e quaisquer registros que envolvam conduta do Usuário Final.
+## 2. DAS PROIBIÇÕES EXPRESSAS E RESTRITIVAS
+Fica **TERMINANTEMENTE PROIBIDO**, sob pena de responsabilização civil e criminal, acrescida de perdas e danos materiais e morais:
+1. **Cópia e Clonagem:** Copiar, reproduzir ou espelhar qualquer trecho estrutural do código-fonte, interface (Frontend) ou arquitetura (Backend).
+2. **Modificação e Engenharia Reversa:** Descompilar, desmontar, traduzir, alterar, descobrir o código ou tentar quebrar os sistemas de autenticação (JWT), HLS, ou a proteção DRM/Watermark imposta sobre os vídeos.
+3. **Redistribuição e Comercialização:** Vender, revender, licenciar, alugar, sublicenciar, arrendar, publicar, transmitir ou distribuir este sistema ou partes dele, seja de forma gratuita ou onerosa, sem o consentimento formal, expresso e assinado do autor.
+4. **Hospedagem Não Autorizada:** Instalar ou rodar este software em servidores, domínios, ou instâncias em nuvem não aprovadas e supervisionadas pelo proprietário.
 
----
+## 3. DA CONFIDENCIALIDADE TÉCNICA
+Todos os algoritmos lógicos presentes neste sistema representam **Segredo de Negócio** (*Trade Secret*). Qualquer tentativa de exposição pública do funcionamento, falhas (seja alegando "bug bounty" não oficial), processos de seed, geração de hashes bcrypt, manipulação do FFmpeg, middlewares e rotas ocultas será caracterizada como infração grave e quebra de sigilo industrial.
 
-## 2. DA PROPRIEDADE INTELECTUAL
+## 4. DA PROTEÇÃO DOS DADOS DO USUÁRIO
+Ferramentas de coleta não-autorizada, raspagem de dados (*Web Scraping*), extração de tokens de vídeo via ferramentas de desenvolvedor (F12) ou redes (Network Sniffing) são ativamente auditadas. O uso indevido das APIs internas para o sequestro de sessões (*Session Hijacking*) ou injeção de privilégios (*Role Injection*) resultará no bloqueio imediato, sumário e permanente do endereço IP/Hardware e rastreamento para prosseguimento judicial.
 
-2.1. O Sistema EduVault, em sua totalidade e em cada uma de suas partes — incluindo código-fonte, arquitetura, design, fluxos lógicos, esquemas de banco de dados, algoritmos de processamento, interfaces visuais, documentação e marca — é propriedade intelectual e material **exclusiva, absoluta e intransferível** do Proprietário.
-
-2.2. O Sistema é protegido pela legislação brasileira, incluindo:
-   - **Lei nº 9.609/1998** — Lei de Software
-   - **Lei nº 9.610/1998** — Lei de Direitos Autorais
-   - **Lei nº 13.709/2018** — Lei Geral de Proteção de Dados (LGPD)
-   - **Lei nº 12.737/2012** — Lei Carolina Dieckmann (crimes informáticos)
-   - **Lei nº 12.965/2014** — Marco Civil da Internet
-   - **Decreto nº 2.556/1998** — Regulamento da Lei de Software
-   - Tratados internacionais de Propriedade Intelectual (Convenção de Berna, TRIPS/OMC)
-
-2.3. O Proprietário retém **todos os direitos** não expressamente concedidos neste documento. Nenhuma disposição desta licença configura cessão, transferência ou renúncia de direitos patrimoniais ou morais.
-
-2.4. O registro do software perante o INPI (Instituto Nacional da Propriedade Industrial) poderá ser efetuado a qualquer tempo pelo Proprietário, sendo esta licença prova documental de autoria e titularidade.
+## 5. AUDITORIA E RESCISÃO
+O uso ou simples hospedagem deste código estabelece concordância irrevogável com estes termos. O Proprietário detém o direito unilateral e inquestionável de suspender ou encerrar qualquer acesso à base, interromper o cluster ou apagar instâncias remotamente, a qualquer instante, caso seja detectado dolo, imperícia grosseira ou suspeita razoável de vazamento/quebra da licença.
 
 ---
+**AVISO LEGAL:** A violação das cláusulas acima incidirá em medidas legais imediatas conforme o rigor da lei vigente, sem prejuízo da apuração da extensão dos danos lucros cessantes.
 
-## 3. DAS PROIBIÇÕES EXPRESSAS
-
-Fica **TERMINANTEMENTE PROIBIDO**, sob pena de responsabilização civil e criminal, acrescida de perdas e danos materiais e morais, lucros cessantes e danos emergentes:
-
-3.1. **Cópia e Reprodução:** Copiar, reproduzir, espelhar, clonar, fazer fork, fazer snapshot, fotografar telas de código ou recriar qualquer trecho estrutural do código-fonte, interface, arquitetura de banco de dados, fluxos de API ou lógica de negócio do Sistema.
-
-3.2. **Engenharia Reversa e Descompilação:** Descompilar, desmontar, desofuscar, traduzir, alterar, adaptar, fazer debug reverso ou tentar extrair o código-fonte compilado. Inclui tentativas de quebra dos sistemas de autenticação (JWT), tokens de streaming (HLS stream-token), proteções de watermark, filtros de profanidade, mecanismo de heartbeat de presença ou qualquer outra camada de segurança.
-
-3.3. **Redistribuição e Comercialização:** Vender, revender, licenciar, sublicenciar, alugar, arrendar, ceder, doar, publicar, transmitir, distribuir ou disponibilizar o Sistema ou partes dele, seja de forma gratuita ou onerosa, online ou offline, sem consentimento formal, expresso e por escrito do Proprietário.
-
-3.4. **Hospedagem Não Autorizada:** Instalar, executar, fazer deploy, hospedar ou provisionar o Sistema em servidores, domínios, instâncias em nuvem (AWS, GCP, Azure, DigitalOcean, Vercel, etc.), containers Docker ou qualquer infraestrutura não previamente aprovada e supervisionada pelo Proprietário.
-
-3.5. **Criação de Derivados:** Criar sistemas derivados, "forks", ramificações, versões alternativas, "skins", white-labels não autorizados, ou qualquer software que incorpore total ou parcialmente a arquitetura, lógica ou design do EduVault.
-
-3.6. **Extração de Dados:** Exportar, extrair, raspar (web scraping), minerar ou coletar em massa dados armazenados no banco de dados do Sistema, incluindo dados de alunos, registros de presença, histórico de vídeos, comentários do fórum, logs de auditoria ou qualquer outro dado processado pelo Sistema.
-
-3.7. **Uso para Treinamento de IA:** Utilizar qualquer parte do código-fonte, documentação, arquitetura ou dados do Sistema para treinar, ajustar (fine-tune) ou alimentar modelos de inteligência artificial, aprendizado de máquina ou sistemas generativos.
-
-3.8. **Remoção de Identificadores:** Remover, alterar, ocultar ou adulterar avisos de copyright, watermarks, identificadores de licença, comentários de autoria no código ou qualquer marca que identifique o Proprietário.
-
----
-
-## 4. DA CONFIDENCIALIDADE E SEGREDO DE NEGÓCIO
-
-4.1. Todos os algoritmos, fluxos lógicos, esquemas de banco de dados, estratégias de segurança, configurações de infraestrutura e processos internos do Sistema constituem **Segredo de Negócio** (*Trade Secret*), protegidos pela Lei nº 9.279/1996 (Lei de Propriedade Industrial) e pelo Acordo TRIPS.
-
-4.2. Constitui infração grave e quebra de sigilo industrial qualquer tentativa de:
-   - Exposição pública do funcionamento interno das rotas, middlewares ou serviços
-   - Divulgação de processos de seed, geração de hashes bcrypt, estrutura do JWT
-   - Publicação de configurações de segurança (rate limiting, Nginx, CloudFlare)
-   - Exposição da lógica do filtro de profanidade, sistema de punições ou heartbeat de presença
-   - Divulgação não autorizada sob pretexto de "bug bounty", "pesquisa de segurança" ou "auditoria independente"
-   - Compartilhamento de credenciais de acesso admin, tokens ou chaves JWT_SECRET
-
-4.3. A obrigação de confidencialidade sobrevive à rescisão desta licença por prazo indeterminado.
-
----
-
-## 5. DA PROTEÇÃO DE DADOS PESSOAIS (LGPD)
-
-5.1. O Proprietário, na qualidade de **Controlador** dos dados pessoais processados pelo Sistema (conforme Art. 5º, VI da LGPD), compromete-se a:
-   - Tratar dados pessoais apenas para finalidades legítimas e informadas
-   - Implementar medidas técnicas e organizacionais de segurança (criptografia bcrypt, JWT, HTTPS, rate limiting)
-   - Manter registros de operações de tratamento (AuditLog, AttendanceEdit)
-   - Garantir os direitos dos titulares de dados (acesso, correção, exclusão)
-
-5.2. O **Operador** que utilize o Sistema para processar dados de alunos em contexto educacional assume a condição de **Operador** (conforme Art. 5º, VII da LGPD) e compromete-se a:
-   - Tratar dados pessoais exclusivamente conforme as instruções do Controlador
-   - Não compartilhar dados de alunos com terceiros sem base legal
-   - Comunicar incidentes de segurança ao Controlador em até 48 horas
-   - Não reutilizar registros de presença, punições ou violações para fins diversos dos educacionais
-   - Respeitar os prazos de retenção definidos pelo Controlador
-
-5.3. **Dados de Presença (Attendance):** Os registros automáticos de presença gerados pelo sistema de heartbeat (tempo de visualização, status PRESENT/ABSENT), bem como as edições manuais com justificativa (AttendanceEdit), constituem dados de desempenho acadêmico e devem ser tratados com a devida confidencialidade, sendo acessíveis apenas a usuários com papel ADMIN.
-
-5.4. **Dados de Conduta no Fórum:** Violações de profanidade (ForumViolation), punições (ForumBan), denúncias (CommentReport) e recursos (ForumAppeal) constituem registros disciplinares e devem ser tratados com sigilo proporcional, não podendo ser expostos publicamente.
-
-5.5. **Importação de Dados via Excel:** O processo de importação de alunos via planilha (.xlsx/.xls) envolve dados pessoais (nome, matrícula, CPF, turma). O Operador é responsável por garantir que possui base legal para o tratamento desses dados e por descartar as planilhas originais após a importação.
-
-5.6. Em caso de incidente de segurança que comprometa dados pessoais, o Controlador deverá comunicar à ANPD (Autoridade Nacional de Proteção de Dados) e aos titulares afetados nos prazos legais, conforme Art. 48 da LGPD.
-
----
-
-## 6. DA PROTEÇÃO TÉCNICA ATIVA
-
-6.1. O Sistema implementa múltiplas camadas de proteção técnica ativa, incluindo:
-   - Autenticação JWT com expiração (24h login, 5min streaming)
-   - Rate limiting em 4 zonas (geral, login, upload, escrita) via Express e Nginx
-   - Watermark dinâmica com identificação do aluno (nome + e-mail)
-   - Bloqueio de ferramentas de desenvolvedor (F12, right-click) no player
-   - Streaming HLS segmentado (impossibilita download direto do mp4)
-   - Helmet para headers de segurança HTTP
-   - Filtro de profanidade com 3 níveis de severidade
-   - Sistema de punições automáticas progressivas
-   - Logs de auditoria em todas as ações administrativas
-   - Health check com monitoramento de DB, disco e fila
-
-6.2. Qualquer tentativa de **contornar, desabilitar, explorar ou burlar** essas proteções técnicas constitui violação desta licença e infração ao Art. 12 da Lei nº 9.609/98, sujeitando o infrator às penalidades previstas nos Arts. 12 a 14 da mesma lei (detenção de 6 meses a 2 anos + multa).
-
-6.3. O uso indevido das APIs internas para sequestro de sessões (*Session Hijacking*), injeção de privilégios (*Role Injection*), escalação de permissões (STUDENT→TEACHER→ADMIN), extração de tokens de vídeo via *Network Sniffing*, ou manipulação do heartbeat de presença resultará em:
-   - Bloqueio imediato, sumário e permanente do endereço IP e identificadores de hardware
-   - Preservação de evidências digitais para procedimento judicial
-   - Comunicação às autoridades competentes
-
----
-
-## 7. DOS PAPÉIS E PERMISSÕES
-
-7.1. O Sistema implementa 3 níveis de acesso hierárquicos:
-   - **ADMIN**: Acesso total ao painel administrativo, CRUD de usuários/cursos/módulos/vídeos, gestão de presença, moderação, punições e configurações
-   - **TEACHER**: Acesso restrito ao painel administrativo (apenas cursos vinculados), sem acesso a configurações globais, punições ou presença
-   - **STUDENT**: Acesso ao dashboard do aluno, visualização de cursos matriculados, participação no fórum
-
-7.2. A concessão, alteração ou revogação de papéis é prerrogativa exclusiva de usuários ADMIN. A manipulação não autorizada de roles no banco de dados ou via API constitui violação grave desta licença.
-
-7.3. Usuários com papel TEACHER atuam como prepostos do Operador e estão sujeitos às mesmas obrigações de confidencialidade desta licença no que tange ao conteúdo dos cursos e dados dos alunos.
-
----
-
-## 8. DOS COMPONENTES DE TERCEIROS
-
-8.1. O Sistema utiliza bibliotecas e ferramentas open-source sob suas respectivas licenças:
-   - **Node.js / Express**: Licença MIT
-   - **React**: Licença MIT
-   - **PostgreSQL**: Licença PostgreSQL (similar a MIT)
-   - **Prisma ORM**: Licença Apache 2.0
-   - **FFmpeg**: Licença LGPL 2.1 / GPL (conforme codecs)
-   - **video.js / HLS.js**: Licença Apache 2.0 / MIT
-   - **PM2**: Licença AGPL 3.0 (uso em servidor)
-   - **Nginx**: Licença BSD 2-cláusulas
-   - **Demais dependências**: Conforme listadas em package.json
-
-8.2. O uso dessas bibliotecas não confere a terceiros qualquer direito sobre o código proprietário do EduVault. A lógica de negócio, arquitetura, integração e código original são integralmente propriedade do Titular.
-
-8.3. Em caso de conflito entre esta licença e as licenças dos componentes de terceiros, prevalecerão os termos mais restritivos no que tange à proteção do código proprietário do EduVault.
-
----
-
-## 9. DA ISENÇÃO DE GARANTIA E LIMITAÇÃO DE RESPONSABILIDADE
-
-9.1. O Sistema é fornecido **"NO ESTADO EM QUE SE ENCONTRA" (AS IS)**, sem garantias de qualquer natureza, expressas ou implícitas, incluindo, mas não se limitando a, garantias de comercialização, adequação a uma finalidade específica, não-violação, disponibilidade ininterrupta ou ausência de erros.
-
-9.2. O Proprietário **não se responsabiliza** por:
-   - Perdas de dados decorrentes de falhas de hardware, software de terceiros ou operação inadequada
-   - Indisponibilidade temporária causada por manutenção, falhas de rede ou ataques externos (DDoS, etc.)
-   - Danos indiretos, incidentais, especiais, consequenciais ou punitivos de qualquer natureza
-   - Ações ou omissões de Operadores, Professores (TEACHER) ou Usuários Finais na operação do Sistema
-   - Conteúdo inserido por usuários no fórum de comentários ou materiais enviados por Professores
-   - Imprecisões nos registros automáticos de presença (heartbeat)
-
-9.3. A responsabilidade total e acumulada do Proprietário, por qualquer causa, será limitada ao valor efetivamente pago pelo Operador nos 12 (doze) meses anteriores ao evento que deu origem à reclamação.
-
----
-
-## 10. DA INDENIZAÇÃO
-
-10.1. O Operador e/ou Usuário Final que violar qualquer disposição desta licença compromete-se a **indenizar e isentar** o Proprietário de todo e qualquer dano, perda, custo, despesa (incluindo honorários advocatícios) ou reclamação decorrente de:
-   - Uso não autorizado ou irregular do Sistema
-   - Violação de direitos de propriedade intelectual
-   - Descumprimento da LGPD ou legislação de proteção de dados
-   - Ações de terceiros prejudicados pelo uso indevido do Sistema
-   - Vazamento de dados causado por negligência do Operador
-
-10.2. O valor mínimo de indenização por violação comprovada desta licença será de **R$ 50.000,00** (cinquenta mil reais) por infração, sem prejuízo do ressarcimento integral dos danos efetivos, lucros cessantes e danos morais.
-
----
-
-## 11. DA AUDITORIA E FISCALIZAÇÃO
-
-11.1. O Proprietário reserva-se o direito de auditar, a qualquer momento e sem aviso prévio, a conformidade do Operador com os termos desta licença, incluindo verificação de:
-   - Servidores e instâncias onde o Sistema está hospedado
-   - Integridade do código-fonte (ausência de modificações não autorizadas)
-   - Conformidade com políticas de segurança e proteção de dados
-   - Uso adequado dos papéis e permissões (ADMIN/TEACHER/STUDENT)
-
-11.2. O Operador compromete-se a fornecer acesso razoável para fins de auditoria e a cooperar integralmente com o processo.
-
----
-
-## 12. DA RESCISÃO
-
-12.1. Esta licença poderá ser rescindida imediatamente, sem aviso prévio, pelo Proprietário, nas seguintes hipóteses:
-   - Violação de qualquer cláusula deste instrumento
-   - Detecção de uso não autorizado, hospedagem irregular ou cópia do Sistema
-   - Suspeita razoável de vazamento, quebra de sigilo ou comprometimento de segurança
-   - Inadimplemento de obrigações financeiras, se aplicáveis
-   - Determinação judicial ou administrativa
-
-12.2. Após a rescisão, o Operador deverá:
-   - Cessar imediatamente todo uso do Sistema
-   - Destruir todas as cópias do código-fonte em sua posse (incluindo backups)
-   - Fornecer certificação por escrito da destruição completa em até 15 (quinze) dias
-   - Deletar dados pessoais de alunos conforme LGPD, salvo obrigação legal de retenção
-
-12.3. O Proprietário poderá, a seu exclusivo critério, suspender ou encerrar qualquer acesso à base, interromper clusters, revogar deploys ou desprovisionar instâncias remotamente.
-
-12.4. As cláusulas 1, 2, 3, 4, 5, 6, 9, 10 e 13 **sobrevivem** à rescisão desta licença por prazo indeterminado.
-
----
-
-## 13. DISPOSIÇÕES GERAIS
-
-13.1. **Foro e Jurisdição:** Fica eleito o foro da comarca do domicílio do Proprietário, no Estado do Rio de Janeiro, Brasil, para dirimir quaisquer controvérsias oriundas desta licença, com renúncia expressa a qualquer outro, por mais privilegiado que seja.
-
-13.2. **Legislação Aplicável:** Esta licença é regida exclusivamente pelas leis da República Federativa do Brasil.
-
-13.3. **Integralidade:** Este instrumento constitui o acordo completo entre as partes e substitui todos os entendimentos anteriores, verbais ou escritos.
-
-13.4. **Independência das Cláusulas:** Se qualquer disposição desta licença for considerada inválida ou inexequível, as demais disposições permanecerão em pleno vigor e efeito.
-
-13.5. **Não Renúncia:** A tolerância ou o não exercício de qualquer direito previsto nesta licença não constituirá renúncia ou novação, podendo o Proprietário exercê-lo a qualquer momento.
-
-13.6. **Cessão:** O Operador não poderá ceder ou transferir os direitos ou obrigações desta licença sem consentimento prévio e por escrito do Proprietário. O Proprietário poderá ceder livremente seus direitos.
-
-13.7. **Comunicações:** Todas as comunicações formais relativas a esta licença deverão ser enviadas para carlospiquet.projetos@gmail.com.
-
-13.8. **Atualizações da Licença:** O Proprietário reserva-se o direito de atualizar os termos desta licença a qualquer momento. A versão vigente será sempre a mais recente disponível no repositório do projeto.
-
----
-
-**AVISO LEGAL FINAL:** A violação de qualquer cláusula deste instrumento sujeitará o infrator a medidas judiciais imediatas — cíveis e criminais — incluindo ação de busca e apreensão, tutela de urgência, ação indenizatória e representação criminal, conforme a legislação vigente, sem qualquer necessidade de notificação prévia.
-
-**Ao acessar, copiar, instalar, hospedar ou utilizar qualquer parte deste Sistema, você declara ter lido, compreendido e aceito integralmente todos os termos desta licença.**
-
----
-
-*Documento de propriedade de Carlos Antonio de Oliveira Piquet. Todos os direitos reservados.*  
-*Nenhuma linha de código deve ser alterada sem autorização do arquiteto-chefe.*  
-*Versão 2.0 — Março de 2026 — EduVault v10.0*
+*Nenhuma linha de código deve ser alterada sem autorização do arquiteto-chefe.*
