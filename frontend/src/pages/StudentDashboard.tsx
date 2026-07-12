@@ -12,13 +12,16 @@ import { useAuth } from '../context/AuthContext';
 import { useConfig } from '../context/ConfigContext';
 import {
     LogOut, Search, ShieldCheck, Loader2, ChevronRight,
-    ChevronLeft, PlayCircle, BookOpen, GraduationCap, TrendingUp,
-    Flag, CheckSquare, Bell, Moon, Sun, Radio, ExternalLink, KeyRound, Bot
+    PlayCircle, BookOpen, GraduationCap, TrendingUp, LayoutDashboard,
+    Flag, Bell, Radio, ExternalLink, KeyRound, Bot, CalendarDays,
+    ClipboardCheck, Award, StickyNote, MessageCircle, Settings, Rocket,
+    Trophy, Target, CircleCheckBig
     // GraduationCap kept for empty state
 } from 'lucide-react';
 import api from '../lib/api';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import './StudentDashboard.css';
 
 const API_BASE = import.meta.env.VITE_API_URL?.trim() || '';
 
@@ -100,9 +103,6 @@ export default function StudentDashboard() {
     const [notifications, setNotifications] = useState<StudentNotification[]>([]);
     const [showNotifs, setShowNotifs] = useState(false);
 
-    // Dark mode
-    const [darkMode, setDarkMode] = useState(() => localStorage.getItem('darkMode') === 'true');
-
     // Live classes
     const [liveClasses, setLiveClasses] = useState<StudentLiveClass[]>([]);
     const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
@@ -178,9 +178,9 @@ export default function StudentDashboard() {
 
     // Dark mode toggle
     useEffect(() => {
-        document.body.classList.toggle('dark', darkMode);
-        localStorage.setItem('darkMode', String(darkMode));
-    }, [darkMode]);
+        document.body.classList.remove('dark');
+        localStorage.removeItem('darkMode');
+    }, []);
 
     const unreadCount = notifications.filter((notification) => !notification.read).length;
 
@@ -268,23 +268,33 @@ export default function StudentDashboard() {
         return courses.filter(c => c.name.toLowerCase().includes(q));
     }, [courses, searchQuery]);
 
+    const dashboardCourses = useMemo(() => {
+        if (searchQuery.trim()) return filteredCourses;
+        const continuedIds = new Set(continueCourses.map(course => course.id));
+        return [...continueCourses, ...courses.filter(course => !continuedIds.has(course.id))];
+    }, [continueCourses, courses, filteredCourses, searchQuery]);
+
+    const completedLessons = useMemo(
+        () => courses.reduce((total, course) => total + course.completedVideos, 0),
+        [courses]
+    );
+
+    const totalLessons = useMemo(
+        () => courses.reduce((total, course) => total + course.totalVideos, 0),
+        [courses]
+    );
+
+    const formattedDate = useMemo(() => {
+        const value = new Intl.DateTimeFormat('pt-BR', {
+            weekday: 'long', day: '2-digit', month: 'long', year: 'numeric'
+        }).format(new Date());
+        return value.charAt(0).toUpperCase() + value.slice(1);
+    }, []);
+
     const getThumbUrl = (url: string | null | undefined): string | null => {
         if (!url) return null;
         if (url.startsWith('http')) return url;
         return `${API_BASE}${url}`;
-    };
-
-    // Número da aula dentro do curso
-    const getLessonNumber = (course: CourseWithProgress): number => {
-        if (!course.lastWatchedVideo) return 1;
-        let count = 0;
-        for (const mod of course.modules) {
-            for (const vid of mod.videos) {
-                count++;
-                if (vid.id === course.lastWatchedVideo.id) return count;
-            }
-        }
-        return 1;
     };
 
     if (loading) {
@@ -364,53 +374,41 @@ export default function StudentDashboard() {
                 </div>
             )}
 
-            {/* ===== HEADER ===== */}
-            <header className="sd-header">
+            <header className="sd-header sd-portal-header">
                 <div className="sd-header-left">
                     {config.logoUrl ? (
                         <img src={getThumbUrl(config.logoUrl) || ''} alt={config.platformName} className="sd-logo-img" />
                     ) : (
-                        <ShieldCheck size={28} color="var(--primary)" />
+                        <ShieldCheck size={30} aria-hidden="true" />
                     )}
                     <span className="sd-logo"><span style={{ color: config.nameColor1 }}>{config.namePart1}</span><span style={{ color: config.nameColor2 }}>{config.namePart2}</span></span>
                 </div>
 
-                <nav className="sd-product-nav" aria-label="Áreas da plataforma">
-                    <Link to="/campus/ao-vivo">
-                        <Radio size={16} aria-hidden="true" /> Campus ao Vivo
-                    </Link>
-                    <Link to="/student/tutor">
-                        <Bot size={16} aria-hidden="true" /> Tutor IA
-                    </Link>
+                <nav className="sd-product-nav" aria-label="Atalhos do aluno">
+                    <a href="#cursos"><BookOpen size={17} /> Cursos</a>
+                    <a href="#agenda"><CalendarDays size={17} /> Agenda</a>
+                    <Link to="/student/tutor"><Bot size={17} /> Tutor IA</Link>
                 </nav>
 
-                <div className="sd-search-bar">
-                    <Search size={18} color="var(--text-muted)" />
+                <label className="sd-search-bar">
+                    <Search size={18} aria-hidden="true" />
+                    <span className="sr-only">Buscar cursos</span>
                     <input
-                        type="text"
-                        placeholder="Buscar curso..."
+                        type="search"
+                        placeholder="Buscar cursos, aulas e materiais..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                     />
-                </div>
+                </label>
 
                 <div className="sd-header-right">
-                    <div className="sd-global-progress">
-                        <TrendingUp size={16} />
-                        <span>{globalProgress}%</span>
-                        <div className="sd-progress-mini">
-                            <div className="sd-progress-mini-fill" style={{ width: `${globalProgress}%` }} />
-                        </div>
+                    <div className="sd-global-progress" title="Progresso geral">
+                        <TrendingUp size={18} />
+                        <span><strong>{globalProgress}%</strong><small>Progresso geral</small></span>
                     </div>
 
-                    {/* Dark mode toggle */}
-                    <button onClick={() => setDarkMode(d => !d)} className="sd-icon-btn" title={darkMode ? 'Modo claro' : 'Modo escuro'}>
-                        {darkMode ? <Sun size={18} /> : <Moon size={18} />}
-                    </button>
-
-                    {/* Notifications */}
-                    <div style={{ position: 'relative' }}>
-                        <button onClick={() => setShowNotifs(s => !s)} className="sd-icon-btn" title="Notificações">
+                    <div className="sd-notif-anchor">
+                        <button onClick={() => setShowNotifs(s => !s)} className="sd-icon-btn" title="Notificações" aria-expanded={showNotifs}>
                             <Bell size={18} />
                             {unreadCount > 0 && <span className="sd-notif-badge">{unreadCount}</span>}
                         </button>
@@ -418,18 +416,16 @@ export default function StudentDashboard() {
                             <div className="sd-notif-dropdown">
                                 <div className="sd-notif-header">
                                     <strong>Notificações</strong>
-                                    {unreadCount > 0 && (
-                                        <button onClick={handleMarkAllRead} className="sd-notif-mark-read">Marcar todas como lidas</button>
-                                    )}
+                                    {unreadCount > 0 && <button onClick={handleMarkAllRead} className="sd-notif-mark-read">Marcar como lidas</button>}
                                 </div>
                                 <div className="sd-notif-list">
                                     {notifications.length === 0 ? (
-                                        <p style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Nenhuma notificação.</p>
-                                    ) : notifications.map((n) => (
-                                        <div key={n.id} className={`sd-notif-item ${n.read ? '' : 'unread'}`}>
-                                            <strong>{n.title}</strong>
-                                            <p>{n.message}</p>
-                                            <small>{new Date(n.createdAt).toLocaleString('pt-BR')}</small>
+                                        <p className="sd-notif-empty">Nenhuma notificação.</p>
+                                    ) : notifications.map((notification) => (
+                                        <div key={notification.id} className={`sd-notif-item ${notification.read ? '' : 'unread'}`}>
+                                            <strong>{notification.title}</strong>
+                                            <p>{notification.message}</p>
+                                            <small>{new Date(notification.createdAt).toLocaleString('pt-BR')}</small>
                                         </div>
                                     ))}
                                 </div>
@@ -438,253 +434,123 @@ export default function StudentDashboard() {
                     </div>
 
                     <div className="sd-user-area">
-                        <div className="sd-avatar">
-                            {user?.name?.charAt(0).toUpperCase()}
-                        </div>
+                        <div className="sd-avatar">{user?.name?.charAt(0).toUpperCase()}</div>
                         <span className="sd-user-name">{user?.name}</span>
-                        <button onClick={logout} className="sd-logout-btn" title="Sair">
-                            <LogOut size={16} />
-                        </button>
+                        <button onClick={logout} className="sd-logout-btn" title="Sair"><LogOut size={17} /></button>
                     </div>
                 </div>
             </header>
 
-            {/* ===== MAIN ===== */}
-            <main className="sd-main">
-
-                {config.bannerUrl && <div className="sd-banner"><img src={getThumbUrl(config.bannerUrl) || ''} alt="" className="sd-banner-img" /></div>}
-
-                {/* ─── SEÇÃO: AULAS AO VIVO ─── */}
-                {liveClasses.length > 0 && (
-                    <section className="sd-section sd-live-section">
-                        <div className="sd-section-header">
-                            <div className="sd-section-title">
-                                <Radio size={22} color="#ef4444" />
-                                <h2>Aulas ao Vivo</h2>
-                            </div>
-                        </div>
-                        <div className="sd-live-cards">
-                            {liveClasses.map((lc) => {
-                                const isLive = lc.status === 'LIVE';
-                                const joinUrl = lc.meetingJoinUrl || lc.zoomJoinUrl;
-                                const dateStr = new Date(lc.startAt).toLocaleString('pt-BR', {
-                                    day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
-                                });
-                                return (
-                                    <a
-                                        key={lc.id}
-                                        href={joinUrl || '#'}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className={`sd-live-card ${isLive ? 'is-live' : ''}`}
-                                    >
-                                        <div className="sd-live-card-badge">
-                                            {isLive ? (
-                                                <><span className="sd-live-dot" /> AO VIVO</>
-                                            ) : (
-                                                <><Radio size={14} /> {dateStr}</>
-                                            )}
-                                        </div>
-                                        <h3 className="sd-live-card-title">{lc.title}</h3>
-                                        <span className="sd-live-card-course">{lc.course?.name}</span>
-                                        {lc.module && <span className="sd-live-card-module">{lc.module.name}</span>}
-                                        <span className="sd-live-card-module">Plataforma: {String(lc.provider || 'CUSTOM').replace(/_/g, ' ')}</span>
-                                        <span className="sd-live-card-join">
-                                            <ExternalLink size={14} /> Entrar na aula
-                                        </span>
-                                    </a>
-                                );
-                            })}
-                        </div>
-                    </section>
-                )}
-
-                {recommendations.length > 0 && (
-                    <section className="sd-section">
-                        <div className="sd-section-header">
-                            <div className="sd-section-title">
-                                <Flag size={22} color="var(--primary)" />
-                                <h2>Trilha Inteligente</h2>
-                            </div>
-                        </div>
-                        <div className="sd-live-cards">
-                            {recommendations.map((rec) => (
-                                <button
-                                    key={`${rec.courseId}_${rec.videoId}`}
-                                    className="sd-live-card"
-                                    onClick={() => handleLessonClick(rec.videoId)}
-                                    onMouseEnter={() => prefetchLessonResources(rec.videoId)}
-                                    onFocus={() => prefetchLessonResources(rec.videoId)}
-                                    style={{ textAlign: 'left', border: '1px solid var(--glass-border)' }}
-                                >
-                                    <div className="sd-live-card-badge">
-                                        <BookOpen size={14} /> {rec.moduleName}
-                                    </div>
-                                    <h3 className="sd-live-card-title">{rec.videoTitle}</h3>
-                                    <span className="sd-live-card-course">{rec.courseName}</span>
-                                    <span className="sd-live-card-module">{rec.reason}</span>
-                                    <span className="sd-live-card-module">Prioridade: {rec.priorityScore} • Risco: {rec.riskLevel}</span>
-                                    <span className="sd-live-card-join">
-                                        <PlayCircle size={14} /> Assistir agora
-                                    </span>
-                                </button>
-                            ))}
-                        </div>
-                    </section>
-                )}
-
-                {/* ─── SEÇÃO 1: CONTINUAR ESTUDANDO ─── */}
-                {continueCourses.length > 0 && (
-                    <section className="sd-section">
-                        <div className="sd-section-header">
-                            <div className="sd-section-title">
-                                <ShieldCheck size={22} color="var(--primary)" />
-                                <h2>Continuar estudando</h2>
-                            </div>
-                            <CarouselNav id="continue" />
-                        </div>
-                        <Carousel carouselId="continue">
-                            {continueCourses.map(course => {
-                                const lessonNum = getLessonNumber(course);
-                                const thumbUrl = getThumbUrl(course.lastWatchedVideo?.thumbnailUrl || course.thumbnailUrl);
-                                return (
-                                    <div
-                                        key={course.id}
-                                        className="sd-card-hero"
-                                        onClick={() => handleCourseClick(course)}
-                                        onMouseEnter={() => prefetchLessonResources(getPreferredVideoId(course))}
-                                    >
-                                        <div
-                                            className="sd-card-hero-bg"
-                                            style={thumbUrl ? { backgroundImage: `url(${thumbUrl})` } : undefined}
-                                        />
-                                        <div className="sd-card-hero-overlay">
-                                            <span className="sd-card-hero-badge">
-                                                {course.lastWatchedVideo?.moduleName || 'Módulo'}
-                                            </span>
-                                            <h3 className="sd-card-hero-title">{course.name}</h3>
-                                            <div className="sd-card-hero-meta">
-                                                <span>Aula {lessonNum}</span>
-                                                <span className="sd-meta-sep">|</span>
-                                                <span>{course.progressPercent}%</span>
-                                                <span className="sd-meta-sep">|</span>
-                                                <span>{course.totalVideos} aulas</span>
-                                            </div>
-                                            <div className="sd-card-hero-progressbar">
-                                                <div className="sd-card-hero-progressbar-fill" style={{ width: `${course.progressPercent}%` }} />
-                                            </div>
-                                            <div className="sd-card-hero-bottom">
-                                                <span className="sd-card-hero-play">
-                                                    <PlayCircle size={22} />
-                                                    <span>{course.lastWatchedVideo?.title || 'Continuar'}</span>
-                                                </span>
-                                                <div className="sd-card-hero-actions">
-                                                    <Flag size={16} />
-                                                    <CheckSquare size={16} />
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </Carousel>
-                    </section>
-                )}
-
-                {/* ─── SEÇÃO 2: CURSOS EM ANDAMENTO ─── */}
-                {(searchQuery ? filteredCourses : inProgressCourses.length > 0 ? inProgressCourses : courses).length > 0 && (
-                    <section className="sd-section">
-                        <div className="sd-section-header">
-                            <div className="sd-section-title">
-                                <BookOpen size={22} color="var(--primary)" />
-                                <h2>Cursos em Andamento</h2>
-                            </div>
-                            <CarouselNav id="andamento" />
-                        </div>
-                        <Carousel carouselId="andamento">
-                            {(searchQuery ? filteredCourses : inProgressCourses.length > 0 ? inProgressCourses : courses).map(course => {
-                                const thumbUrl = getThumbUrl(course.thumbnailUrl);
-                                return (
-                                    <div
-                                        key={course.id}
-                                        className="sd-card-medium"
-                                        onClick={() => handleCourseClick(course)}
-                                        onMouseEnter={() => prefetchLessonResources(getPreferredVideoId(course))}
-                                    >
-                                        <div
-                                            className="sd-card-medium-bg"
-                                            style={thumbUrl ? { backgroundImage: `url(${thumbUrl})` } : undefined}
-                                        />
-                                        <div className="sd-card-medium-overlay">
-                                            <h5 className="sd-card-medium-name">{course.name}</h5>
-                                            <span className="sd-card-medium-badge">{course.progressPercent}%</span>
-                                        </div>
-                                        <div className="sd-card-medium-bar">
-                                            <div className="sd-card-medium-bar-fill" style={{ width: `${course.progressPercent}%` }} />
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </Carousel>
-                    </section>
-                )}
-
-                {/* Estado vazio */}
-                {courses.length === 0 && (
-                    <div className="sd-empty-state">
-                        <GraduationCap size={64} color="var(--text-muted)" />
-                        <p>Nenhum curso encontrado. Aguarde a matrícula pelo administrador.</p>
+            <div className="sd-portal-shell">
+                <aside className="sd-sidebar" aria-label="Menu do aluno">
+                    <nav>
+                        <a className="active" href="#inicio"><LayoutDashboard size={18} /> Dashboard</a>
+                        <a href="#cursos"><BookOpen size={18} /> Meus cursos</a>
+                        <a href="#agenda"><CalendarDays size={18} /> Cronograma</a>
+                        <a href="#agenda"><ClipboardCheck size={18} /> Atividades</a>
+                        <a href="#progresso"><Award size={18} /> Progresso</a>
+                        <a href="#trilha"><StickyNote size={18} /> Trilha inteligente</a>
+                        <Link to="/student/tutor"><MessageCircle size={18} /> Tutor IA</Link>
+                        <Link to="/account/security"><Settings size={18} /> Segurança</Link>
+                    </nav>
+                    <div className="sd-sidebar-progress">
+                        <Rocket size={28} />
+                        <strong>Continue aprendendo!</strong>
+                        <p>Você já concluiu {completedLessons} de {totalLessons} aulas.</p>
+                        <div><span style={{ width: `${globalProgress}%` }} /></div>
+                        <a href="#cursos">Ver meu progresso</a>
                     </div>
-                )}
-            </main>
-        </div>
-    );
-}
+                </aside>
 
-/* ═══════════════════════════════════════════
-   Carousel Navigation Arrows
-   ═══════════════════════════════════════════ */
-function CarouselNav({ id }: { id: string }) {
-    return (
-        <div className="sd-carousel-nav">
-            <button
-                className="sd-carousel-arrow"
-                onClick={() => {
-                    const track = document.getElementById(`carousel-${id}`);
-                    track?.scrollBy({ left: -400, behavior: 'smooth' });
-                }}
-                aria-label="Anterior"
-            >
-                <ChevronLeft size={18} />
-            </button>
-            <button
-                className="sd-carousel-arrow"
-                onClick={() => {
-                    const track = document.getElementById(`carousel-${id}`);
-                    track?.scrollBy({ left: 400, behavior: 'smooth' });
-                }}
-                aria-label="Próximo"
-            >
-                <ChevronRight size={18} />
-            </button>
-        </div>
-    );
-}
+                <main className="sd-main sd-portal-main" id="inicio">
+                    {config.bannerUrl && <div className="sd-banner"><img src={getThumbUrl(config.bannerUrl) || ''} alt="" className="sd-banner-img" /></div>}
 
-/* ═══════════════════════════════════════════
-   Carousel Track (scroll horizontal)
-   ═══════════════════════════════════════════ */
-function Carousel({ children, carouselId }: { children: React.ReactNode; carouselId: string }) {
-    const scrollRef = useRef<HTMLDivElement>(null);
+                    <section className="sd-welcome">
+                        <div>
+                            <span className="sd-eyebrow">Área do aluno</span>
+                            <h1>Olá, {user?.name?.split(' ')[0] || 'estudante'}! <span aria-hidden="true">👋</span></h1>
+                            <p>Continue seus estudos e avance nos seus objetivos.</p>
+                        </div>
+                        <time><CalendarDays size={18} /> {formattedDate}</time>
+                    </section>
 
-    return (
-        <div className="sd-carousel-wrapper">
-            <div
-                className="sd-carousel-track"
-                ref={scrollRef}
-                id={`carousel-${carouselId}`}
-            >
-                {children}
+                    <section className="sd-kpi-grid" id="progresso" aria-label="Resumo de aprendizagem">
+                        <article><span className="blue"><BookOpen /></span><div><small>Cursos matriculados</small><strong>{courses.length}</strong><p>{inProgressCourses.length} em andamento</p></div></article>
+                        <article><span className="green"><CircleCheckBig /></span><div><small>Aulas concluídas</small><strong>{completedLessons}</strong><p>de {totalLessons} disponíveis</p></div></article>
+                        <article><span className="amber"><Trophy /></span><div><small>Progresso geral</small><strong>{globalProgress}%</strong><p>Continue avançando</p></div></article>
+                        <article><span className="violet"><Target /></span><div><small>Próximos encontros</small><strong>{liveClasses.length}</strong><p>aulas ao vivo</p></div></article>
+                    </section>
+
+                    <div className="sd-dashboard-grid">
+                        <section className="sd-portal-panel sd-courses-panel" id="cursos">
+                            <header><div><span>Minha aprendizagem</span><h2>Meus cursos</h2></div><small>{dashboardCourses.length} curso(s)</small></header>
+                            <div className="sd-course-list">
+                                {dashboardCourses.length === 0 ? (
+                                    <div className="sd-portal-empty"><GraduationCap size={38} /><strong>{searchQuery ? 'Nenhum curso corresponde à busca.' : 'Nenhum curso matriculado.'}</strong><p>{searchQuery ? 'Tente outro termo.' : 'Aguarde a matrícula pela instituição.'}</p></div>
+                                ) : dashboardCourses.slice(0, 6).map(course => {
+                                    const thumbUrl = getThumbUrl(course.lastWatchedVideo?.thumbnailUrl || course.thumbnailUrl);
+                                    const preferredVideo = getPreferredVideoId(course);
+                                    return (
+                                        <article key={course.id} className="sd-course-row" onMouseEnter={() => prefetchLessonResources(preferredVideo)}>
+                                            <button className="sd-course-thumb" type="button" onClick={() => handleCourseClick(course)} disabled={!preferredVideo} style={thumbUrl ? { backgroundImage: `url(${thumbUrl})` } : undefined}>
+                                                {!thumbUrl && <BookOpen size={24} />}
+                                            </button>
+                                            <div className="sd-course-copy">
+                                                <strong>{course.name}</strong>
+                                                <small>{course.lastWatchedVideo?.moduleName || course.modules[0]?.name || `${course.totalVideos} aulas`}</small>
+                                                <div className="sd-course-progress"><span style={{ width: `${course.progressPercent}%` }} /></div>
+                                            </div>
+                                            <span className="sd-course-percent">{course.progressPercent}%</span>
+                                            <button className="sd-course-continue" type="button" onClick={() => handleCourseClick(course)} disabled={!preferredVideo}>Continuar <ChevronRight size={15} /></button>
+                                        </article>
+                                    );
+                                })}
+                            </div>
+                        </section>
+
+                        <section className="sd-portal-panel sd-activity-panel" id="agenda">
+                            <header><div><span>Agenda acadêmica</span><h2>Próximas atividades</h2></div><CalendarDays size={20} /></header>
+                            <div className="sd-activity-list">
+                                {liveClasses.slice(0, 4).map(liveClass => {
+                                    const isLive = liveClass.status === 'LIVE';
+                                    const joinUrl = liveClass.meetingJoinUrl || liveClass.zoomJoinUrl;
+                                    const startAt = new Date(liveClass.startAt);
+                                    return (
+                                        <article key={liveClass.id}>
+                                            <span className={isLive ? 'red' : 'blue'}><Radio /></span>
+                                            <div><small>{isLive ? 'Ao vivo agora' : 'Aula ao vivo'}</small><strong>{liveClass.title}</strong><p>{liveClass.course?.name || liveClass.module?.name || 'Encontro acadêmico'}</p></div>
+                                            <time>{startAt.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}<small>{startAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</small></time>
+                                            {joinUrl && <a href={joinUrl} target="_blank" rel="noopener noreferrer" title="Entrar na aula"><ExternalLink size={16} /></a>}
+                                        </article>
+                                    );
+                                })}
+                                {recommendations.slice(0, Math.max(0, 4 - liveClasses.length)).map(recommendation => (
+                                    <button key={`${recommendation.courseId}_${recommendation.videoId}`} type="button" onClick={() => handleLessonClick(recommendation.videoId)} onMouseEnter={() => prefetchLessonResources(recommendation.videoId)}>
+                                        <span className="violet"><Flag /></span>
+                                        <div><small>Trilha recomendada</small><strong>{recommendation.videoTitle}</strong><p>{recommendation.courseName}</p></div>
+                                        <ChevronRight size={17} />
+                                    </button>
+                                ))}
+                                {liveClasses.length === 0 && recommendations.length === 0 && (
+                                    <div className="sd-portal-empty"><CalendarDays size={34} /><strong>Agenda livre por enquanto</strong><p>Novas aulas e recomendações aparecerão aqui.</p></div>
+                                )}
+                            </div>
+                        </section>
+                    </div>
+
+                    {recommendations.length > 0 && (
+                        <section className="sd-portal-panel sd-ai-track" id="trilha">
+                            <header><div><span>Personalização por dados</span><h2>Trilha inteligente</h2></div><Bot size={22} /></header>
+                            <div>
+                                {recommendations.slice(0, 3).map(recommendation => (
+                                    <button key={`${recommendation.courseId}_${recommendation.videoId}_track`} type="button" onClick={() => handleLessonClick(recommendation.videoId)} onMouseEnter={() => prefetchLessonResources(recommendation.videoId)}>
+                                        <span><PlayCircle /></span><div><strong>{recommendation.videoTitle}</strong><small>{recommendation.moduleName} · {recommendation.reason}</small></div><ChevronRight />
+                                    </button>
+                                ))}
+                            </div>
+                        </section>
+                    )}
+                </main>
             </div>
         </div>
     );

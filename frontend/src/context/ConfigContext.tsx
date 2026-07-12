@@ -60,6 +60,26 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } {
     };
 }
 
+function relativeLuminance(hex: string): number {
+    const { r, g, b } = hexToRgb(hex);
+    const channel = (value: number) => {
+        const normalized = value / 255;
+        return normalized <= 0.04045
+            ? normalized / 12.92
+            : ((normalized + 0.055) / 1.055) ** 2.4;
+    };
+
+    return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+}
+
+function contrastRatio(foreground: string, background: string): number {
+    const first = relativeLuminance(foreground);
+    const second = relativeLuminance(background);
+    const lighter = Math.max(first, second);
+    const darker = Math.min(first, second);
+    return (lighter + 0.05) / (darker + 0.05);
+}
+
 /**
  * Escurece uma cor hex por uma porcentagem (0–1)
  */
@@ -84,12 +104,27 @@ function lightenHex(hex: string, amount: number): string {
     return `#${nr.toString(16).padStart(2, '0')}${ng.toString(16).padStart(2, '0')}${nb.toString(16).padStart(2, '0')}`;
 }
 
+/**
+ * Mantem a identidade configuravel sem permitir texto ilegivel. Cores usadas
+ * como texto ou fundo de acao sao escurecidas apenas quando nao atingem AA.
+ */
+function darkenUntilContrast(hex: string, background: string, target = 4.5): string {
+    let candidate = hex;
+    for (let step = 0; step < 20 && contrastRatio(candidate, background) < target; step += 1) {
+        candidate = darkenHex(candidate, 0.08);
+    }
+    return candidate;
+}
+
 function applyTheme(currentConfig: PlatformConfig) {
     const root = document.documentElement;
     const primary = currentConfig.primaryColor || '#6366f1';
     const accent = currentConfig.accentColor || '#ec4899';
     const { r, g, b } = hexToRgb(primary);
     const accentRgb = hexToRgb(accent);
+    const primaryAction = darkenUntilContrast(primary, '#ffffff');
+    const primaryInk = darkenUntilContrast(primary, '#ffffff');
+    const accentInk = darkenUntilContrast(accent, '#ffffff');
 
     root.style.setProperty('--primary', primary);
     root.style.setProperty('--primary-color', primary);
@@ -99,7 +134,12 @@ function applyTheme(currentConfig: PlatformConfig) {
     root.style.setProperty('--primary-soft', `rgba(${r}, ${g}, ${b}, 0.12)`);
     root.style.setProperty('--primary-color-light', `rgba(${r}, ${g}, ${b}, 0.12)`);
     root.style.setProperty('--primary-light', lightenHex(primary, 0.3));
+    root.style.setProperty('--primary-action', primaryAction);
+    root.style.setProperty('--primary-action-hover', darkenHex(primaryAction, 0.12));
+    root.style.setProperty('--primary-ink', primaryInk);
+    root.style.setProperty('--on-primary-action', '#ffffff');
     root.style.setProperty('--accent-pink', accent);
+    root.style.setProperty('--accent-ink', accentInk);
     root.style.setProperty('--accent-pink-glow', `rgba(${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}, 0.3)`);
     document.title = currentConfig.platformName || 'EduVault';
 }

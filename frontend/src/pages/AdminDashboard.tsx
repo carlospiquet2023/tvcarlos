@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useConfig } from '../context/ConfigContext';
-import { Users, BookOpen, Activity, Plus, Trash2, Settings, Save, Eye, EyeOff, CheckCircle, AlertCircle, Upload, Edit3, RefreshCw, Monitor, X, FileSpreadsheet, FileDown, CalendarDays, ClipboardList, BarChart3, Download, Bell, ChevronUp, ChevronDown, Video, ExternalLink, ShieldCheck, Flag, Ban, Scale, AlertTriangle, RadioTower, Key, School, Activity as ActivityIcon } from 'lucide-react';
+import { Users, BookOpen, Activity, Plus, Trash2, Settings, Save, Eye, EyeOff, CheckCircle, AlertCircle, Upload, Edit3, RefreshCw, Monitor, X, FileSpreadsheet, FileDown, CalendarDays, ClipboardList, BarChart3, Download, Bell, ChevronUp, ChevronDown, Video, ExternalLink, ShieldCheck, Flag, Ban, Scale, AlertTriangle, RadioTower, Key, School, Activity as ActivityIcon, Search, Menu, LogOut, UserCheck, FileVideo, Database, Server, Clock3, Layers3, UserCog, MessageCircle, Library } from 'lucide-react';
 import axios from 'axios';
 import api from '../lib/api';
 import 'react-quill-new/dist/quill.snow.css';
@@ -10,6 +10,7 @@ import BlockEditor, { BlockRenderer, type ContentBlock, parseContentField } from
 import ConfirmModal from '../components/ConfirmModal';
 import BroadcastAdminPanel from '../components/BroadcastAdminPanel';
 import PrivateRoomAdminPanel from '../components/PrivateRoomAdminPanel';
+import './AdminDashboard.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
@@ -68,6 +69,10 @@ function roleLabel(role: string): string {
     return ({ ADMIN: 'Administrador', TEACHER: 'Professor', STUDENT: 'Aluno', STAFF: 'Equipe escolar', GUARDIAN: 'Responsável' } as Record<string, string>)[role] || role;
 }
 
+function auditActionLabel(action: string): string {
+    return action.replace(/_/g, ' ').toLocaleLowerCase('pt-BR').replace(/^./, value => value.toUpperCase());
+}
+
 export default function AdminDashboard() {
     const { token, user, logout, login: doLogin } = useAuth();
     const { config } = useConfig();
@@ -83,6 +88,7 @@ export default function AdminDashboard() {
     const [userTotal, setUserTotal] = useState(0);
     const [userSearch, setUserSearch] = useState('');
     const [userSearchInput, setUserSearchInput] = useState('');
+    const [globalSearch, setGlobalSearch] = useState('');
 
     // Forms state
     const [newUser, setNewUser] = useState({ name: '', email: '', password: '', role: 'STUDENT' });
@@ -184,8 +190,23 @@ export default function AdminDashboard() {
         try {
             const headers = { Authorization: `Bearer ${token}` };
             if (activeTab === 'overview') {
-                const res = await api.get('/api/admin/stats', { headers });
-                setStats(res.data);
+                const [statsRes, usersRes, coursesRes, auditRes, healthRes, reportsRes, liveRes] = await Promise.all([
+                    api.get('/api/admin/stats', { headers }),
+                    api.get('/api/admin/users', { headers, params: { page: 1, limit: 100 } }),
+                    api.get('/api/admin/courses', { headers }),
+                    api.get('/api/admin/audit-log', { headers, params: { page: 1, limit: 8 } }),
+                    api.get('/api/admin/health', { headers }),
+                    api.get('/api/admin/reports', { headers }),
+                    api.get('/api/admin/live-classes', { headers })
+                ]);
+                setStats(statsRes.data);
+                setUsers(usersRes.data.data);
+                setUserTotal(usersRes.data.total);
+                setCourses(coursesRes.data.data);
+                setAuditLogs(auditRes.data.data);
+                setHealthData(healthRes.data);
+                setReports(reportsRes.data);
+                setLiveClasses(liveRes.data);
             } else if (activeTab === 'users') {
                 const res = await api.get('/api/admin/users', { headers, params: { page: userPage, limit: 50, search: userSearch } });
                 setUsers(res.data.data);
@@ -819,25 +840,68 @@ export default function AdminDashboard() {
         } catch { alert('Erro ao salvar configurações de presença.'); }
     };
 
+    const overviewEnrollments = useMemo(
+        () => courses.reduce((total, course) => total + course.enrollments.filter(enrollment => enrollment.enrollmentRole === 'STUDENT').length, 0),
+        [courses]
+    );
+    const overviewTeachers = useMemo(() => users.filter(item => item.role === 'TEACHER').length, [users]);
+    const overviewModules = useMemo(() => courses.reduce((total, course) => total + course.modules.length, 0), [courses]);
+    const overviewCourseRows = useMemo(() => {
+        if (reports.length > 0) return reports.slice(0, 5);
+        return courses.slice(0, 5).map(course => ({
+            id: course.id,
+            name: course.name,
+            totalStudents: course.enrollments.filter(enrollment => enrollment.enrollmentRole === 'STUDENT').length,
+            totalVideos: course.modules.reduce((total, module) => total + module.videos.length, 0),
+            completionRate: 0,
+            completedLessons: 0,
+            totalPossibleLessons: 0
+        }));
+    }, [courses, reports]);
+    const maxCourseStudents = Math.max(1, ...overviewCourseRows.map(course => course.totalStudents));
+    const adminDate = useMemo(() => {
+        const value = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }).format(new Date());
+        return value.charAt(0).toUpperCase() + value.slice(1);
+    }, []);
+
+    const handleGlobalSearch = (event: React.FormEvent) => {
+        event.preventDefault();
+        const query = globalSearch.trim();
+        if (!query) return;
+        setUserSearchInput(query);
+        setUserSearch(query);
+        setUserPage(1);
+        setActiveTab('users');
+    };
+
     return (
         <>
         <div className="admin-root">
-            <header className="admin-header">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                    {config.logoUrl && (
-                        <img src={`${API_BASE}${config.logoUrl}`} alt={config.platformName} style={{ maxHeight: '36px', borderRadius: '4px', objectFit: 'contain' }} />
-                    )}
+            <header className="admin-header admin-pro-header">
+                <div className="admin-header-brand">
+                    {config.logoUrl ? (
+                        <img src={`${API_BASE}${config.logoUrl}`} alt={config.platformName} />
+                    ) : <ShieldCheck size={31} aria-hidden="true" />}
                     <h2 className="admin-brand">
                         <span style={{ color: config.nameColor1 }}>{config.namePart1}</span>
                         <span style={{ color: config.nameColor2 }}>{config.namePart2}</span>
-                        {' '}<span>{isTeacher ? 'Professor' : 'Admin'}</span>
+                        <em>{isTeacher ? 'Professor' : 'Admin'}</em>
                     </h2>
+                    <button type="button" className="admin-menu-btn" aria-label="Alternar menu"><Menu size={20} /></button>
                 </div>
+
+                {!isTeacher && (
+                    <form className="admin-global-search" onSubmit={handleGlobalSearch}>
+                        <Search size={17} aria-hidden="true" />
+                        <input value={globalSearch} onChange={event => setGlobalSearch(event.target.value)} placeholder="Buscar alunos por nome ou e-mail..." aria-label="Busca global" />
+                    </form>
+                )}
+
                 <div className="admin-header-right">
-                    <span className="admin-user-info">{user?.name} ({user?.role})</span>
-                    <button onClick={logout} className="admin-logout-btn">
-                        Sair
-                    </button>
+                    {!isTeacher && <button type="button" className="admin-header-icon" onClick={() => setActiveTab('notifications')} title="Notificações"><Bell size={18} /></button>}
+                    <span className="admin-avatar">{user?.name?.charAt(0).toUpperCase()}</span>
+                    <span className="admin-user-info"><strong>{user?.name}</strong><small>{roleLabel(user?.role || '')}</small></span>
+                    <button onClick={logout} className="admin-logout-btn" title="Sair"><LogOut size={17} /><span>Sair</span></button>
                 </div>
             </header>
 
@@ -849,30 +913,41 @@ export default function AdminDashboard() {
                         <Activity size={20} /> Visão Geral
                     </button>
                     )}
-                    {!isTeacher && (
-                    <button onClick={() => setActiveTab('users')} className={`admin-nav-btn ${activeTab === 'users' ? 'active' : ''}`}>
-                        <Users size={20} /> Alunos
-                    </button>
-                    )}
+                    <span className="admin-sidebar-section-label">Gestão acadêmica</span>
                     <button onClick={() => setActiveTab('courses')} className={`admin-nav-btn ${activeTab === 'courses' ? 'active' : ''}`}>
-                        <BookOpen size={20} /> {isTeacher ? 'Meus Cursos' : 'Cursos e Módulos'}
+                        <BookOpen size={20} /> {isTeacher ? 'Meus Cursos' : 'Cursos e Conteúdos'}
                     </button>
                     <button onClick={() => window.location.assign('/school')} className="admin-nav-btn">
                         <School size={20} /> Escola 360
                     </button>
                     {!isTeacher && (
                     <>
-                    <button onClick={() => setActiveTab('audit')} className={`admin-nav-btn ${activeTab === 'audit' ? 'active' : ''}`}>
-                        <ClipboardList size={20} /> Audit Log
-                    </button>
-                    <button onClick={() => setActiveTab('reports')} className={`admin-nav-btn ${activeTab === 'reports' ? 'active' : ''}`}>
-                        <BarChart3 size={20} /> Relatórios
-                    </button>
-                    <button onClick={() => setActiveTab('notifications')} className={`admin-nav-btn ${activeTab === 'notifications' ? 'active' : ''}`}>
-                        <Bell size={20} /> Notificações
-                    </button>
                     <button onClick={() => setActiveTab('live')} className={`admin-nav-btn ${activeTab === 'live' ? 'active' : ''}`}>
                         <Video size={20} /> Aulas ao Vivo
+                    </button>
+                    <button onClick={() => setActiveTab('attendance')} className={`admin-nav-btn ${activeTab === 'attendance' ? 'active' : ''}`}>
+                        <CheckCircle size={20} /> Presença
+                    </button>
+                    </>
+                    )}
+
+                    {!isTeacher && <span className="admin-sidebar-section-label">Usuários e acessos</span>}
+                    {!isTeacher && (
+                    <button onClick={() => setActiveTab('users')} className={`admin-nav-btn ${activeTab === 'users' ? 'active' : ''}`}>
+                        <Users size={20} /> Usuários
+                    </button>
+                    )}
+                    {!isTeacher && (
+                    <>
+                    <button onClick={() => setActiveTab('audit')} className={`admin-nav-btn ${activeTab === 'audit' ? 'active' : ''}`}>
+                        <ClipboardList size={20} /> Logs do Sistema
+                    </button>
+                    <button onClick={() => setActiveTab('reports')} className={`admin-nav-btn ${activeTab === 'reports' ? 'active' : ''}`}>
+                        <BarChart3 size={20} /> Relatórios de Acesso
+                    </button>
+                    <span className="admin-sidebar-section-label">Comunicação e segurança</span>
+                    <button onClick={() => setActiveTab('notifications')} className={`admin-nav-btn ${activeTab === 'notifications' ? 'active' : ''}`}>
+                        <Bell size={20} /> Notificações
                     </button>
                     <button onClick={() => setActiveTab('moderation')} className={`admin-nav-btn ${activeTab === 'moderation' ? 'active' : ''}`}>
                         <ShieldCheck size={20} /> Moderação
@@ -881,9 +956,7 @@ export default function AdminDashboard() {
                     <button onClick={() => setActiveTab('punishment')} className={`admin-nav-btn ${activeTab === 'punishment' ? 'active' : ''}`}>
                         <Ban size={20} /> Punições
                     </button>
-                    <button onClick={() => setActiveTab('attendance')} className={`admin-nav-btn ${activeTab === 'attendance' ? 'active' : ''}`}>
-                        <CheckCircle size={20} /> Presença
-                    </button>
+                    <span className="admin-sidebar-section-label">Experiências</span>
                     <button onClick={() => setActiveTab('broadcast')} className={`admin-nav-btn ${activeTab === 'broadcast' ? 'active' : ''}`}>
                         <RadioTower size={20} /> Campus ao Vivo
                     </button>
@@ -894,8 +967,7 @@ export default function AdminDashboard() {
                         <Key size={20} /> Salas Privadas
                     </button>
 
-                    <div className="admin-sidebar-divider" />
-
+                    <span className="admin-sidebar-section-label">Configurações</span>
                     <button onClick={() => setActiveTab('settings')} className={`admin-nav-btn ${activeTab === 'settings' ? 'active' : ''}`}>
                         <Settings size={20} /> Configurações
                     </button>
@@ -906,23 +978,78 @@ export default function AdminDashboard() {
 
                     {/* TAB: OVERVIEW */}
                     {activeTab === 'overview' && stats && (
-                        <div className="admin-fade-in">
-                            <h2 className="admin-page-title">Estatísticas da Plataforma</h2>
-                            <div className="admin-stats-grid">
-                                <div className="admin-stat-card">
-                                    <h3>Total de Alunos</h3>
-                                    <p className="admin-stat-number">{stats.totalUsers}</p>
-                                </div>
-                                <div className="admin-stat-card">
-                                    <h3>Cursos Ativos</h3>
-                                    <p className="admin-stat-number">{stats.totalCourses}</p>
-                                </div>
-                                <div className="admin-stat-card">
-                                    <h3>Vídeos HLS</h3>
-                                    <p className="admin-stat-number">{stats.totalVideos}</p>
-                                    <small className="admin-stat-sub">{stats.readyVideos} Prontos</small>
-                                </div>
+                        <div className="admin-fade-in admin-overview">
+                            <section className="admin-overview-welcome">
+                                <div><span>Painel executivo</span><h1>Olá, {user?.name?.split(' ')[0] || 'Administrador'}! <span aria-hidden="true">👋</span></h1><p>Aqui está o resumo operacional da plataforma {config.platformName}.</p></div>
+                                <time><CalendarDays size={17} /> {adminDate}</time>
+                            </section>
+
+                            <section className="admin-overview-kpis" aria-label="Indicadores da plataforma">
+                                <article><span className="violet"><Users /></span><div><small>Total de alunos</small><strong>{stats.totalUsers.toLocaleString('pt-BR')}</strong><p>contas estudantis</p></div></article>
+                                <article><span className="blue"><BookOpen /></span><div><small>Cursos ativos</small><strong>{stats.totalCourses.toLocaleString('pt-BR')}</strong><p>catálogo publicado</p></div></article>
+                                <article><span className="green"><FileVideo /></span><div><small>Aulas publicadas</small><strong>{stats.readyVideos.toLocaleString('pt-BR')}</strong><p>de {stats.totalVideos} vídeos</p></div></article>
+                                <article><span className="amber"><UserCheck /></span><div><small>Matrículas</small><strong>{overviewEnrollments.toLocaleString('pt-BR')}</strong><p>vínculos ativos</p></div></article>
+                                <article><span className="violet"><Layers3 /></span><div><small>Módulos</small><strong>{overviewModules.toLocaleString('pt-BR')}</strong><p>trilhas organizadas</p></div></article>
+                                <article><span className="blue"><Video /></span><div><small>Aulas ao vivo</small><strong>{liveClasses.length.toLocaleString('pt-BR')}</strong><p>encontros cadastrados</p></div></article>
+                            </section>
+
+                            <div className="admin-overview-primary-grid">
+                                <section className="admin-overview-panel admin-course-chart">
+                                    <header><div><span>Aprendizagem</span><h2>Alunos por curso</h2></div><button type="button" onClick={() => setActiveTab('reports')}>Ver relatório <ChevronDown size={14} /></button></header>
+                                    <div className="admin-course-bars">
+                                        {overviewCourseRows.length === 0 ? <p className="admin-overview-empty">Ainda não há cursos com matrículas.</p> : overviewCourseRows.map((course, index) => (
+                                            <div key={course.id}><span>{course.name}</span><div><i style={{ width: `${Math.max(6, (course.totalStudents / maxCourseStudents) * 100)}%`, '--bar-index': index } as React.CSSProperties} /></div><strong>{course.totalStudents}</strong></div>
+                                        ))}
+                                    </div>
+                                </section>
+
+                                <section className="admin-overview-panel admin-live-activity">
+                                    <header><div><span>Auditoria</span><h2>Atividade em tempo real</h2></div><em><i /> Online agora</em></header>
+                                    <div>
+                                        {auditLogs.length === 0 ? <p className="admin-overview-empty">Nenhuma ação recente registrada.</p> : auditLogs.slice(0, 5).map(log => (
+                                            <article key={log.id}><span><ActivityIcon size={16} /></span><div><small>{auditActionLabel(log.action)}</small><strong>{log.user?.name || 'Sistema'}</strong><p>{log.target || log.details || 'Ação auditada'}</p></div><time>{new Date(log.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</time></article>
+                                        ))}
+                                    </div>
+                                    <button type="button" className="admin-panel-link" onClick={() => setActiveTab('audit')}>Ver todas as atividades <ChevronDown size={14} /></button>
+                                </section>
                             </div>
+
+                            <div className="admin-overview-secondary-grid">
+                                <section className="admin-overview-panel admin-course-table-panel">
+                                    <header><div><span>Conteúdo</span><h2>Cursos com maior alcance</h2></div><Library size={19} /></header>
+                                    <div className="admin-overview-table-wrap"><table><thead><tr><th>Curso</th><th>Alunos</th><th>Aulas</th><th>Conclusão</th></tr></thead><tbody>{overviewCourseRows.map(course => <tr key={course.id}><td>{course.name}</td><td>{course.totalStudents}</td><td>{course.totalVideos}</td><td><span>{course.completionRate}%</span></td></tr>)}</tbody></table></div>
+                                    <button type="button" className="admin-panel-link" onClick={() => setActiveTab('courses')}>Ver todos os cursos <ChevronDown size={14} /></button>
+                                </section>
+
+                                <section className="admin-overview-panel admin-health-panel">
+                                    <header><div><span>Infraestrutura</span><h2>Saúde da plataforma</h2></div><Server size={19} /></header>
+                                    <div className="admin-health-list">
+                                        <article><span><Database /></span><div><strong>Banco de dados</strong><small>Persistência principal</small></div><em className={healthData?.services.database === 'up' ? 'ok' : 'error'}>{healthData?.services.database === 'up' ? 'Operacional' : 'Indisponível'}</em></article>
+                                        <article><span><FileVideo /></span><div><strong>Armazenamento</strong><small>Vídeos e documentos</small></div><em className={healthData?.services.storage === 'up' ? 'ok' : 'error'}>{healthData?.services.storage === 'up' ? 'Operacional' : 'Indisponível'}</em></article>
+                                        <article><span><Clock3 /></span><div><strong>Tempo online</strong><small>Processo da aplicação</small></div><em>{healthData ? `${Math.floor(healthData.uptime / 3600)}h` : '—'}</em></article>
+                                    </div>
+                                    <button type="button" className="admin-panel-link" onClick={() => setActiveTab('audit')}>Abrir observabilidade <ChevronDown size={14} /></button>
+                                </section>
+
+                                <section className="admin-overview-panel admin-pending-panel">
+                                    <header><div><span>Operação</span><h2>Pendências</h2></div><AlertTriangle size={19} /></header>
+                                    <div>
+                                        <button type="button" onClick={() => setActiveTab('courses')}><Upload /><span>Vídeos processando</span><strong>{stats.processingVideos}</strong></button>
+                                        <button type="button" onClick={() => setActiveTab('courses')}><Clock3 /><span>Vídeos pendentes</span><strong>{stats.pendingVideos}</strong></button>
+                                        <button type="button" onClick={() => setActiveTab('courses')}><AlertCircle /><span>Falhas de mídia</span><strong className="danger">{stats.errorVideos}</strong></button>
+                                        <button type="button" onClick={() => setActiveTab('moderation')}><MessageCircle /><span>Itens em moderação</span><strong>{flaggedTotal}</strong></button>
+                                    </div>
+                                </section>
+                            </div>
+
+                            <section className="admin-quick-summary">
+                                <h2>Resumo rápido</h2><div>
+                                    <article><Users /><span><small>Usuários cadastrados</small><strong>{userTotal.toLocaleString('pt-BR')}</strong></span></article>
+                                    <article><UserCog /><span><small>Professores</small><strong>{overviewTeachers}</strong></span></article>
+                                    <article><FileVideo /><span><small>Conteúdos</small><strong>{stats.totalVideos}</strong></span></article>
+                                    <article><ActivityIcon /><span><small>Eventos recentes</small><strong>{auditLogs.length}</strong></span></article>
+                                </div>
+                            </section>
                         </div>
                     )}
 

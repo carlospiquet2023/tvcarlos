@@ -1,0 +1,322 @@
+/*
+ * Contrato de contraste do tema institucional claro.
+ *
+ * Carregado depois dos estilos historicos para impedir que regras do antigo
+ * tema escuro produzam texto claro em superficies claras. Texto normal segue
+ * WCAG AA (4.5:1 ou superior).
+ */
+:root {
+  --primary-action: #4f46e5;
+  --primary-action-hover: #4338ca;
+  --primary-ink: #4338ca;
+  --accent-ink: #be185d;
+  --on-primary-action: #fff;
+  --surface-text: #172033;
+  --surface-text-secondary: #52627a;
+  --surface-border-strong: #c8d2e0;
+  --danger: #b91c1c;
+  --success: #047857;
+  --warning: #92400e;
+  --accent-cyan: #0e7490;
+}
+
+/* Superficies administrativas claras */
+.admin-root,
+.admin-main,
+.admin-card,
+.admin-form-card,
+.admin-section-card,
+.admin-course-card,
+.admin-stat-card,
+.admin-table,
+.admin-module-block,
+.admin-video-item,
+.admin-enrollment-item,
+.live-class-item {
+  color: var(--surface-text);
+}
+
+.admin-stat-number {
+  color: var(--surface-text);
+  background: none;
+  -webkit-background-clip: initial;
+  background-clip: initial;
+  -webkit-text-fill-color: var(--surface-text);
+  text-shadow: none;
+}
+
+.admin-stat-card h3,
+.admin-table th,
+.admin-course-meta,
+.admin-video-meta,
+.live-class-meta {
+  color: var(--surface-text-secondary);
+}
+
+.admin-stat-sub,
+.admin-status-badge.ready {
+  color: #047857;
+}
+
+.admin-table td {
+  color: #26354b;
+}
+
+.admin-module-block,
+.admin-enrollment-item {
+  background: #f8fafc;
+}
+
+.admin-module-header {
+  color: var(--surface-text);
+  background: #f1f5f9;
+}
+
+.admin-module-name,
+.admin-upload-label,
+.admin-content-editor .ql-editor a,
+.admin-content-editor .ql-editor blockquote {
+  color: var(--primary-ink);
+}
+
+/* O fundo de acao e calculado em runtime a partir do branding. */
+.login-button,
+.admin-nav-btn.active,
+.admin-btn.primary,
+.admin-btn-primary,
+.admin-btn-primary-sm,
+.admin-content-toolbar .admin-btn-ghost.active,
+.editor-modal-tab.active,
+.editor-modal-save {
+  color: var(--on-primary-action);
+  background: var(--primary-action);
+}
+
+.login-button:hover,
+.admin-btn.primary:hover,
+.admin-btn-primary:hover:not(:disabled),
+.admin-btn-primary-sm:hover:not(:disabled),
+.editor-modal-save:hover:not(:disabled) {
+  color: var(--on-primary-action);
+  background: var(--primary-action-hover);
+}
+
+.admin-btn-success {
+  color: #fff;
+  background: #047857;
+}
+
+.admin-btn-success:hover:not(:disabled) {
+  background: #065f46;
+}
+
+.admin-btn:hover:not(.primary),
+.admin-btn-ghost:hover {
+  color: var(--primary-ink);
+  background: #f5f3ff;
+}
+
+.admin-btn-icon.primary,
+.admin-btn-icon.primary:hover {
+  color: #4338ca;
+  background: #eef2ff;
+  border-color: #c7d2fe;
+}
+
+.admin-btn-icon.danger,
+.admin-btn-icon.danger:hover {
+  color: #b91c1c;
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.admin-btn-calendar,
+.admin-btn-calendar:hover {
+  color: #92400e;
+  background: #fffbeb;
+  border-color: #fcd34d;
+}
+
+.admin-pdf-badge,
+.admin-pdf-badge:hover {
+  color: #1d4ed8;
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+/* Badges precisam manter contraste mesmo com fonte pequena. */
+.admin-role-badge.admin { color: #9d174d; background: #fdf2f8; border-color: #fbcfe8; }
+.admin-role-badge.teacher { color: #155e75; background: #ecfeff; border-color: #a5f3fc; }
+.admin-role-badge.student { color: #047857; background: #ecfdf5; border-color: #a7f3d0; }
+.admin-role-badge.staff { color: #4338ca; background: #eef2ff; border: 1px solid #c7d2fe; }
+.admin-role-badge.guardian { color: #7e22ce; background: #faf5ff; border: 1px solid #e9d5ff; }
+
+.admin-status-badge.processing {
+  color: #92400e;
+  background: #fffbeb;
+  border-color: #fcd34d;
+}
+
+.admin-status-badge.error {
+  color: #b91c1c;
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+/* Formularios, editor, notificacoes e modais */
+.admin-input,
+.admin-input-sm,
+.admin-textarea,
+.admin-select,
+.login-form input,
+.settings-input {
+  color: var(--surface-text);
+  background: #fff;
+  border-color: var(--surface-border-strong);
+}
+
+.admin-input::placeholder,
+.admin-textarea::placeholder,
+.login-form input::placeholder,
+.settings-input::placeholder {
+  color: #66758a;
+  opacity: 1;
+}
+
+.admin-content-editor .ql-toolbar.ql-snow {
+  color: #475569;
+}
+
+.admin-content-editor .ql-toolbar .ql-stroke { stroke: #475569; }
+.admin-content-editor .ql-toolbar .ql-fill { fill: #475569; }
+.admin-content-editor .ql-editor.ql-blank::before { color: #66758a; }
+
+.sd-notif-dropdown,
+.sd-notif-panel,
+.modal-content,
+.confirm-modal,
+.editor-modal {
+  color: var(--surface-text);
+  background: #fff;
+}
+
+.sd-notif-header,
+.sd-notif-item strong,
+.confirm-modal-title,
+.live-class-header strong {
+  color: var(--surface-text);
+}
+
+.sd-notif-item {
+  border-bottom-color: #e2e8f0;
+}
+
+.sd-notif-mark-read,
+.live-zoom-link {
+  color: var(--primary-ink);
+}
+
+/* Alertas originalmente usavam tons luminosos pensados para fundo escuro. */
+.lc-error,
+.lc-delete,
+.lc-report,
+.error-message,
+.settings-alert.error {
+  color: #b91c1c;
+}
+
+.punishment-warning,
+.punishment-ban-type,
+.punishment-severity.light,
+.punishment-severity.medium {
+  color: #92400e;
+}
+
+.punishment-ban-status.active,
+.lc-appeal-sent {
+  color: #047857;
+}
+
+.punishment-ban-status.inactive {
+  color: #475569;
+}
+
+/* Cabecalho claro do aluno: busca, navegacao e conta. */
+.sd-header {
+  color: var(--surface-text);
+  background: rgba(255, 255, 255, .97);
+  border-bottom-color: #d8e0eb;
+}
+
+.sd-product-nav a {
+  color: #52627a;
+  background: #fff;
+  border-color: #d8e0eb;
+}
+
+.sd-product-nav a:hover,
+.sd-product-nav a:focus-visible {
+  color: var(--primary-ink);
+  background: #eef2ff;
+  border-color: #c7d2fe;
+}
+
+.sd-search-bar {
+  color: var(--surface-text-secondary);
+  background: #f8fafc;
+  border-color: #c8d2e0;
+  border-radius: 8px;
+}
+
+.sd-search-bar:focus-within {
+  background: #fff;
+  border-color: var(--primary-action);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-action) 14%, transparent);
+}
+
+.sd-search-bar input {
+  min-width: 0;
+  color: var(--surface-text);
+  background: transparent;
+}
+
+.sd-search-bar input::placeholder {
+  color: #66758a;
+  opacity: 1;
+}
+
+.sd-user-name {
+  color: var(--surface-text);
+  font-weight: 600;
+}
+
+.sd-icon-btn,
+.sd-logout-btn {
+  color: #52627a;
+  background: #f8fafc;
+  border: 1px solid #d8e0eb;
+}
+
+.sd-icon-btn:hover,
+.sd-icon-btn:focus-visible {
+  color: var(--primary-ink);
+  background: #eef2ff;
+  border-color: #c7d2fe;
+}
+
+.sd-logout-btn:hover,
+.sd-logout-btn:focus-visible {
+  color: #b91c1c;
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.sd-progress-mini {
+  background: #d8e0eb;
+}
+
+.settings-alert.success {
+  color: #047857;
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+}

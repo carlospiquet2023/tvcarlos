@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "test:contrast": "node scripts/check-contrast.mjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },
