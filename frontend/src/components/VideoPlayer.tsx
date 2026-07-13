@@ -181,7 +181,7 @@ export default function VideoPlayer({ videoId, hlsUrl, moduleId }: VideoPlayerPr
                     void api.get('/api/auth/stream-token', { params: { videoId } })
                         .then(response => { streamToken = response.data.streamToken; })
                         .catch(() => undefined);
-                }, 4 * 60 * 1000);
+                }, 45 * 1000);
             }
 
         };

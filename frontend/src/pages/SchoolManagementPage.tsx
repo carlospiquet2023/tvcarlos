@@ -159,6 +159,20 @@ export default function SchoolManagementPage() {
         } finally { setSaving(false); }
     };
 
+    const navigateSchoolTab = (nextTab: SchoolTab) => {
+        setSuccess('');
+        if (!selectedId || !bootstrap) {
+            setError('Conclua primeiro a configuração da instituição. Estrutura, currículo e turmas serão liberados sem precisar recadastrar dados.');
+            setShowSetup(true);
+            window.requestAnimationFrame(() => document.querySelector('.school-main')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+            return;
+        }
+        setError('');
+        setShowSetup(false);
+        setTab(nextTab);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
     if (loading && !organizations.length && !showSetup) return <div className="school-loading"><Loader2 className="spinner" /> Preparando operação escolar...</div>;
 
     return (
@@ -166,7 +180,7 @@ export default function SchoolManagementPage() {
             <header className="school-topbar">
                 <Link to="/school" className="school-brand"><span><School size={22} /></span><div><strong>Escola 360</strong><small>Sistema operacional educacional</small></div></Link>
                 <div className="school-topbar-actions">
-                    {organizations.length > 0 && <select value={selectedId} onChange={(event) => setSelectedId(event.target.value)} aria-label="Instituição ativa">{organizations.map((organization) => <option key={organization.id} value={organization.id}>{organization.name}</option>)}</select>}
+                    {organizations.length > 0 && <select value={selectedId} onChange={(event) => { setSelectedId(event.target.value); setShowSetup(false); setTab('overview'); }} aria-label="Instituição ativa">{organizations.map((organization) => <option key={organization.id} value={organization.id}>{organization.name}</option>)}</select>}
                     {user?.role === 'ADMIN' && <button onClick={() => setShowSetup(true)}><Plus size={16} /> Nova instituição</button>}
                     {(user?.role === 'ADMIN' || user?.role === 'TEACHER') && <Link to="/admin">Voltar ao painel</Link>}
                     <button onClick={logout} title="Sair"><LogOut size={16} /> Sair</button>
@@ -177,10 +191,10 @@ export default function SchoolManagementPage() {
                 <aside className="school-sidebar" aria-label="Módulos escolares">
                     <div className="school-context"><Building2 size={18} /><div><strong>{bootstrap?.name || 'Configuração'}</strong><small>{bootstrap?.inepCode ? `INEP ${bootstrap.inepCode}` : 'Operação institucional'}</small></div></div>
                     <nav>
-                        <SchoolNav icon={<LayoutDashboard size={17} />} label="Visão geral" active={tab === 'overview'} onClick={() => setTab('overview')} />
-                        <SchoolNav icon={<Building2 size={17} />} label="Estrutura" active={tab === 'structure'} onClick={() => setTab('structure')} />
-                        <SchoolNav icon={<BookOpenCheck size={17} />} label="Currículo" active={tab === 'curriculum'} onClick={() => setTab('curriculum')} />
-                        <SchoolNav icon={<Users size={17} />} label="Turmas" active={tab === 'classes'} onClick={() => setTab('classes')} />
+                        <SchoolNav icon={<LayoutDashboard size={17} />} label="Visão geral" active={!showSetup && tab === 'overview'} onClick={() => navigateSchoolTab('overview')} />
+                        <SchoolNav icon={<Building2 size={17} />} label="Estrutura" active={!showSetup && tab === 'structure'} onClick={() => navigateSchoolTab('structure')} />
+                        <SchoolNav icon={<BookOpenCheck size={17} />} label="Currículo" active={!showSetup && tab === 'curriculum'} onClick={() => navigateSchoolTab('curriculum')} />
+                        <SchoolNav icon={<Users size={17} />} label="Turmas" active={!showSetup && tab === 'classes'} onClick={() => navigateSchoolTab('classes')} />
                     </nav>
                     <div className="school-sidebar-foot"><Settings2 size={16} /><span>Configuração concluída</span><strong>{setupProgress}%</strong><div><i style={{ width: `${setupProgress}%` }} /></div></div>
                 </aside>
@@ -190,7 +204,7 @@ export default function SchoolManagementPage() {
 
                     {showSetup && user?.role === 'ADMIN' ? <SetupWizard setup={setup} setSetup={setSetup} onSubmit={submitSetup} saving={saving} onCancel={organizations.length ? () => setShowSetup(false) : undefined} /> : (
                         <>
-                            {tab === 'overview' && <OverviewPanel overview={overview} bootstrap={bootstrap} progress={setupProgress} onNavigate={setTab} onRefresh={() => void loadOrganization(selectedId)} />}
+                            {tab === 'overview' && <OverviewPanel overview={overview} bootstrap={bootstrap} progress={setupProgress} onNavigate={navigateSchoolTab} onRefresh={() => void loadOrganization(selectedId)} />}
                             {tab === 'structure' && <StructurePanel bootstrap={bootstrap} form={campusForm} setForm={setCampusForm} onSubmit={submitCampus} saving={saving} />}
                             {tab === 'curriculum' && <CurriculumPanel bootstrap={bootstrap} form={subjectForm} setForm={setSubjectForm} onSubmit={submitSubject} saving={saving} />}
                             {tab === 'classes' && <ClassesPanel bootstrap={bootstrap} form={classForm} setForm={setClassForm} onSubmit={submitClass} saving={saving} />}
@@ -203,7 +217,7 @@ export default function SchoolManagementPage() {
 }
 
 function SchoolNav({ icon, label, active, onClick }: { icon: React.ReactNode; label: string; active: boolean; onClick: () => void }) {
-    return <button className={active ? 'active' : ''} onClick={onClick}>{icon}<span>{label}</span><ChevronRight size={14} /></button>;
+    return <button type="button" className={active ? 'active' : ''} onClick={onClick} aria-pressed={active}>{icon}<span>{label}</span><ChevronRight size={14} /></button>;
 }
 
 function SetupWizard({ setup, setSetup, onSubmit, saving, onCancel }: { setup: typeof initialSetup; setSetup: React.Dispatch<React.SetStateAction<typeof initialSetup>>; onSubmit: (event: FormEvent) => void; saving: boolean; onCancel?: () => void }) {

@@ -5,7 +5,7 @@
  * - POST /login          → Autentica por username/e-mail e emite cookie HttpOnly
  * - GET  /me             → Retorna dados do usuário logado (validação de sessão)
  * - PUT  /profile        → Altera username e/ou senha (requer senha atual)
- * - GET  /stream-token   → Gera JWT de curta duração (5min) para streaming HLS
+ * - GET  /stream-token   → Gera JWT de curta duração (1min) para streaming HLS
  *
  * Segurança: bcrypt (12 rounds), JWT HS256, cookie HttpOnly e double-submit CSRF
  */
@@ -257,7 +257,9 @@ export async function logoutHandler(req: Request, res: Response): Promise<void> 
 
 router.post('/logout', logoutHandler);
 
-// ISSUE-03: Token de streaming curto (5 min) para mitigar exposição na URL
+// Token de streaming de 1 min: bloqueios administrativos interrompem a
+// renovação imediatamente e limitam a janela residual sem consultar o banco
+// em cada segmento HLS.
 router.get('/stream-token', authenticateToken, async (req: Request, res: Response): Promise<void> => {
     try {
         const videoId = typeof req.query.videoId === 'string' ? req.query.videoId : '';
@@ -320,7 +322,7 @@ router.get('/stream-token', authenticateToken, async (req: Request, res: Respons
                 ver: req.user!.ver
             },
             process.env.JWT_SECRET as string,
-            { algorithm: 'HS256', expiresIn: '5m' }
+            { algorithm: 'HS256', expiresIn: '1m' }
         );
         res.json({ streamToken });
     } catch (error) {

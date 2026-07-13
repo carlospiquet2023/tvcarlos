@@ -170,7 +170,7 @@ export const authenticateStreamToken = (req: Request, res: Response, next: NextF
             return;
         }
 
-        // O token de mídia expira em cinco minutos. Não consultar o banco em
+        // O token de mídia expira em um minuto. Não consultar o banco em
         // cada segmento evita transformar playback HLS em uma tempestade SQL.
         req.user = verified;
         next();
