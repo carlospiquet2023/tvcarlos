@@ -91,12 +91,15 @@ interface StudentLiveClass {
     module?: { name: string } | null;
 }
 
+type StudentView = 'dashboard' | 'courses' | 'schedule' | 'activities' | 'progress' | 'track';
+
 export default function StudentDashboard() {
     const { user, token, logout, login: doLogin } = useAuth();
     const { config } = useConfig();
     const [courses, setCourses] = useState<CourseWithProgress[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
+    const [activeView, setActiveView] = useState<StudentView>('dashboard');
     const navigate = useNavigate();
 
     // Notifications
@@ -291,6 +294,11 @@ export default function StudentDashboard() {
         return value.charAt(0).toUpperCase() + value.slice(1);
     }, []);
 
+    const selectView = (view: StudentView) => {
+        setActiveView(view);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
     const getThumbUrl = (url: string | null | undefined): string | null => {
         if (!url) return null;
         if (url.startsWith('http')) return url;
@@ -385,8 +393,8 @@ export default function StudentDashboard() {
                 </div>
 
                 <nav className="sd-product-nav" aria-label="Atalhos do aluno">
-                    <a href="#cursos"><BookOpen size={17} /> Cursos</a>
-                    <a href="#agenda"><CalendarDays size={17} /> Agenda</a>
+                    <button type="button" onClick={() => selectView('courses')}><BookOpen size={17} /> Cursos</button>
+                    <button type="button" onClick={() => selectView('schedule')}><CalendarDays size={17} /> Agenda</button>
                     <Link to="/student/tutor"><Bot size={17} /> Tutor IA</Link>
                 </nav>
 
@@ -444,12 +452,12 @@ export default function StudentDashboard() {
             <div className="sd-portal-shell">
                 <aside className="sd-sidebar" aria-label="Menu do aluno">
                     <nav>
-                        <a className="active" href="#inicio"><LayoutDashboard size={18} /> Dashboard</a>
-                        <a href="#cursos"><BookOpen size={18} /> Meus cursos</a>
-                        <a href="#agenda"><CalendarDays size={18} /> Cronograma</a>
-                        <a href="#agenda"><ClipboardCheck size={18} /> Atividades</a>
-                        <a href="#progresso"><Award size={18} /> Progresso</a>
-                        <a href="#trilha"><StickyNote size={18} /> Trilha inteligente</a>
+                        <button type="button" className={activeView === 'dashboard' ? 'active' : ''} onClick={() => selectView('dashboard')}><LayoutDashboard size={18} /> Dashboard</button>
+                        <button type="button" className={activeView === 'courses' ? 'active' : ''} onClick={() => selectView('courses')}><BookOpen size={18} /> Meus cursos</button>
+                        <button type="button" className={activeView === 'schedule' ? 'active' : ''} onClick={() => selectView('schedule')}><CalendarDays size={18} /> Cronograma</button>
+                        <button type="button" className={activeView === 'activities' ? 'active' : ''} onClick={() => selectView('activities')}><ClipboardCheck size={18} /> Atividades</button>
+                        <button type="button" className={activeView === 'progress' ? 'active' : ''} onClick={() => selectView('progress')}><Award size={18} /> Progresso</button>
+                        <button type="button" className={activeView === 'track' ? 'active' : ''} onClick={() => selectView('track')}><StickyNote size={18} /> Trilha inteligente</button>
                         <Link to="/student/tutor"><MessageCircle size={18} /> Tutor IA</Link>
                         <Link to="/account/security"><Settings size={18} /> Segurança</Link>
                     </nav>
@@ -458,13 +466,71 @@ export default function StudentDashboard() {
                         <strong>Continue aprendendo!</strong>
                         <p>Você já concluiu {completedLessons} de {totalLessons} aulas.</p>
                         <div><span style={{ width: `${globalProgress}%` }} /></div>
-                        <a href="#cursos">Ver meu progresso</a>
+                        <button type="button" onClick={() => selectView('progress')}>Ver meu progresso</button>
                     </div>
                 </aside>
 
                 <main className="sd-main sd-portal-main" id="inicio">
                     {config.bannerUrl && <div className="sd-banner"><img src={getThumbUrl(config.bannerUrl) || ''} alt="" className="sd-banner-img" /></div>}
 
+                    {activeView !== 'dashboard' && (
+                        <section className="sd-student-module" aria-live="polite">
+                            <header>
+                                <div>
+                                    <span>Módulo do aluno</span>
+                                    <h1>{({ courses: 'Meus cursos', schedule: 'Cronograma', activities: 'Atividades', progress: 'Meu progresso', track: 'Trilha inteligente' } as Record<string, string>)[activeView]}</h1>
+                                    <p>{activeView === 'courses' && 'Acesse todos os cursos em que você está matriculado.'}
+                                       {activeView === 'schedule' && 'Consulte suas próximas aulas e encontros ao vivo.'}
+                                       {activeView === 'activities' && 'Veja as atividades e aulas recomendadas para continuar avançando.'}
+                                       {activeView === 'progress' && 'Acompanhe o avanço real em cada curso e aula.'}
+                                       {activeView === 'track' && 'Recomendações personalizadas a partir do seu progresso.'}</p>
+                                </div>
+                                {activeView === 'courses' && <BookOpen />}
+                                {activeView === 'schedule' && <CalendarDays />}
+                                {activeView === 'activities' && <ClipboardCheck />}
+                                {activeView === 'progress' && <Award />}
+                                {activeView === 'track' && <Bot />}
+                            </header>
+
+                            {(activeView === 'courses' || activeView === 'progress') && (
+                                <div className="sd-module-course-list">
+                                    {dashboardCourses.length === 0 ? (
+                                        <div className="sd-portal-empty"><GraduationCap size={42} /><strong>Nenhum curso matriculado</strong><p>A instituição ainda não vinculou cursos ao seu acesso.</p></div>
+                                    ) : dashboardCourses.map(course => (
+                                        <button type="button" key={`${activeView}_${course.id}`} onClick={() => handleCourseClick(course)} disabled={!getPreferredVideoId(course)} onMouseEnter={() => prefetchLessonResources(getPreferredVideoId(course))}>
+                                            <span><BookOpen /></span><div><strong>{course.name}</strong><small>{course.lastWatchedVideo?.moduleName || course.modules[0]?.name || `${course.totalVideos} aulas`}</small><i><b style={{ width: `${course.progressPercent}%` }} /></i></div><em>{course.progressPercent}%</em><ChevronRight />
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+
+                            {activeView === 'schedule' && (
+                                <div className="sd-module-schedule">
+                                    {liveClasses.length === 0 ? (
+                                        <div className="sd-portal-empty"><CalendarDays size={42} /><strong>Nenhum encontro agendado</strong><p>Quando a escola publicar uma aula ao vivo, ela aparecerá aqui.</p></div>
+                                    ) : liveClasses.map(liveClass => {
+                                        const startAt = new Date(liveClass.startAt);
+                                        const joinUrl = liveClass.meetingJoinUrl || liveClass.zoomJoinUrl;
+                                        return <article key={liveClass.id}><time><strong>{startAt.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}</strong><small>{startAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</small></time><span><Radio /></span><div><strong>{liveClass.title}</strong><small>{liveClass.course?.name || liveClass.module?.name || 'Encontro acadêmico'}</small></div>{joinUrl ? <a href={joinUrl} target="_blank" rel="noopener noreferrer">Entrar <ExternalLink size={15} /></a> : <em>Link em preparação</em>}</article>;
+                                    })}
+                                </div>
+                            )}
+
+                            {(activeView === 'activities' || activeView === 'track') && (
+                                <div className="sd-module-activity-list">
+                                    {recommendations.length === 0 ? (
+                                        <div className="sd-portal-empty"><CircleCheckBig size={42} /><strong>{activeView === 'activities' ? 'Nenhuma atividade pendente' : 'Trilha em preparação'}</strong><p>{activeView === 'activities' ? 'Você não tem recomendações pendentes neste momento.' : 'As recomendações serão geradas conforme você avançar nas aulas.'}</p></div>
+                                    ) : recommendations.map(recommendation => (
+                                        <button type="button" key={`${activeView}_${recommendation.courseId}_${recommendation.videoId}`} onClick={() => handleLessonClick(recommendation.videoId)} onMouseEnter={() => prefetchLessonResources(recommendation.videoId)}>
+                                            <span>{activeView === 'track' ? <Bot /> : <ClipboardCheck />}</span><div><small>{recommendation.courseName} · {recommendation.moduleName}</small><strong>{recommendation.videoTitle}</strong><p>{recommendation.reason}</p></div><em>Assistir <ChevronRight size={15} /></em>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </section>
+                    )}
+
+                    <div hidden={activeView !== 'dashboard'}>
                     <section className="sd-welcome">
                         <div>
                             <span className="sd-eyebrow">Área do aluno</span>
@@ -550,6 +616,7 @@ export default function StudentDashboard() {
                             </div>
                         </section>
                     )}
+                    </div>
                 </main>
             </div>
         </div>

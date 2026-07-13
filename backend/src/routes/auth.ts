@@ -69,6 +69,11 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
             return;
         }
 
+        if (user.accessBlocked) {
+            res.status(403).json({ message: 'Acesso bloqueado pela instituição. Procure a administração escolar.' });
+            return;
+        }
+
         // Gerar token
         const token = jwt.sign(
             { id: user.id, username: user.username, email: user.email, role: user.role, name: user.name, ver: user.tokenVersion },

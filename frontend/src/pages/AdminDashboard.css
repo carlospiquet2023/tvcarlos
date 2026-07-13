@@ -152,6 +152,23 @@
 .admin-quick-summary small { overflow: hidden; color: #52627a; font-size: .55rem; text-overflow: ellipsis; white-space: nowrap; }
 .admin-quick-summary strong { margin-top: .1rem; color: #172033; font-size: .72rem; }
 
+.admin-access-badge { display: inline-flex; align-items: center; padding: .25rem .55rem; border-radius: 999px; font-size: .66rem; font-weight: 800; }
+.admin-access-badge.active { color: #047857; background: #ecfdf5; border: 1px solid #a7f3d0; }
+.admin-access-badge.blocked { color: #b91c1c; background: #fef2f2; border: 1px solid #fecaca; }
+.admin-user-actions { display: flex; align-items: center; gap: .35rem; flex-wrap: wrap; }
+.admin-user-security-modal { position: relative; display: grid; gap: .85rem; color: #172033; }
+.admin-user-security-modal > div > small { color: var(--primary-ink); font-size: .62rem; font-weight: 800; letter-spacing: .08em; }
+.admin-user-security-modal h2 { margin: .15rem 0; font-size: 1.25rem; }
+.admin-user-security-modal > div > p { margin: 0; color: #52627a; font-size: .76rem; }
+.admin-user-security-modal label { display: grid; gap: .35rem; color: #34445b; font-size: .72rem; font-weight: 750; }
+.admin-security-modal-icon { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 13px; }
+.admin-security-modal-icon.password { color: #4338ca; background: #eef2ff; }
+.admin-security-modal-icon.block { color: #b91c1c; background: #fef2f2; }
+.admin-security-note { margin: 0; padding: .7rem; color: #52627a; border: 1px solid #d8e0eb; border-radius: 8px; background: #f8fafc; font-size: .68rem; line-height: 1.5; }
+.admin-security-modal-actions { display: flex; justify-content: flex-end; gap: .55rem; margin-top: .25rem; }
+.admin-btn-danger.solid { color: #fff; background: #b91c1c; border-color: #b91c1c; }
+.admin-btn-danger.solid:hover { color: #fff; background: #991b1b; }
+
 @media (min-width: 1600px) {
     .admin-pro-header { grid-template-columns: 270px minmax(320px, 1fr) auto; padding-inline: 1.5rem; }
     .admin-root .admin-sidebar { width: 270px; min-width: 270px; }

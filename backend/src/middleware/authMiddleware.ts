@@ -14,6 +14,7 @@ import prisma from '../lib/prisma';
 import logger from '../lib/logger';
 import {
     bearerTokenFromHeader,
+    clearSessionCookies,
     sessionCookieFromRequest,
     sessionTokenFromRequest,
     synchronizeCsrfCookie,
@@ -80,10 +81,22 @@ export const authenticateToken = async (req: Request, res: Response, next: NextF
                 name: true,
                 tokenVersion: true,
                 mustChangePassword: true,
+                accessBlocked: true,
             }
         });
 
-        if (!currentUser || currentUser.tokenVersion !== decoded.ver) {
+        if (!currentUser) {
+            res.status(401).json({ message: 'Sessão revogada. Entre novamente.' });
+            return;
+        }
+
+        if (currentUser.accessBlocked) {
+            clearSessionCookies(res);
+            res.status(403).json({ message: 'Acesso bloqueado pela instituição. Procure a administração escolar.' });
+            return;
+        }
+
+        if (currentUser.tokenVersion !== decoded.ver) {
             res.status(401).json({ message: 'Sessão revogada. Entre novamente.' });
             return;
         }

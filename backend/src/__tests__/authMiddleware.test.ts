@@ -120,6 +120,29 @@ describe('authenticateToken', () => {
         expect(mocks.logError).toHaveBeenCalledOnce();
     });
 
+    it('blocks an account before protected content is served', async () => {
+        mocks.findUnique.mockResolvedValue({
+            id: USER_ID,
+            username: 'blocked-student',
+            email: 'blocked@example.test',
+            role: 'STUDENT',
+            name: 'Blocked Student',
+            tokenVersion: 4,
+            mustChangePassword: false,
+            accessBlocked: true,
+        });
+        const req = sessionRequest(sessionToken());
+        const res = responseDouble();
+        const next = vi.fn() as NextFunction;
+
+        await authenticateToken(req, res, next);
+
+        expect(res.status).toHaveBeenCalledWith(403);
+        expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringContaining('bloqueado') }));
+        expect(res.clearCookie).toHaveBeenCalled();
+        expect(next).not.toHaveBeenCalled();
+    });
+
     it('rejects revoked sessions as authentication failures', async () => {
         mocks.findUnique.mockResolvedValue({
             id: USER_ID,

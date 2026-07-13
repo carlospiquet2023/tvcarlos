@@ -42,6 +42,14 @@ async function auditLog(userId: string, action: string, target: string, details?
 
 const VALID_ROLES = ['ADMIN', 'TEACHER', 'STUDENT', 'STAFF', 'GUARDIAN'] as const;
 
+function passwordValidationMessage(password: unknown): string | null {
+    if (typeof password !== 'string' || password.length < 8) return 'A senha deve ter pelo menos 8 caracteres.';
+    if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
+        return 'A senha deve conter letras maiúsculas, minúsculas e números.';
+    }
+    return null;
+}
+
 // ============================================================
 // HELPER: Verificar se TEACHER tem acesso ao curso
 // ============================================================
@@ -158,7 +166,7 @@ router.get('/users', authenticateToken, requireRole(['ADMIN']), async (req: Requ
         const [users, total] = await Promise.all([
             prisma.user.findMany({
                 where,
-                select: { id: true, name: true, email: true, role: true, createdAt: true },
+                select: { id: true, name: true, email: true, role: true, accessBlocked: true, accessBlockedAt: true, accessBlockedReason: true, createdAt: true },
                 orderBy: { createdAt: 'desc' },
                 skip,
                 take: limit
@@ -190,13 +198,9 @@ router.post('/users', authenticateToken, requireRole(['ADMIN']), async (req: Req
             return;
         }
 
-        // Validação de senha forte
-        if (password.length < 8) {
-            res.status(400).json({ message: 'A senha deve ter pelo menos 8 caracteres.' });
-            return;
-        }
-        if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
-            res.status(400).json({ message: 'A senha deve conter letras maiúsculas, minúsculas e números.' });
+        const passwordError = passwordValidationMessage(password);
+        if (passwordError) {
+            res.status(400).json({ message: passwordError });
             return;
         }
 
@@ -209,7 +213,7 @@ router.post('/users', authenticateToken, requireRole(['ADMIN']), async (req: Req
         const hashedPassword = await bcrypt.hash(password, 12);
         const user = await prisma.user.create({
             data: { name, email, password: hashedPassword, role: userRole },
-            select: { id: true, name: true, email: true, role: true, createdAt: true }
+            select: { id: true, name: true, email: true, role: true, accessBlocked: true, accessBlockedAt: true, accessBlockedReason: true, createdAt: true }
         });
 
         await auditLog(req.user!.id, 'CREATE_USER', user.id, `Criou usuário ${name} (${email})`);
@@ -236,14 +240,25 @@ router.put('/users/:id', authenticateToken, requireRole(['ADMIN']), async (req: 
         if (name) data.name = name;
         if (email) data.email = email;
         if (role) data.role = role;
-        if (password) data.password = await bcrypt.hash(password, 12);
+        if (password) {
+            const passwordError = passwordValidationMessage(password);
+            if (passwordError) {
+                res.status(400).json({ message: passwordError });
+                return;
+            }
+            data.password = await bcrypt.hash(password, 12);
+            data.passwordChangedAt = new Date();
+            data.mustChangePassword = true;
+            data.tokenVersion = { increment: 1 };
+        }
 
         const user = await prisma.user.update({
             where: { id },
             data,
-            select: { id: true, name: true, email: true, role: true, createdAt: true }
+            select: { id: true, name: true, email: true, role: true, accessBlocked: true, accessBlockedAt: true, accessBlockedReason: true, createdAt: true }
         });
 
+        await auditLog(req.user!.id, 'UPDATE_USER', user.id, `Atualizou o usuário ${user.email}${password ? ' e redefiniu a senha' : ''}`);
         res.json(user);
     } catch (error) {
         console.error(error);
@@ -811,14 +826,17 @@ router.post('/upload-pdf', authenticateToken, requireRole(['ADMIN', 'TEACHER']),
 
 router.get('/stats', authenticateToken, requireRole(['ADMIN']), async (_req: Request, res: Response): Promise<void> => {
     try {
-        const [totalStudents, totalCourses, totalVideos, processingVideos, readyVideos, pendingVideos, errorVideos] = await Promise.all([
+        const [totalStudents, totalCourses, totalVideos, processingVideos, readyVideos, pendingVideos, errorVideos, totalEnrollments, totalModules, totalLiveClasses] = await Promise.all([
             prisma.user.count({ where: { role: 'STUDENT' } }),
             prisma.course.count(),
             prisma.video.count(),
             prisma.video.count({ where: { status: 'PROCESSING' } }),
             prisma.video.count({ where: { status: 'READY' } }),
             prisma.video.count({ where: { status: 'PENDING' } }),
-            prisma.video.count({ where: { status: 'ERROR' } })
+            prisma.video.count({ where: { status: 'ERROR' } }),
+            prisma.courseEnrollment.count({ where: { enrollmentRole: 'STUDENT' } }),
+            prisma.module.count(),
+            prisma.liveClass.count()
         ]);
 
         res.json({
@@ -828,7 +846,10 @@ router.get('/stats', authenticateToken, requireRole(['ADMIN']), async (_req: Req
             processingVideos,
             readyVideos,
             pendingVideos,
-            errorVideos
+            errorVideos,
+            totalEnrollments,
+            totalModules,
+            totalLiveClasses
         });
     } catch (error) {
         console.error(error);
@@ -1348,6 +1369,97 @@ router.get('/export-students', authenticateToken, requireRole(['ADMIN']), async 
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Erro ao exportar alunos.' });
+    }
+});
+
+// Bloquear ou liberar acesso sem remover matrícula, progresso ou histórico.
+router.patch('/users/:id/access', authenticateToken, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<void> => {
+    try {
+        const id = req.params.id as string;
+        const blocked = req.body?.blocked;
+        const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 500) : '';
+
+        if (id === req.user!.id) {
+            res.status(403).json({ message: 'Não é possível bloquear sua própria conta.' });
+            return;
+        }
+        if (typeof blocked !== 'boolean') {
+            res.status(400).json({ message: 'O campo blocked deve ser booleano.' });
+            return;
+        }
+        if (blocked && reason.length < 3) {
+            res.status(400).json({ message: 'Informe o motivo do bloqueio.' });
+            return;
+        }
+
+        const user = await prisma.user.update({
+            where: { id },
+            data: {
+                accessBlocked: blocked,
+                accessBlockedAt: blocked ? new Date() : null,
+                accessBlockedReason: blocked ? reason : null,
+                tokenVersion: { increment: 1 }
+            },
+            select: { id: true, name: true, email: true, role: true, accessBlocked: true, accessBlockedAt: true, accessBlockedReason: true, createdAt: true }
+        });
+
+        await auditLog(req.user!.id, blocked ? 'BLOCK_USER_ACCESS' : 'UNBLOCK_USER_ACCESS', id, blocked ? reason : `Liberou o acesso de ${user.email}`);
+        res.json(user);
+    } catch (error) {
+        logger.error({ error }, 'Erro ao alterar bloqueio do usuário');
+        res.status(500).json({ message: 'Erro ao alterar o acesso do usuário.' });
+    }
+});
+
+router.post('/users/:id/revoke-sessions', authenticateToken, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<void> => {
+    try {
+        const id = req.params.id as string;
+        if (id === req.user!.id) {
+            res.status(403).json({ message: 'Use o botão Sair para encerrar sua própria sessão.' });
+            return;
+        }
+        const user = await prisma.user.update({
+            where: { id },
+            data: { tokenVersion: { increment: 1 } },
+            select: { id: true, email: true }
+        });
+        await auditLog(req.user!.id, 'REVOKE_USER_SESSIONS', id, `Revogou todas as sessões de ${user.email}`);
+        res.json({ message: 'Todas as sessões foram revogadas.' });
+    } catch (error) {
+        logger.error({ error }, 'Erro ao revogar sessões do usuário');
+        res.status(500).json({ message: 'Erro ao revogar as sessões.' });
+    }
+});
+
+router.post('/users/:id/reset-password', authenticateToken, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<void> => {
+    try {
+        const id = req.params.id as string;
+        if (id === req.user!.id) {
+            res.status(403).json({ message: 'Altere sua própria senha em Configurações.' });
+            return;
+        }
+        const password = req.body?.password;
+        const passwordError = passwordValidationMessage(password);
+        if (passwordError) {
+            res.status(400).json({ message: passwordError });
+            return;
+        }
+
+        const user = await prisma.user.update({
+            where: { id },
+            data: {
+                password: await bcrypt.hash(password, 12),
+                passwordChangedAt: new Date(),
+                mustChangePassword: true,
+                tokenVersion: { increment: 1 }
+            },
+            select: { id: true, email: true }
+        });
+        await auditLog(req.user!.id, 'ADMIN_RESET_USER_PASSWORD', id, `Redefiniu a senha de ${user.email} e exigiu troca no próximo acesso`);
+        res.json({ message: 'Senha redefinida. O usuário deverá trocá-la no próximo acesso.' });
+    } catch (error) {
+        logger.error({ error }, 'Erro ao redefinir senha do usuário');
+        res.status(500).json({ message: 'Erro ao redefinir a senha.' });
     }
 });
 

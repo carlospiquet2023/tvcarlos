@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useConfig } from '../context/ConfigContext';
-import { Users, BookOpen, Activity, Plus, Trash2, Settings, Save, Eye, EyeOff, CheckCircle, AlertCircle, Upload, Edit3, RefreshCw, Monitor, X, FileSpreadsheet, FileDown, CalendarDays, ClipboardList, BarChart3, Download, Bell, ChevronUp, ChevronDown, Video, ExternalLink, ShieldCheck, Flag, Ban, Scale, AlertTriangle, RadioTower, Key, School, Activity as ActivityIcon, Search, Menu, LogOut, UserCheck, FileVideo, Database, Server, Clock3, Layers3, UserCog, MessageCircle, Library } from 'lucide-react';
+import { Users, BookOpen, Activity, Plus, Trash2, Settings, Save, Eye, EyeOff, CheckCircle, AlertCircle, Upload, Edit3, RefreshCw, Monitor, X, FileSpreadsheet, FileDown, CalendarDays, ClipboardList, BarChart3, Download, Bell, ChevronUp, ChevronDown, Video, ExternalLink, ShieldCheck, Flag, Ban, Scale, AlertTriangle, RadioTower, Key, School, Activity as ActivityIcon, Search, Menu, LogOut, UserCheck, FileVideo, Database, Server, Clock3, Layers3, UserCog, MessageCircle, Library, LockKeyhole, UserX } from 'lucide-react';
 import axios from 'axios';
 import api from '../lib/api';
 import 'react-quill-new/dist/quill.snow.css';
@@ -22,6 +22,9 @@ interface StatsData {
     readyVideos: number;
     pendingVideos: number;
     errorVideos: number;
+    totalEnrollments: number;
+    totalModules: number;
+    totalLiveClasses: number;
 }
 
 interface UserData {
@@ -29,6 +32,9 @@ interface UserData {
     name: string;
     email: string;
     role: string;
+    accessBlocked: boolean;
+    accessBlockedAt?: string | null;
+    accessBlockedReason?: string | null;
     createdAt: string;
 }
 
@@ -94,7 +100,11 @@ export default function AdminDashboard() {
     // Forms state
     const [newUser, setNewUser] = useState({ name: '', email: '', password: '', role: 'STUDENT' });
     const [editingUserId, setEditingUserId] = useState<string | null>(null);
-    const [editUserData, setEditUserData] = useState({ name: '', email: '', role: 'STUDENT', password: '' });
+    const [editUserData, setEditUserData] = useState({ name: '', email: '', role: 'STUDENT' });
+    const [userSecurityAction, setUserSecurityAction] = useState<{ mode: 'password' | 'block'; user: UserData } | null>(null);
+    const [userSecurityForm, setUserSecurityForm] = useState({ password: '', confirmPassword: '', reason: '' });
+    const [userSecurityLoading, setUserSecurityLoading] = useState(false);
+    const [userSecurityError, setUserSecurityError] = useState('');
     const [newCourse, setNewCourse] = useState({ name: '', description: '', thumbnailUrl: '' });
 
     // Module, Video, Enrollment state
@@ -841,12 +851,7 @@ export default function AdminDashboard() {
         } catch { alert('Erro ao salvar configurações de presença.'); }
     };
 
-    const overviewEnrollments = useMemo(
-        () => courses.reduce((total, course) => total + course.enrollments.filter(enrollment => enrollment.enrollmentRole === 'STUDENT').length, 0),
-        [courses]
-    );
     const overviewTeachers = useMemo(() => users.filter(item => item.role === 'TEACHER').length, [users]);
-    const overviewModules = useMemo(() => courses.reduce((total, course) => total + course.modules.length, 0), [courses]);
     const overviewCourseRows = useMemo(() => {
         if (reports.length > 0) return reports.slice(0, 5);
         return courses.slice(0, 5).map(course => ({
@@ -873,6 +878,73 @@ export default function AdminDashboard() {
         setUserSearch(query);
         setUserPage(1);
         setActiveTab('users');
+    };
+
+    const openUserSecurityAction = (mode: 'password' | 'block', targetUser: UserData) => {
+        setUserSecurityForm({ password: '', confirmPassword: '', reason: '' });
+        setUserSecurityError('');
+        setUserSecurityAction({ mode, user: targetUser });
+    };
+
+    const handleUserSecuritySubmit = async (event: React.FormEvent) => {
+        event.preventDefault();
+        if (!userSecurityAction) return;
+        setUserSecurityError('');
+
+        if (userSecurityAction.mode === 'password' && userSecurityForm.password !== userSecurityForm.confirmPassword) {
+            setUserSecurityError('As senhas não coincidem.');
+            return;
+        }
+        if (userSecurityAction.mode === 'block' && userSecurityForm.reason.trim().length < 3) {
+            setUserSecurityError('Informe o motivo do bloqueio.');
+            return;
+        }
+
+        setUserSecurityLoading(true);
+        try {
+            const headers = { Authorization: `Bearer ${token}` };
+            if (userSecurityAction.mode === 'password') {
+                await api.post(`/api/admin/users/${userSecurityAction.user.id}/reset-password`, {
+                    password: userSecurityForm.password
+                }, { headers });
+            } else {
+                await api.patch(`/api/admin/users/${userSecurityAction.user.id}/access`, {
+                    blocked: true,
+                    reason: userSecurityForm.reason.trim()
+                }, { headers });
+            }
+            setUserSecurityAction(null);
+            setUserSecurityForm({ password: '', confirmPassword: '', reason: '' });
+            await fetchData();
+        } catch (error: unknown) {
+            setUserSecurityError(axios.isAxiosError<{ message?: string }>(error)
+                ? error.response?.data?.message || 'Não foi possível concluir a ação.'
+                : 'Não foi possível concluir a ação.');
+        } finally {
+            setUserSecurityLoading(false);
+        }
+    };
+
+    const handleUnblockUser = async (targetUser: UserData) => {
+        try {
+            await api.patch(`/api/admin/users/${targetUser.id}/access`, { blocked: false }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            await fetchData();
+        } catch (error: unknown) {
+            alert(axios.isAxiosError<{ message?: string }>(error) ? error.response?.data?.message || 'Erro ao liberar acesso.' : 'Erro ao liberar acesso.');
+        }
+    };
+
+    const handleRevokeUserSessions = async (targetUser: UserData) => {
+        try {
+            await api.post(`/api/admin/users/${targetUser.id}/revoke-sessions`, {}, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            alert(`Sessões de ${targetUser.name} revogadas com sucesso.`);
+        } catch (error: unknown) {
+            alert(axios.isAxiosError<{ message?: string }>(error) ? error.response?.data?.message || 'Erro ao revogar sessões.' : 'Erro ao revogar sessões.');
+        }
     };
 
     return (
@@ -989,9 +1061,9 @@ export default function AdminDashboard() {
                                 <article><span className="violet"><Users /></span><div><small>Total de alunos</small><strong>{stats.totalUsers.toLocaleString('pt-BR')}</strong><p>contas estudantis</p></div></article>
                                 <article><span className="blue"><BookOpen /></span><div><small>Cursos ativos</small><strong>{stats.totalCourses.toLocaleString('pt-BR')}</strong><p>catálogo publicado</p></div></article>
                                 <article><span className="green"><FileVideo /></span><div><small>Aulas publicadas</small><strong>{stats.readyVideos.toLocaleString('pt-BR')}</strong><p>de {stats.totalVideos} vídeos</p></div></article>
-                                <article><span className="amber"><UserCheck /></span><div><small>Matrículas</small><strong>{overviewEnrollments.toLocaleString('pt-BR')}</strong><p>vínculos ativos</p></div></article>
-                                <article><span className="violet"><Layers3 /></span><div><small>Módulos</small><strong>{overviewModules.toLocaleString('pt-BR')}</strong><p>trilhas organizadas</p></div></article>
-                                <article><span className="blue"><Video /></span><div><small>Aulas ao vivo</small><strong>{liveClasses.length.toLocaleString('pt-BR')}</strong><p>encontros cadastrados</p></div></article>
+                                <article><span className="amber"><UserCheck /></span><div><small>Matrículas</small><strong>{stats.totalEnrollments.toLocaleString('pt-BR')}</strong><p>vínculos ativos</p></div></article>
+                                <article><span className="violet"><Layers3 /></span><div><small>Módulos</small><strong>{stats.totalModules.toLocaleString('pt-BR')}</strong><p>trilhas organizadas</p></div></article>
+                                <article><span className="blue"><Video /></span><div><small>Aulas ao vivo</small><strong>{stats.totalLiveClasses.toLocaleString('pt-BR')}</strong><p>encontros cadastrados</p></div></article>
                             </section>
 
                             <div className="admin-overview-primary-grid">
@@ -1163,6 +1235,7 @@ export default function AdminDashboard() {
                                         <th>Nome</th>
                                         <th>Email</th>
                                         <th>Permissão</th>
+                                        <th>Status de acesso</th>
                                         <th>Ações</th>
                                     </tr>
                                 </thead>
@@ -1188,9 +1261,14 @@ export default function AdminDashboard() {
                                                         <option value="STAFF">Equipe escolar</option>
                                                         <option value="GUARDIAN">Responsável</option>
                                                     </select>
-                                                ) : <span className={`admin-role-badge ${u.role.toLowerCase()}`}>{roleLabel(u.role)}</span>}
+                                                 ) : <span className={`admin-role-badge ${u.role.toLowerCase()}`}>{roleLabel(u.role)}</span>}
+                                             </td>
+                                            <td>
+                                                <span className={`admin-access-badge ${u.accessBlocked ? 'blocked' : 'active'}`} title={u.accessBlockedReason || undefined}>
+                                                    {u.accessBlocked ? 'Bloqueado' : 'Ativo'}
+                                                </span>
                                             </td>
-                                            <td style={{ display: 'flex', gap: '0.5rem' }}>
+                                            <td><div className="admin-user-actions">
                                                 {editingUserId === u.id ? (
                                                     <>
                                                         <button onClick={async () => {
@@ -1199,7 +1277,6 @@ export default function AdminDashboard() {
                                                                 if (editUserData.name !== u.name) payload.name = editUserData.name;
                                                                 if (editUserData.email !== u.email) payload.email = editUserData.email;
                                                                 if (editUserData.role !== u.role) payload.role = editUserData.role;
-                                                                if (editUserData.password) payload.password = editUserData.password;
                                                                 if (Object.keys(payload).length > 0) {
                                                                     await api.put(`/api/admin/users/${u.id}`, payload, { headers: { Authorization: `Bearer ${token}` } });
                                                                     fetchData();
@@ -1219,15 +1296,34 @@ export default function AdminDashboard() {
                                                     </>
                                                 ) : (
                                                     <>
-                                                        <button onClick={() => { setEditingUserId(u.id); setEditUserData({ name: u.name, email: u.email, role: u.role, password: '' }); }} className="admin-btn-icon" title="Editar">
+                                                        <button onClick={() => { setEditingUserId(u.id); setEditUserData({ name: u.name, email: u.email, role: u.role }); }} className="admin-btn-icon" title="Editar dados">
                                                             <Edit3 size={18} />
                                                         </button>
-                                                        <button onClick={() => setConfirmAction({ message: `Remover "${u.name}"?`, action: () => handleDeleteUser(u.id) })} className="admin-btn-icon danger">
-                                                            <Trash2 size={18} />
-                                                        </button>
+                                                        {u.id !== user?.id && (
+                                                            <>
+                                                                <button onClick={() => openUserSecurityAction('password', u)} className="admin-btn-icon primary" title="Redefinir senha sem apagar dados">
+                                                                    <LockKeyhole size={18} />
+                                                                </button>
+                                                                <button onClick={() => setConfirmAction({ message: `Revogar todas as sessões de "${u.name}"? A pessoa precisará entrar novamente.`, action: () => void handleRevokeUserSessions(u) })} className="admin-btn-icon" title="Revogar sessões">
+                                                                    <LogOut size={18} />
+                                                                </button>
+                                                                {u.accessBlocked ? (
+                                                                    <button onClick={() => setConfirmAction({ message: `Liberar novamente o acesso de "${u.name}"?`, action: () => void handleUnblockUser(u) })} className="admin-btn-icon primary" title="Liberar acesso">
+                                                                        <UserCheck size={18} />
+                                                                    </button>
+                                                                ) : (
+                                                                    <button onClick={() => openUserSecurityAction('block', u)} className="admin-btn-icon danger" title="Bloquear acesso e revogar sessões">
+                                                                        <UserX size={18} />
+                                                                    </button>
+                                                                )}
+                                                                <button onClick={() => setConfirmAction({ message: `Remover "${u.name}"? Esta ação apaga os dados relacionados e deve ser usada somente quando exigido.`, action: () => handleDeleteUser(u.id) })} className="admin-btn-icon danger" title="Excluir definitivamente">
+                                                                    <Trash2 size={18} />
+                                                                </button>
+                                                            </>
+                                                        )}
                                                     </>
                                                 )}
-                                            </td>
+                                            </div></td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -2780,6 +2876,49 @@ export default function AdminDashboard() {
                         )}
                     </div>
                 </div>
+            </div>
+        )}
+
+        {userSecurityAction && (
+            <div className="modal-overlay" onClick={() => !userSecurityLoading && setUserSecurityAction(null)}>
+                <form className="modal-content admin-user-security-modal" onSubmit={handleUserSecuritySubmit} onClick={event => event.stopPropagation()}>
+                    <button type="button" className="confirm-modal-close" onClick={() => setUserSecurityAction(null)} aria-label="Fechar"><X size={18} /></button>
+                    <span className={`admin-security-modal-icon ${userSecurityAction.mode}`}>
+                        {userSecurityAction.mode === 'password' ? <LockKeyhole size={27} /> : <UserX size={27} />}
+                    </span>
+                    <div>
+                        <small>{userSecurityAction.mode === 'password' ? 'CREDENCIAIS' : 'CONTROLE DE ACESSO'}</small>
+                        <h2>{userSecurityAction.mode === 'password' ? 'Redefinir senha' : 'Bloquear usuário'}</h2>
+                        <p>{userSecurityAction.user.name} · {userSecurityAction.user.email}</p>
+                    </div>
+
+                    {userSecurityAction.mode === 'password' ? (
+                        <>
+                            <label>Nova senha
+                                <input type="password" className="admin-input" value={userSecurityForm.password} onChange={event => setUserSecurityForm(current => ({ ...current, password: event.target.value }))} minLength={8} autoComplete="new-password" required />
+                            </label>
+                            <label>Confirmar nova senha
+                                <input type="password" className="admin-input" value={userSecurityForm.confirmPassword} onChange={event => setUserSecurityForm(current => ({ ...current, confirmPassword: event.target.value }))} minLength={8} autoComplete="new-password" required />
+                            </label>
+                            <p className="admin-security-note">Matrículas, progresso, certificados e histórico serão preservados. As sessões atuais serão encerradas e a troca da senha será exigida no próximo acesso.</p>
+                        </>
+                    ) : (
+                        <>
+                            <label>Motivo do bloqueio
+                                <textarea className="admin-textarea" value={userSecurityForm.reason} onChange={event => setUserSecurityForm(current => ({ ...current, reason: event.target.value }))} maxLength={500} placeholder="Ex.: suspensão temporária determinada pela direção" required />
+                            </label>
+                            <p className="admin-security-note">O acesso às aulas e APIs será interrompido e todas as sessões serão revogadas. Nenhum dado acadêmico será apagado.</p>
+                        </>
+                    )}
+
+                    {userSecurityError && <div className="settings-alert error">{userSecurityError}</div>}
+                    <div className="admin-security-modal-actions">
+                        <button type="button" className="admin-btn" onClick={() => setUserSecurityAction(null)} disabled={userSecurityLoading}>Cancelar</button>
+                        <button type="submit" className={userSecurityAction.mode === 'block' ? 'admin-btn-danger solid' : 'admin-btn-primary'} disabled={userSecurityLoading}>
+                            {userSecurityLoading ? 'Processando...' : userSecurityAction.mode === 'password' ? 'Redefinir e revogar sessões' : 'Bloquear acesso'}
+                        </button>
+                    </div>
+                </form>
             </div>
         )}
 

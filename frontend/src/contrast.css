@@ -248,14 +248,17 @@
   border-bottom-color: #d8e0eb;
 }
 
-.sd-product-nav a {
+.sd-product-nav a,
+.sd-product-nav button {
   color: #52627a;
   background: #fff;
   border-color: #d8e0eb;
 }
 
 .sd-product-nav a:hover,
-.sd-product-nav a:focus-visible {
+.sd-product-nav a:focus-visible,
+.sd-product-nav button:hover,
+.sd-product-nav button:focus-visible {
   color: var(--primary-ink);
   background: #eef2ff;
   border-color: #c7d2fe;
