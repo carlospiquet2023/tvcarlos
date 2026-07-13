@@ -70,6 +70,8 @@ interface BanData { id: string; active: boolean; banType: string; reason: string
 interface AppealData { id: string; status: string; reason: string; adminNote?: string | null; createdAt: string; user: { name: string; email: string }; }
 interface AttendanceEditData { oldStatus: string; newStatus: string; justification: string; editedBy?: { name: string } | null; }
 interface AttendanceData { id?: string; userId: string; status: string; watchTimeSeconds?: number; autoDetected?: boolean; user?: { name: string; email: string }; edits?: AttendanceEditData[]; }
+interface EmailStatusData { configured: boolean; missing: string[]; host: string | null; port: number; secure: boolean; from: string | null; }
+interface EmailDeliveryData { configured: boolean; eligible?: number; attempted: number; sent: number; failed: number; }
 
 function roleLabel(role: string): string {
     return ({ ADMIN: 'Administrador', TEACHER: 'Professor', STUDENT: 'Aluno', STAFF: 'Equipe escolar', GUARDIAN: 'Responsável' } as Record<string, string>)[role] || role;
@@ -124,6 +126,7 @@ export default function AdminDashboard() {
     // Excel upload state
     const [excelUploading, setExcelUploading] = useState(false);
     const [excelResults, setExcelResults] = useState<{ name: string; email: string; password: string; enrolled: string[]; error?: string }[] | null>(null);
+    const [excelEmailDelivery, setExcelEmailDelivery] = useState<EmailDeliveryData | null>(null);
 
     // Confirm modal state
     const [confirmAction, setConfirmAction] = useState<{ message: string; action: () => void } | null>(null);
@@ -141,6 +144,8 @@ export default function AdminDashboard() {
 
     // Notification broadcast state
     const [notifForm, setNotifForm] = useState({ title: '', message: '' });
+    const [emailStatus, setEmailStatus] = useState<EmailStatusData | null>(null);
+    const [notificationFeedback, setNotificationFeedback] = useState('');
 
     // Live Classes state
     const [liveClasses, setLiveClasses] = useState<LiveClassData[]>([]);
@@ -259,6 +264,9 @@ export default function AdminDashboard() {
             } else if (activeTab === 'reports') {
                 const res = await api.get('/api/admin/reports', { headers });
                 setReports(res.data);
+            } else if (activeTab === 'notifications') {
+                const res = await api.get('/api/admin/email/status', { headers });
+                setEmailStatus(res.data);
             } else if (activeTab === 'live') {
                 const [liveRes, coursesRes] = await Promise.all([
                     api.get('/api/admin/live-classes', { headers }),
@@ -328,10 +336,15 @@ export default function AdminDashboard() {
     const handleCreateUser = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            await api.post('/api/admin/users', newUser, { headers: { Authorization: `Bearer ${token}` } });
+            const response = await api.post('/api/admin/users', newUser, { headers: { Authorization: `Bearer ${token}` } });
             setNewUser({ name: '', email: '', password: '', role: 'STUDENT' });
             fetchData();
-            alert('Usuário criado com sucesso!');
+            const delivery = response.data.emailDelivery;
+            alert(delivery?.sent
+                ? 'Usuário criado e credenciais enviadas por e-mail.'
+                : delivery?.configured
+                    ? 'Usuário criado, mas o e-mail não foi entregue. Confira o endereço e o provedor SMTP.'
+                    : 'Usuário criado. O e-mail não foi enviado porque o SMTP ainda não está configurado.');
         } catch (err: unknown) {
             if (axios.isAxiosError(err)) {
                 alert(err.response?.data?.message || 'Erro');
@@ -566,6 +579,7 @@ export default function AdminDashboard() {
     const handleExcelUpload = async (file: File) => {
         setExcelUploading(true);
         setExcelResults(null);
+        setExcelEmailDelivery(null);
         try {
             const formData = new FormData();
             formData.append('file', file);
@@ -573,6 +587,7 @@ export default function AdminDashboard() {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setExcelResults(res.data.results);
+            setExcelEmailDelivery(res.data.emailDelivery || null);
             fetchData();
         } catch (err: unknown) {
             if (axios.isAxiosError(err)) {
@@ -626,9 +641,9 @@ export default function AdminDashboard() {
             const res = await api.post('/api/admin/notifications', notifForm, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            alert(res.data.message);
+            setNotificationFeedback(res.data.message);
             setNotifForm({ title: '', message: '' });
-        } catch { alert('Erro ao enviar notificação.'); }
+        } catch { setNotificationFeedback('Não foi possível registrar a notificação.'); }
     };
 
     // ── Live Class handlers ──
@@ -904,9 +919,15 @@ export default function AdminDashboard() {
         try {
             const headers = { Authorization: `Bearer ${token}` };
             if (userSecurityAction.mode === 'password') {
-                await api.post(`/api/admin/users/${userSecurityAction.user.id}/reset-password`, {
+                const response = await api.post(`/api/admin/users/${userSecurityAction.user.id}/reset-password`, {
                     password: userSecurityForm.password
                 }, { headers });
+                const delivery = response.data.emailDelivery;
+                alert(delivery?.sent
+                    ? 'Senha redefinida e nova credencial enviada por e-mail.'
+                    : delivery?.configured
+                        ? 'Senha redefinida, mas o e-mail não foi entregue.'
+                        : 'Senha redefinida. O SMTP ainda não está configurado, portanto a credencial não foi enviada.');
             } else {
                 await api.patch(`/api/admin/users/${userSecurityAction.user.id}/access`, {
                     blocked: true,
@@ -1154,7 +1175,7 @@ export default function AdminDashboard() {
                             <div className="admin-card">
                                 <h3><FileSpreadsheet size={18} /> Importar Alunos via Excel</h3>
                                 <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '0.75rem' }}>
-                                    Cabeçários esperados: <strong>aluno</strong>, <strong>matricula</strong>, <strong>turma</strong>, <strong>cpf</strong>. O sistema gera email e senha automaticamente e matricula nas turmas correspondentes.
+                                    Cabeçários: <strong>aluno</strong>, <strong>matricula</strong>, <strong>turma</strong>, <strong>cpf</strong> e <strong>email</strong> (recomendado). Sem um e-mail real, o sistema gera apenas um login técnico e não há como entregar as credenciais ao aluno.
                                 </p>
                                 <div className="admin-form-row">
                                     <input
@@ -1174,6 +1195,13 @@ export default function AdminDashboard() {
                                 {excelResults && (
                                     <div className="excel-results">
                                         <h4>Resultado da Importação ({excelResults.length} alunos)</h4>
+                                        {excelEmailDelivery && (
+                                            <p style={{ margin: '0.65rem 0', color: excelEmailDelivery.configured ? 'var(--text-secondary)' : '#92400e', fontSize: '0.85rem' }}>
+                                                {excelEmailDelivery.configured
+                                                    ? `E-mails elegíveis: ${excelEmailDelivery.eligible || 0}. Entregues: ${excelEmailDelivery.sent}. Falhas: ${excelEmailDelivery.failed}.`
+                                                    : `SMTP não configurado: ${(excelEmailDelivery.eligible || 0)} credencial(is) com e-mail real não foram enviadas.`}
+                                            </p>
+                                        )}
                                         <table className="admin-table">
                                             <thead>
                                                 <tr>
@@ -1189,7 +1217,7 @@ export default function AdminDashboard() {
                                                     <tr key={i}>
                                                         <td>{r.name}</td>
                                                         <td>{r.email}</td>
-                                                        <td><code>{r.password}</code></td>
+                                                        <td>{r.password ? <code>{r.password}</code> : '—'}</td>
                                                         <td>{r.enrolled.length > 0 ? r.enrolled.join(', ') : '—'}</td>
                                                         <td>
                                                             {r.error ? (
@@ -1793,7 +1821,21 @@ export default function AdminDashboard() {
                     {activeTab === 'notifications' && (
                         <div className="admin-fade-in">
                             <h2 className="admin-page-title">Enviar Notificação</h2>
-                            <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>Envie uma notificação para todos os alunos da plataforma.</p>
+                            <p style={{ color: 'var(--text-muted)', marginBottom: '1rem' }}>Envie um aviso para o painel e, quando o SMTP estiver ativo, também para o e-mail real dos alunos.</p>
+
+                            <div className="admin-card" style={{ marginBottom: '1rem', borderLeft: `4px solid ${emailStatus?.configured ? '#15803d' : '#d97706'}` }}>
+                                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem' }}>
+                                    {emailStatus?.configured ? <CheckCircle size={20} color="#15803d" /> : <AlertTriangle size={20} color="#b45309" />}
+                                    <div>
+                                        <strong>{emailStatus?.configured ? 'Entrega por e-mail ativa' : 'Entrega por e-mail desativada'}</strong>
+                                        <p style={{ margin: '0.3rem 0 0', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                                            {emailStatus?.configured
+                                                ? `Servidor ${emailStatus.host}:${emailStatus.port} · Remetente ${emailStatus.from}`
+                                                : `Configure no Railway: ${emailStatus?.missing?.join(', ') || 'carregando diagnóstico...'}. Os avisos continuam funcionando dentro da plataforma.`}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
 
                             <div className="admin-card">
                                 <form onSubmit={handleSendNotification} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -1815,6 +1857,9 @@ export default function AdminDashboard() {
                                     <button type="submit" className="admin-btn-primary" style={{ alignSelf: 'flex-start' }}>
                                         <Bell size={16} /> Enviar para todos os alunos
                                     </button>
+                                    {notificationFeedback && (
+                                        <p role="status" style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{notificationFeedback}</p>
+                                    )}
                                 </form>
                             </div>
                         </div>

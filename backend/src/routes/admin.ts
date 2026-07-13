@@ -27,6 +27,14 @@ import prisma from '../lib/prisma';
 import { invalidateConfigCache } from './config';
 import logger from '../lib/logger';
 import { uploadFileToStorage } from '../lib/storage';
+import {
+    getEmailConfigurationStatus,
+    isEmailConfigured,
+    sendBulkEmails,
+    sendGenericEmail,
+    sendResetPasswordEmail,
+    sendStudentCredentialsEmail
+} from '../lib/email';
 import ExcelJS from 'exceljs';
 
 // ============================================================
@@ -144,6 +152,27 @@ const uploadPdf = multer({
 
 const router = Router();
 
+interface EmailDeliveryStatus {
+    configured: boolean;
+    sent: boolean;
+}
+
+async function attemptEmailDelivery(send: () => Promise<void>, context: Record<string, unknown>, recipient?: string): Promise<EmailDeliveryStatus> {
+    if (!isEmailConfigured()) return { configured: false, sent: false };
+    if (recipient && !isDeliverableEmailAddress(recipient)) return { configured: true, sent: false };
+    try {
+        await send();
+        return { configured: true, sent: true };
+    } catch (error) {
+        logger.error({ error, ...context }, 'Falha ao entregar e-mail');
+        return { configured: true, sent: false };
+    }
+}
+
+router.get('/email/status', authenticateToken, requireRole(['ADMIN']), (_req: Request, res: Response): void => {
+    res.json(getEmailConfigurationStatus());
+});
+
 // ============================================================
 // GERENCIAMENTO DE ALUNOS (Users)
 // ============================================================
@@ -217,7 +246,13 @@ router.post('/users', authenticateToken, requireRole(['ADMIN']), async (req: Req
         });
 
         await auditLog(req.user!.id, 'CREATE_USER', user.id, `Criou usuário ${name} (${email})`);
-        res.status(201).json(user);
+        const emailDelivery = await attemptEmailDelivery(() => sendStudentCredentialsEmail({
+            to: user.email,
+            studentName: user.name,
+            login: user.email,
+            password
+        }), { action: 'CREATE_USER', userId: user.id }, user.email);
+        res.status(201).json({ ...user, emailDelivery });
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Erro ao criar usuário.' });
@@ -575,8 +610,14 @@ router.post('/enrollments', authenticateToken, requireRole(['ADMIN']), async (re
             data: { userId, title: 'Nova matrícula', message: `Você foi vinculado como ${roleLabel} no curso ${enrollment.course.name}.` }
         }).catch(() => {});
 
+        const emailDelivery = await attemptEmailDelivery(() => sendGenericEmail(
+            enrollment.user.email,
+            `[${process.env.PLATFORM_NAME || 'EduVault'}] Nova matrícula`,
+            `Olá, ${enrollment.user.name}!\n\nVocê foi vinculado como ${roleLabel} no curso ${enrollment.course.name}. Acesse a plataforma para consultar as aulas e atividades.`
+        ), { action: 'ENROLL', userId, courseId }, enrollment.user.email);
+
         await auditLog(req.user!.id, 'ENROLL', `${userId}→${courseId}`, `Matriculou ${roleLabel} em curso`);
-        res.status(201).json(enrollment);
+        res.status(201).json({ ...enrollment, emailDelivery });
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Erro ao matricular.' });
@@ -616,8 +657,30 @@ router.post('/enrollments/all', authenticateToken, requireRole(['ADMIN']), async
             skipDuplicates: true
         });
 
+        await prisma.notification.createMany({
+            data: toEnroll.map(student => ({
+                userId: student.id,
+                title: 'Nova matrícula',
+                message: `Você foi matriculado no curso ${course.name}.`
+            }))
+        });
+
+        const configured = isEmailConfigured();
+        const eligibleStudents = toEnroll.filter(student => isDeliverableEmailAddress(student.email));
+        const emailResult = configured
+            ? await sendBulkEmails(eligibleStudents.map(student => ({
+                to: student.email,
+                subject: `[${process.env.PLATFORM_NAME || 'EduVault'}] Nova matrícula`,
+                message: `Olá, ${student.name}!\n\nVocê foi matriculado no curso ${course.name}. Acesse a plataforma para consultar as aulas e atividades.`
+            })))
+            : { attempted: 0, sent: 0, failed: 0 };
+
         await auditLog(req.user!.id, 'ENROLL_ALL', courseId, `Matriculou ${toEnroll.length} alunos em ${course.name}`);
-        res.status(201).json({ message: `${toEnroll.length} aluno(s) matriculado(s).`, enrolled: toEnroll.length });
+        res.status(201).json({
+            message: `${toEnroll.length} aluno(s) matriculado(s).`,
+            enrolled: toEnroll.length,
+            emailDelivery: { configured, eligible: eligibleStudents.length, ...emailResult }
+        });
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Erro ao matricular alunos.' });
@@ -1119,9 +1182,9 @@ router.put('/config', authenticateToken, requireRole(['ADMIN']), async (req: Req
 // ============================================================
 // IMPORTAÇÃO DE ALUNOS VIA EXCEL
 // ============================================================
-// Cabeçários esperados: aluno, matricula, turma, cpf
-// - Sistema gera email/username: primeironomesegundnome@alunos.com
-// - Senha: ano + 3 primeiras letras nome + 4 últimos dígitos CPF
+// Cabeçários esperados: aluno, matricula, turma, cpf e email (opcional, recomendado)
+// - Com email real, ele é usado como login e recebe as credenciais.
+// - Sem email, o sistema gera um login técnico @alunos.com que não recebe mensagens.
 // - Turma = nome do curso → matricula automaticamente
 
 function normalizeHeader(h: string): string {
@@ -1145,6 +1208,14 @@ function generateCredentials(name: string, cpf: string): { email: string; passwo
     const password = `${randHex}${last4}${randSuffix}`;
 
     return { email, password };
+}
+
+function isValidEmailAddress(value: string): boolean {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) && value.length <= 254;
+}
+
+function isDeliverableEmailAddress(value: string): boolean {
+    return isValidEmailAddress(value) && !value.toLowerCase().endsWith('@alunos.com');
 }
 
 router.post('/upload-students-excel', authenticateToken, requireRole(['ADMIN']), uploadExcel.single('file'), async (req: Request, res: Response): Promise<void> => {
@@ -1198,6 +1269,7 @@ router.post('/upload-students-excel', authenticateToken, requireRole(['ADMIN']),
             else if (norm.includes('matricula')) headerMap['matricula'] = h;
             else if (norm.includes('turma') || norm.includes('curso')) headerMap['turma'] = h;
             else if (norm.includes('cpf')) headerMap['cpf'] = h;
+            else if (norm.includes('email')) headerMap['email'] = h;
         }
 
         if (!headerMap['aluno'] || !headerMap['cpf']) {
@@ -1213,7 +1285,9 @@ router.post('/upload-students-excel', authenticateToken, requireRole(['ADMIN']),
             const studentName = (row[headerMap['aluno']] || '').toString().trim();
             const cpf = (row[headerMap['cpf']] || '').toString().trim();
             if (!studentName || !cpf) return null;
-            return generateCredentials(studentName, cpf).email;
+            const suppliedEmail = headerMap['email'] ? (row[headerMap['email']] || '').toString().trim().toLowerCase() : '';
+            if (suppliedEmail && !isValidEmailAddress(suppliedEmail)) return null;
+            return suppliedEmail || generateCredentials(studentName, cpf).email;
         }).filter((e): e is string => e !== null);
 
         const existingUsers = await prisma.user.findMany({
@@ -1233,22 +1307,36 @@ router.post('/upload-students-excel', authenticateToken, requireRole(['ADMIN']),
 
         // Process rows — only create what's needed
         const usersToCreate: { name: string; email: string; username: string; password: string; role: 'STUDENT' }[] = [];
-        const credentialsMap = new Map<string, { name: string; password: string; turma: string }>();
+        const credentialsMap = new Map<string, { name: string; password: string; turma: string; isNew: boolean; deliverable: boolean }>();
 
         for (const row of rawRows) {
             const studentName = (row[headerMap['aluno']] || '').toString().trim();
             const cpf = (row[headerMap['cpf']] || '').toString().trim();
             const turma = headerMap['turma'] ? (row[headerMap['turma']] || '').toString().trim() : '';
+            const suppliedEmail = headerMap['email'] ? (row[headerMap['email']] || '').toString().trim().toLowerCase() : '';
 
             if (!studentName || !cpf) {
                 results.push({ name: studentName || '(vazio)', email: '', password: '', enrolled: [], error: 'Nome ou CPF em branco' });
                 continue;
             }
 
-            const { email, password } = generateCredentials(studentName, cpf);
-            credentialsMap.set(email, { name: studentName, password, turma });
+            if (suppliedEmail && !isValidEmailAddress(suppliedEmail)) {
+                results.push({ name: studentName, email: suppliedEmail, password: '', enrolled: [], error: 'E-mail inválido' });
+                continue;
+            }
 
-            if (!userByEmail.has(email)) {
+            const generated = generateCredentials(studentName, cpf);
+            const email = suppliedEmail || generated.email;
+            if (credentialsMap.has(email)) {
+                results.push({ name: studentName, email, password: '', enrolled: [], error: 'E-mail duplicado na planilha' });
+                continue;
+            }
+
+            const isNew = !userByEmail.has(email);
+            const password = isNew ? generated.password : '';
+            credentialsMap.set(email, { name: studentName, password, turma, isNew, deliverable: Boolean(suppliedEmail) });
+
+            if (isNew) {
                 const hashedPassword = await bcrypt.hash(password, 12);
                 usersToCreate.push({ name: studentName, email, username: email, password: hashedPassword, role: 'STUDENT' });
             }
@@ -1297,9 +1385,26 @@ router.post('/upload-students-excel', authenticateToken, requireRole(['ADMIN']),
             await prisma.courseEnrollment.createMany({ data: enrollmentsToCreate, skipDuplicates: true });
         }
 
+        const eligibleEmails = Array.from(credentialsMap.entries())
+            .filter(([, credentials]) => credentials.isNew && credentials.deliverable)
+            .map(([email, credentials]) => ({
+                to: email,
+                subject: `[${process.env.PLATFORM_NAME || 'EduVault'}] Acesso criado`,
+                message: `Olá, ${credentials.name}!\n\nSeu acesso foi criado.\nLogin: ${email}\nSenha temporária: ${credentials.password}\n\nPor segurança, altere sua senha no primeiro acesso.`
+            }));
+        const configured = isEmailConfigured();
+        const emailResult = configured
+            ? await sendBulkEmails(eligibleEmails)
+            : { attempted: 0, sent: 0, failed: 0 };
+
+        if (emailResult.failed > 0) {
+            logger.warn({ ...emailResult }, 'Parte dos e-mails da importação não foi entregue');
+        }
+
         res.json({
             message: `Importação concluída: ${results.filter(r => !r.error).length} de ${results.length} alunos processados.`,
-            results
+            results,
+            emailDelivery: { configured, eligible: eligibleEmails.length, ...emailResult }
         });
         await auditLog(req.user!.id, 'EXCEL_IMPORT', `${results.length} linhas`, `Importou planilha: ${results.filter(r => !r.error).length} OK, ${results.filter(r => r.error).length} erros`);
     } catch (error) {
@@ -1453,10 +1558,19 @@ router.post('/users/:id/reset-password', authenticateToken, requireRole(['ADMIN'
                 mustChangePassword: true,
                 tokenVersion: { increment: 1 }
             },
-            select: { id: true, email: true }
+            select: { id: true, email: true, name: true, username: true }
         });
+        const emailDelivery = await attemptEmailDelivery(() => sendResetPasswordEmail({
+            to: user.email,
+            studentName: user.name,
+            login: user.username || user.email,
+            password
+        }), { action: 'ADMIN_RESET_USER_PASSWORD', userId: id }, user.email);
         await auditLog(req.user!.id, 'ADMIN_RESET_USER_PASSWORD', id, `Redefiniu a senha de ${user.email} e exigiu troca no próximo acesso`);
-        res.json({ message: 'Senha redefinida. O usuário deverá trocá-la no próximo acesso.' });
+        res.json({
+            message: 'Senha redefinida. O usuário deverá trocá-la no próximo acesso.',
+            emailDelivery
+        });
     } catch (error) {
         logger.error({ error }, 'Erro ao redefinir senha do usuário');
         res.status(500).json({ message: 'Erro ao redefinir a senha.' });
@@ -1598,18 +1712,45 @@ router.post('/notifications', authenticateToken, requireRole(['ADMIN']), async (
             return;
         }
 
-        let targetIds: string[] = userIds;
-        if (!userIds || userIds.length === 0) {
-            // Broadcast para todos os alunos
-            const students = await prisma.user.findMany({ where: { role: 'STUDENT' }, select: { id: true } });
-            targetIds = students.map(s => s.id);
+        const targetUsers = await prisma.user.findMany({
+            where: Array.isArray(userIds) && userIds.length > 0
+                ? { id: { in: userIds } }
+                : { role: 'STUDENT' },
+            select: { id: true, name: true, email: true }
+        });
+        const targetIds = targetUsers.map(student => student.id);
+
+        if (targetIds.length === 0) {
+            res.status(400).json({ message: 'Nenhum aluno encontrado para receber a notificação.' });
+            return;
         }
 
         await prisma.notification.createMany({
             data: targetIds.map((uid: string) => ({ userId: uid, title, message }))
         });
 
-        res.status(201).json({ message: `Notificação enviada para ${targetIds.length} aluno(s).` });
+        const configured = isEmailConfigured();
+        const emailRecipients = targetUsers.filter(student => isDeliverableEmailAddress(student.email));
+        const emailResult = configured
+            ? await sendBulkEmails(emailRecipients.map(student => ({
+                to: student.email,
+                subject: `[${process.env.PLATFORM_NAME || 'EduVault'}] ${title}`,
+                message: `Olá, ${student.name}!\n\n${message}`
+            })))
+            : { attempted: 0, sent: 0, failed: 0 };
+
+        if (emailResult.failed > 0) {
+            logger.warn({ ...emailResult }, 'Parte dos e-mails de notificação não foi entregue');
+        }
+
+        const deliveryMessage = configured
+            ? ` E-mail: ${emailResult.sent} entregue(s), ${emailResult.failed} falha(s).`
+            : ' O aviso ficou disponível no painel; o SMTP ainda não está configurado.';
+        res.status(201).json({
+            message: `Notificação registrada para ${targetIds.length} aluno(s).${deliveryMessage}`,
+            recipients: targetIds.length,
+            emailDelivery: { configured, eligible: emailRecipients.length, ...emailResult }
+        });
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Erro ao enviar notificação.' });
