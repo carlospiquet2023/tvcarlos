@@ -78,6 +78,7 @@ export default function AdminDashboard() {
     const { config } = useConfig();
     const isTeacher = user?.role === 'TEACHER';
     const [activeTab, setActiveTab] = useState(isTeacher ? 'courses' : 'overview');
+    const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
     const [stats, setStats] = useState<StatsData | null>(null);
     const [users, setUsers] = useState<UserData[]>([]);
     const [courses, setCourses] = useState<CourseData[]>([]);
@@ -876,7 +877,7 @@ export default function AdminDashboard() {
 
     return (
         <>
-        <div className="admin-root">
+        <div className={`admin-root ${sidebarCollapsed ? 'admin-sidebar-collapsed' : ''}`}>
             <header className="admin-header admin-pro-header">
                 <div className="admin-header-brand">
                     {config.logoUrl ? (
@@ -887,7 +888,7 @@ export default function AdminDashboard() {
                         <span style={{ color: config.nameColor2 }}>{config.namePart2}</span>
                         <em>{isTeacher ? 'Professor' : 'Admin'}</em>
                     </h2>
-                    <button type="button" className="admin-menu-btn" aria-label="Alternar menu"><Menu size={20} /></button>
+                    <button type="button" className="admin-menu-btn" onClick={() => setSidebarCollapsed(value => !value)} aria-label={sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'} aria-expanded={!sidebarCollapsed}><Menu size={20} /></button>
                 </div>
 
                 {!isTeacher && (

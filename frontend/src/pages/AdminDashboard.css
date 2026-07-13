@@ -170,6 +170,9 @@
     .admin-pro-header { grid-template-columns: 216px minmax(220px, 1fr) auto; }
     .admin-root .admin-sidebar { width: 216px; min-width: 216px; }
     .admin-root .admin-main { width: calc(100% - 216px); padding: 1.1rem; }
+    .admin-header-brand { gap: .45rem; }
+    .admin-header-brand .admin-brand { font-size: .95rem; }
+    .admin-menu-btn { width: 32px; }
     .admin-overview { gap: .75rem; }
     .admin-overview-kpis { gap: .5rem; }
     .admin-overview-kpis article { padding: .72rem; }
@@ -225,4 +228,19 @@
     .admin-root .admin-main { padding-block: .85rem; }
     .admin-overview-welcome h1 { font-size: 1.15rem; }
     .admin-overview-kpis article { padding-block: .62rem; }
+}
+
+@media (min-width: 1025px) {
+    .admin-root.admin-sidebar-collapsed .admin-pro-header { grid-template-columns: 72px minmax(260px, 1fr) auto; }
+    .admin-root.admin-sidebar-collapsed .admin-header-brand { justify-content: center; }
+    .admin-root.admin-sidebar-collapsed .admin-header-brand > img,
+    .admin-root.admin-sidebar-collapsed .admin-header-brand > svg,
+    .admin-root.admin-sidebar-collapsed .admin-header-brand .admin-brand { display: none; }
+    .admin-root.admin-sidebar-collapsed .admin-menu-btn { margin: 0; }
+    .admin-root.admin-sidebar-collapsed .admin-sidebar { width: 72px; min-width: 72px; padding-inline: .55rem; }
+    .admin-root.admin-sidebar-collapsed .admin-sidebar-section-label { display: none; }
+    .admin-root.admin-sidebar-collapsed .admin-sidebar .admin-nav-btn { justify-content: center; padding-inline: .55rem; font-size: 0; }
+    .admin-root.admin-sidebar-collapsed .admin-sidebar .admin-nav-btn svg { width: 19px; flex-basis: 19px; }
+    .admin-root.admin-sidebar-collapsed .admin-sidebar .admin-nav-badge { position: absolute; margin: -21px 0 0 22px; font-size: .55rem; }
+    .admin-root.admin-sidebar-collapsed .admin-main { width: calc(100% - 72px); }
 }
