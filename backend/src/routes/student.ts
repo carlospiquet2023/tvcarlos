@@ -12,11 +12,16 @@
  */
 import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
-import type { ForumBan, ViolationSeverity } from '@prisma/client';
 import { authenticateToken, requireRole } from '../middleware/authMiddleware';
 import prisma from '../lib/prisma';
 import { checkProfanity } from '../lib/profanityFilter';
 import { calculateProgressUpdate } from '../services/progressPolicy';
+import { checkForumBan, recordForumViolation } from '../modules/forum/moderation';
+import {
+    attendanceDate,
+    hasScheduledClassOnLocalDate,
+    normalizeStudentLiveClass,
+} from '../modules/learning/liveClasses';
 
 const router = Router();
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -33,179 +38,74 @@ function generateCertificateCode(): string {
     return crypto.randomBytes(16).toString('hex').toUpperCase();
 }
 
-function detectMeetingProvider(url?: string | null): string {
-    if (!url) return 'CUSTOM';
-    try {
-        const host = new URL(url).hostname.toLowerCase();
-        if (host.includes('meet.google')) return 'GOOGLE_MEET';
-        if (host.includes('teams.microsoft')) return 'MICROSOFT_TEAMS';
-        if (host.includes('zoom.us')) return 'ZOOM';
-        if (host.includes('jitsi')) return 'JITSI';
-        if (host.includes('whereby')) return 'WHEREBY';
-        if (host.includes('bigbluebutton') || host.includes('bbb')) return 'BIGBLUEBUTTON';
-        return 'CUSTOM';
-    } catch {
-        return 'CUSTOM';
-    }
-}
-
-function normalizeStudentLiveClass(lc: {
-    provider?: string | null;
-    meetingJoinUrl?: string | null;
-    zoomJoinUrl?: string | null;
-}) {
-    const candidate = lc.meetingJoinUrl || lc.zoomJoinUrl || null;
-    let safeJoinUrl: string | null = null;
-    if (candidate) {
-        try {
-            const parsed = new URL(candidate);
-            const developmentHttp = process.env.NODE_ENV !== 'production'
-                && parsed.protocol === 'http:'
-                && ['localhost', '127.0.0.1', '::1'].includes(parsed.hostname);
-            if ((parsed.protocol === 'https:' || developmentHttp) && !parsed.username && !parsed.password) {
-                safeJoinUrl = parsed.toString();
-            }
-        } catch {
-            safeJoinUrl = null;
-        }
-    }
-    return {
-        ...lc,
-        provider: lc.provider && lc.provider !== 'CUSTOM'
-            ? lc.provider
-            : detectMeetingProvider(safeJoinUrl),
-        meetingJoinUrl: safeJoinUrl,
-        zoomJoinUrl: safeJoinUrl
-    };
-}
-
-type ForumBanStatus =
-    | { banned: true; ban: ForumBan }
-    | { banned: false; ban: null };
-
 function isIdentifier(value: unknown): value is string {
     return typeof value === 'string' && UUID_PATTERN.test(value);
 }
 
-const APP_TIMEZONE = (() => {
-    const configured = process.env.APP_TIMEZONE?.trim() || 'America/Sao_Paulo';
-    try {
-        new Intl.DateTimeFormat('en-US', { timeZone: configured }).format(new Date());
-        return configured;
-    } catch {
-        console.warn(`APP_TIMEZONE inválido (${configured}); usando America/Sao_Paulo.`);
-        return 'America/Sao_Paulo';
+const videoCourseSelect = {
+    module: { select: { courseId: true } },
+} as const;
+
+const studentLiveClassSelect = {
+    id: true,
+    title: true,
+    description: true,
+    startAt: true,
+    endAt: true,
+    status: true,
+    provider: true,
+    meetingJoinUrl: true,
+    zoomJoinUrl: true,
+    module: { select: { id: true, name: true } },
+} as const;
+
+const commentAuthorSelect = { id: true, name: true, role: true } as const;
+const commentFieldsSelect = {
+    id: true,
+    text: true,
+    flagged: true,
+    createdAt: true,
+    userId: true,
+    user: { select: commentAuthorSelect },
+    _count: { select: { reports: true } },
+} as const;
+
+async function hasCourseEnrollment(userId: string, courseId: string): Promise<boolean> {
+    const enrollment = await prisma.courseEnrollment.findUnique({
+        where: { userId_courseId: { userId, courseId } },
+        select: { id: true },
+    });
+    return enrollment !== null;
+}
+
+function studentEnrollmentWhere(userId: string) {
+    return { userId, enrollmentRole: 'STUDENT' as const };
+}
+
+async function requireQuizVideoAccess(userId: string, videoId: string, res: Response): Promise<boolean> {
+    const video = await prisma.video.findUnique({
+        where: { id: videoId },
+        select: videoCourseSelect,
+    });
+    if (!video) {
+        res.status(404).json({ message: 'Aula não encontrada.' });
+        return false;
     }
-})();
-
-function dateKeyInAppTimezone(date = new Date()): string {
-    const parts = new Intl.DateTimeFormat('en-US', {
-        timeZone: APP_TIMEZONE,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-    }).formatToParts(date);
-    const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? '';
-    return `${value('year')}-${value('month')}-${value('day')}`;
+    if (!await hasCourseEnrollment(userId, video.module.courseId)) {
+        res.status(403).json({ message: 'Acesso negado.' });
+        return false;
+    }
+    return true;
 }
 
-function attendanceDate(date = new Date()): Date {
-    return new Date(`${dateKeyInAppTimezone(date)}T00:00:00.000Z`);
-}
-
-async function hasScheduledClassOnLocalDate(moduleId: string, date: Date): Promise<boolean> {
-    const key = dateKeyInAppTimezone(date);
-    const [year, month, day] = key.split('-').map(Number);
-    const utcMidnight = Date.UTC(year, month - 1, day);
-    // All IANA offsets fit inside this window around the represented local day.
-    const candidates = await prisma.liveClass.findMany({
-        where: {
-            moduleId,
-            startAt: {
-                gte: new Date(utcMidnight - 14 * 60 * 60 * 1000),
-                lt: new Date(utcMidnight + 38 * 60 * 60 * 1000)
-            }
+function findActiveLiveClasses(courseId: string | { in: string[] }, includeCourse = false) {
+    return prisma.liveClass.findMany({
+        where: { courseId, status: { in: ['SCHEDULED', 'LIVE'] } },
+        orderBy: { startAt: 'asc' },
+        select: {
+            ...studentLiveClassSelect,
+            ...(includeCourse ? { course: { select: { id: true, name: true } } } : {}),
         },
-        select: { startAt: true },
-        take: 50
-    });
-    return candidates.some((liveClass) => dateKeyInAppTimezone(liveClass.startAt) === key);
-}
-
-async function checkForumBan(userId: string): Promise<ForumBanStatus> {
-    const now = new Date();
-    const activeBan = await prisma.forumBan.findFirst({
-        where: {
-            userId,
-            active: true,
-            OR: [{ expiresAt: null }, { expiresAt: { gt: now } }]
-        },
-        orderBy: { createdAt: 'desc' }
-    });
-
-    return activeBan ? { banned: true, ban: activeBan } : { banned: false, ban: null };
-}
-
-async function recordForumViolation(
-    userId: string,
-    severity: ViolationSeverity,
-    word: string,
-    messageText: string
-): Promise<{ action: string; message: string }> {
-    return prisma.$transaction(async (tx) => {
-        const [config, violationCount] = await Promise.all([
-            tx.platformConfig.findFirst({ select: { forumPunishmentEnabled: true } }),
-            tx.forumViolation.count({ where: { userId } })
-        ]);
-
-        const violationNumber = violationCount + 1;
-        let action = 'NONE';
-        let banType: 'TEMP_1D' | 'TEMP_2D' | 'TEMP_10D' | 'PERMANENT' | null = null;
-        let banDays: number | null = null;
-        let publicMessage = `Violação registrada: uso do termo "${word}". Sua mensagem foi bloqueada.`;
-
-        if (config?.forumPunishmentEnabled) {
-            if (severity === 'SEVERE') {
-                action = 'BAN_10D';
-                banType = 'TEMP_10D';
-                banDays = 10;
-                publicMessage = `Violação grave detectada. Seu acesso ao fórum foi suspenso por 10 dias. Você pode enviar um recurso pelo painel.`;
-            } else if (severity === 'MEDIUM' || violationNumber >= 4) {
-                if (violationNumber >= 5) {
-                    action = 'BAN_PERMANENT';
-                    banType = 'PERMANENT';
-                    publicMessage = `Seu acesso ao fórum foi suspenso por reincidência. Você pode enviar um recurso pelo painel.`;
-                } else {
-                    action = 'BAN_2D';
-                    banType = 'TEMP_2D';
-                    banDays = 2;
-                    publicMessage = `Violação detectada. Seu acesso ao fórum foi suspenso por 2 dias. Você pode enviar um recurso pelo painel.`;
-                }
-            } else if (violationNumber >= 3) {
-                action = 'BAN_1D';
-                banType = 'TEMP_1D';
-                banDays = 1;
-                publicMessage = `Terceira violação registrada. Seu acesso ao fórum foi suspenso por 1 dia. Você pode enviar um recurso pelo painel.`;
-            } else {
-                action = 'WARNING';
-                publicMessage = `Mensagem bloqueada por conteúdo inadequado. Esta é sua ${violationNumber}ª violação; reincidências podem suspender o fórum.`;
-            }
-        }
-
-        await tx.forumViolation.create({
-            data: { userId, word, severity, message: messageText, autoAction: action }
-        });
-
-        if (banType) {
-            const expiresAt = banDays
-                ? new Date(Date.now() + banDays * 24 * 60 * 60 * 1000)
-                : null;
-            await tx.forumBan.create({
-                data: { userId, reason: `Moderação automática (${severity})`, banType, expiresAt }
-            });
-        }
-
-        return { action, message: publicMessage };
     });
 }
 
@@ -222,7 +122,7 @@ router.get('/my-courses', async (req: Request, res: Response): Promise<void> => 
         const userId = req.user!.id;
 
         const enrollments = await prisma.courseEnrollment.findMany({
-            where: { userId, enrollmentRole: 'STUDENT' },
+            where: studentEnrollmentWhere(userId),
             select: {
                 course: {
                     select: {
@@ -333,7 +233,7 @@ router.get('/recommendations', async (req: Request, res: Response): Promise<void
         const userId = req.user!.id;
 
         const enrollments = await prisma.courseEnrollment.findMany({
-            where: { userId, enrollmentRole: 'STUDENT' },
+            where: studentEnrollmentWhere(userId),
             select: {
                 course: {
                     select: {
@@ -527,7 +427,7 @@ router.post('/progress', async (req: Request, res: Response): Promise<void> => {
             where: { id: videoId },
             select: {
                 durationSeconds: true,
-                module: { select: { courseId: true } }
+                ...videoCourseSelect,
             }
         });
 
@@ -536,11 +436,7 @@ router.post('/progress', async (req: Request, res: Response): Promise<void> => {
             return;
         }
 
-        const enrollment = await prisma.courseEnrollment.findUnique({
-            where: { userId_courseId: { userId, courseId: video.module.courseId } }
-        });
-
-        if (!enrollment) {
+        if (!await hasCourseEnrollment(userId, video.module.courseId)) {
             res.status(403).json({ message: 'Acesso negado. Você não está matriculado neste curso.' });
             return;
         }
@@ -618,10 +514,7 @@ router.get('/certificate/:courseId', async (req: Request, res: Response): Promis
         const courseId = req.params.courseId as string;
 
         // Valida matrícula
-        const enrollment = await prisma.courseEnrollment.findUnique({
-            where: { userId_courseId: { userId, courseId } }
-        });
-        if (!enrollment) {
+        if (!await hasCourseEnrollment(userId, courseId)) {
             res.status(403).json({ message: 'Acesso negado.' });
             return;
         }
@@ -708,25 +601,7 @@ router.get('/lesson/:videoId/quiz', async (req: Request, res: Response): Promise
         const userId = req.user!.id;
         const videoId = req.params.videoId as string;
 
-        const video = await prisma.video.findUnique({
-            where: { id: videoId },
-            select: {
-                module: { select: { courseId: true } }
-            }
-        });
-
-        if (!video) {
-            res.status(404).json({ message: 'Aula não encontrada.' });
-            return;
-        }
-
-        const enrollment = await prisma.courseEnrollment.findUnique({
-            where: { userId_courseId: { userId, courseId: video.module.courseId } }
-        });
-        if (!enrollment) {
-            res.status(403).json({ message: 'Acesso negado.' });
-            return;
-        }
+        if (!await requireQuizVideoAccess(userId, videoId, res)) return;
 
         const questions = await prisma.quizQuestion.findMany({
             where: { videoId, active: true },
@@ -756,24 +631,7 @@ router.post('/lesson/:videoId/quiz-attempt', async (req: Request, res: Response)
             return;
         }
 
-        const video = await prisma.video.findUnique({
-            where: { id: videoId },
-            select: {
-                module: { select: { courseId: true } }
-            }
-        });
-        if (!video) {
-            res.status(404).json({ message: 'Aula não encontrada.' });
-            return;
-        }
-
-        const enrollment = await prisma.courseEnrollment.findUnique({
-            where: { userId_courseId: { userId, courseId: video.module.courseId } }
-        });
-        if (!enrollment) {
-            res.status(403).json({ message: 'Acesso negado.' });
-            return;
-        }
+        if (!await requireQuizVideoAccess(userId, videoId, res)) return;
 
         const questions = await prisma.quizQuestion.findMany({
             where: { videoId, active: true }
@@ -881,33 +739,12 @@ router.get('/live-classes/:courseId', async (req: Request, res: Response): Promi
         const courseId = req.params.courseId as string;
 
         // Validate enrollment
-        const enrollment = await prisma.courseEnrollment.findUnique({
-            where: { userId_courseId: { userId, courseId } }
-        });
-        if (!enrollment) {
+        if (!await hasCourseEnrollment(userId, courseId)) {
             res.status(403).json({ message: 'Você não está matriculado neste curso.' });
             return;
         }
 
-        const liveClasses = await prisma.liveClass.findMany({
-            where: {
-                courseId,
-                status: { in: ['SCHEDULED', 'LIVE'] }
-            },
-            orderBy: { startAt: 'asc' },
-            select: {
-                id: true,
-                title: true,
-                description: true,
-                startAt: true,
-                endAt: true,
-                status: true,
-                provider: true,
-                meetingJoinUrl: true,
-                zoomJoinUrl: true,
-                module: { select: { id: true, name: true } }
-            }
-        });
+        const liveClasses = await findActiveLiveClasses(courseId);
 
         res.json(liveClasses.map((lc: any) => normalizeStudentLiveClass(lc)));
     } catch (error) {
@@ -922,31 +759,12 @@ router.get('/my-live-classes', async (req: Request, res: Response): Promise<void
         const userId = req.user!.id;
 
         const enrollments = await prisma.courseEnrollment.findMany({
-            where: { userId, enrollmentRole: 'STUDENT' },
+            where: studentEnrollmentWhere(userId),
             select: { courseId: true }
         });
         const courseIds = enrollments.map((e: any) => e.courseId);
 
-        const liveClasses = await prisma.liveClass.findMany({
-            where: {
-                courseId: { in: courseIds },
-                status: { in: ['SCHEDULED', 'LIVE'] }
-            },
-            orderBy: { startAt: 'asc' },
-            select: {
-                id: true,
-                title: true,
-                description: true,
-                startAt: true,
-                endAt: true,
-                status: true,
-                provider: true,
-                meetingJoinUrl: true,
-                zoomJoinUrl: true,
-                course: { select: { id: true, name: true } },
-                module: { select: { id: true, name: true } }
-            }
-        });
+        const liveClasses = await findActiveLiveClasses({ in: courseIds }, true);
 
         res.json(liveClasses.map((lc: any) => normalizeStudentLiveClass(lc)));
     } catch (error) {
@@ -983,18 +801,14 @@ router.get('/comments/:videoId', async (req: Request, res: Response): Promise<vo
 
         const video = await prisma.video.findUnique({
             where: { id: videoId },
-            select: { commentsEnabled: true, module: { select: { courseId: true } } }
+            select: { commentsEnabled: true, ...videoCourseSelect }
         });
         if (!video) {
             res.status(404).json({ message: 'Aula não encontrada.' });
             return;
         }
 
-        const enrollment = await prisma.courseEnrollment.findUnique({
-            where: { userId_courseId: { userId, courseId: video.module.courseId } },
-            select: { id: true }
-        });
-        if (!enrollment) {
+        if (!await hasCourseEnrollment(userId, video.module.courseId)) {
             res.status(403).json({ message: 'Acesso negado.' });
             return;
         }
@@ -1014,26 +828,12 @@ router.get('/comments/:videoId', async (req: Request, res: Response): Promise<vo
             orderBy: { createdAt: 'desc' },
             take: 100,
             select: {
-                id: true,
-                text: true,
-                flagged: true,
-                createdAt: true,
-                userId: true,
-                user: { select: { id: true, name: true, role: true } },
+                ...commentFieldsSelect,
                 replies: {
                     orderBy: { createdAt: 'asc' },
                     take: 100,
-                    select: {
-                        id: true,
-                        text: true,
-                        flagged: true,
-                        createdAt: true,
-                        userId: true,
-                        user: { select: { id: true, name: true, role: true } },
-                        _count: { select: { reports: true } }
-                    }
+                    select: commentFieldsSelect,
                 },
-                _count: { select: { reports: true } }
             }
         });
 
@@ -1086,7 +886,7 @@ router.post('/comments', async (req: Request, res: Response): Promise<void> => {
 
         const video = await prisma.video.findUnique({
             where: { id: videoId },
-            select: { commentsEnabled: true, module: { select: { courseId: true } } }
+            select: { commentsEnabled: true, ...videoCourseSelect }
         });
         if (!video) {
             res.status(404).json({ message: 'Aula não encontrada.' });
@@ -1097,11 +897,7 @@ router.post('/comments', async (req: Request, res: Response): Promise<void> => {
             return;
         }
 
-        const enrollment = await prisma.courseEnrollment.findUnique({
-            where: { userId_courseId: { userId, courseId: video.module.courseId } },
-            select: { id: true }
-        });
-        if (!enrollment) {
+        if (!await hasCourseEnrollment(userId, video.module.courseId)) {
             res.status(403).json({ message: 'Acesso negado.' });
             return;
         }

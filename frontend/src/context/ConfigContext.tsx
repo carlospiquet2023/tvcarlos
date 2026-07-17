@@ -1,7 +1,8 @@
 import React, { createContext, useState, useEffect, useContext, useCallback } from 'react';
 import axios from 'axios';
+import { API_BASE_URL } from '../lib/urls';
 
-interface PlatformConfig {
+export interface PlatformConfig {
     appTimezone: string;
     platformName: string;
     namePart1: string;
@@ -42,8 +43,6 @@ const ConfigContext = createContext<ConfigContextType>({
     setConfig: () => { },
     refreshConfig: async () => { }
 });
-
-const API_BASE_URL = import.meta.env.VITE_API_URL?.trim() || '';
 
 /**
  * Converte hex (#rrggbb) para { r, g, b }

@@ -17,12 +17,7 @@ import { Lock, User, Loader2, ShieldCheck } from 'lucide-react';
 import { motion } from 'framer-motion';
 import axios from 'axios';
 import api from '../lib/api';
-
-const API_BASE = import.meta.env.VITE_API_URL?.trim() || '';
-
-function assetUrl(value: string): string {
-    return /^https?:\/\//i.test(value) ? value : `${API_BASE}${value}`;
-}
+import { resolveMediaUrl } from '../lib/urls';
 
 export default function Login() {
     const [login, setLogin] = useState('');
@@ -74,7 +69,7 @@ export default function Login() {
             >
                 <div className="login-header">
                     {config.logoUrl ? (
-                        <img src={assetUrl(config.logoUrl)} alt={config.platformName} className="login-logo-img" />
+                        <img src={resolveMediaUrl(config.logoUrl)} alt={config.platformName} className="login-logo-img" />
                     ) : (
                         <ShieldCheck size={48} className="logo-icon" />
                     )}

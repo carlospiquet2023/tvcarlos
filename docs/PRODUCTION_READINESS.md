@@ -2,6 +2,10 @@
 
 “Produção” é um estado verificável, não uma aparência. Uma versão só pode ser promovida quando todos os itens aplicáveis possuem responsável, data e evidência.
 
+## Evidência da release atual
+
+A execução local controlada de 16/07/2026 está registrada em `docs/RELEASE_READINESS_2026-07-16.md`. Ela autoriza publicação e implantação em **staging**. Homologação no ambiente público, pentest independente e os demais controles organizacionais abaixo continuam sendo pré-requisitos para o go-live de produção.
+
 ## Gates automatizados
 
 - `npm run quality` aprovado.

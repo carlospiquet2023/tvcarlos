@@ -5,6 +5,22 @@ import { uploadVideo, validateUploadedVideo, removeUploadedFile } from '../middl
 import { uploadFileToStorage } from '../lib/storage';
 import prisma from '../lib/prisma';
 import logger from '../lib/logger';
+import { asyncHandler as asyncRoute, HttpError } from '../lib/http';
+import { createInputValidator } from '../lib/validation';
+
+const BroadcastHttpError = HttpError;
+const broadcastInput = createInputValidator(
+    (_issue, message) => new HttpError(400, message),
+);
+const {
+    requireObject,
+    rejectUnknownKeys,
+    requiredText,
+    nullableText,
+    requiredUuid,
+    optionalUuid,
+    enumValue,
+} = broadcastInput;
 
 export const publicBroadcastRouter = Router();
 export const adminBroadcastRouter = Router();
@@ -557,10 +573,6 @@ function safeEqual(left: string, right: string): boolean {
     return timingSafeEqual(leftHash, rightHash);
 }
 
-function asyncRoute(handler: (req: Request, res: Response) => Promise<unknown>): RequestHandler {
-    return (req, res, next) => { void Promise.resolve(handler(req, res)).catch(next); };
-}
-
 for (const targetRouter of [publicBroadcastRouter, adminBroadcastRouter, internalBroadcastRouter]) {
     targetRouter.use((error: unknown, req: Request, res: Response, next: NextFunction) => {
         if (res.headersSent) return next(error);
@@ -571,49 +583,6 @@ for (const targetRouter of [publicBroadcastRouter, adminBroadcastRouter, interna
         logger.error({ err: error, requestId: req.id }, 'Unhandled broadcast route error');
         res.status(500).json({ code: 'BROADCAST_INTERNAL_ERROR', message: 'Nao foi possivel concluir a operacao do Campus ao vivo.' });
     });
-}
-
-class BroadcastHttpError extends Error {
-    constructor(public readonly statusCode: number, public readonly safeMessage: string) {
-        super(safeMessage);
-    }
-}
-
-function requireObject(value: unknown): Record<string, unknown> {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) {
-        throw new BroadcastHttpError(400, 'Envie um objeto JSON valido.');
-    }
-    return value as Record<string, unknown>;
-}
-
-function rejectUnknownKeys(object: Record<string, unknown>, allowed: string[]) {
-    const unknown = Object.keys(object).filter((key) => !allowed.includes(key));
-    if (unknown.length) throw new BroadcastHttpError(400, `Campos nao reconhecidos: ${unknown.join(', ')}.`);
-}
-
-function requiredText(value: unknown, field: string, maximum: number): string {
-    if (typeof value !== 'string' || !value.trim()) throw new BroadcastHttpError(400, `${field} e obrigatorio.`);
-    const text = value.trim();
-    if (text.length > maximum) throw new BroadcastHttpError(400, `${field} excede ${maximum} caracteres.`);
-    return text;
-}
-
-function nullableText(value: unknown, field: string, maximum: number): string | null {
-    if (value === undefined || value === null || value === '') return null;
-    return requiredText(value, field, maximum);
-}
-
-function requiredUuid(value: unknown, field: string): string {
-    const text = requiredText(Array.isArray(value) ? value[0] : value, field, 64);
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(text)) {
-        throw new BroadcastHttpError(400, `${field} deve ser um UUID valido.`);
-    }
-    return text;
-}
-
-function optionalUuid(value: unknown, field: string): string | undefined {
-    if (value === undefined || value === null || value === '') return undefined;
-    return requiredUuid(value, field);
 }
 
 function integerValue(value: unknown, field: string, minimum: number, maximum: number): number {
@@ -628,13 +597,6 @@ function booleanValue(value: unknown, field: string): boolean {
     if (value === undefined) return true;
     if (typeof value !== 'boolean') throw new BroadcastHttpError(400, `${field} deve ser booleano.`);
     return value;
-}
-
-function enumValue<const T extends readonly string[]>(value: unknown, field: string, allowed: T): T[number] {
-    if (typeof value !== 'string' || !allowed.includes(value.toUpperCase())) {
-        throw new BroadcastHttpError(400, `${field} deve ser um de: ${allowed.join(', ')}.`);
-    }
-    return value.toUpperCase() as T[number];
 }
 
 function colorValue(value: unknown, field: string): string {

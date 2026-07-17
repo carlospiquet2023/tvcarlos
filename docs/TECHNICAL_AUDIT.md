@@ -1,118 +1,90 @@
-# Auditoria técnica e arquitetura-alvo
+# Auditoria técnica
 
-Data-base: 12/07/2026. Escopo: código, dados, segurança, desempenho, infraestrutura, UX, IA e operação do repositório. Este documento registra evidências técnicas; não substitui pentest, DPIA/RIPD, homologação de acessibilidade nem certificação independente.
+Data-base: 16/07/2026. Escopo: código, persistência, segurança, testes, frontend, infraestrutura e documentação. Esta auditoria registra evidência do repositório; não substitui pentest, RIPD/DPIA, teste de carga, restore drill ou homologação de acessibilidade.
 
-## Resumo executivo
+## Resumo
 
-O produto possui uma base aproveitável: React e Node em TypeScript estrito, PostgreSQL/Prisma, autenticação HttpOnly com CSRF, RBAC, revogação de sessão, processamento assíncrono de vídeo, logs Pino, Docker, health checks, testes e documentação operacional. A estratégia correta é evolução modular, não reescrita total.
+A plataforma adota monólito modular com processos separados para API, worker de vídeo e broadcast. A base possui controles maduros de sessão, mídia e operação, mas continua em uma migração incremental dos antigos arquivos grandes para módulos de domínio.
 
-Na entrada da auditoria, os bloqueadores eram: 34 erros de lint; tipagem desativada no maior componente; biblioteca `xlsx` com vulnerabilidades altas; senhas de salas privadas em texto puro e expostas pela API; ausência da tabela `PrivateRoom` na migração inicial; design parcialmente escuro e inconsistente; fonte externa; health check com serviço fictício; ausência de CI/CodeQL/Dependabot no repositório.
+Não existe nota “10/10” comprovável apenas por refatoração. O repositório pode eliminar riscos estruturais; segurança, escala e disponibilidade exigem evidência externa e operação real.
 
-Os bloqueadores acima foram corrigidos nesta etapa. Testes automatizados, builds, lint e auditorias de dependência passam localmente. A liberação comercial ainda depende dos gates externos descritos em `PRODUCTION_READINESS.md`.
+## Evolução verificada nesta refatoração
 
-## O que deve ser mantido
+- aplicação Express separada do bootstrap e importável sem abrir porta;
+- worker pg-boss/FFmpeg com entrypoint próprio e sem servidor HTTP;
+- boundary comum para erro HTTP, async handlers e validação;
+- importação Excel movida para caso de uso transacional e testável;
+- políticas de aulas ao vivo e moderação extraídas de `student.ts`;
+- chamada e notas movidas para serviços acadêmicos transacionais;
+- setup, bootstrap e insights escolares em serviços de domínio;
+- FKs compostas, checks e triggers protegem novas escritas nas relações institucionais cobertas;
+- escopo opcional de campus passou a ser aplicado na autorização;
+- painel administrativo decomposto por `features/admin`, com componentes e tipos por responsabilidade;
+- URL base e resolução de mídia centralizadas no frontend;
+- testes frontend adicionados e integrados ao quality gate;
+- Docker Compose, PM2 e Supervisor separam API e worker;
+- documentação de arquitetura, tenancy e testes reescrita;
+- alegações de capacidade sem evidência e credencial padrão foram removidas.
 
-- Stack TypeScript, React/Vite, Express, Prisma e PostgreSQL.
-- Modelo relacional, constraints, índices e exclusões em cascata já existentes.
-- Sessão por cookie HttpOnly, proteção CSRF, RBAC e `tokenVersion`.
-- Fila pg-boss e pipeline FFmpeg/HLS.
-- Storage local/R2, Docker multi-stage, Nginx e probes.
-- Módulos de cursos, aulas, presença, avaliações, certificados, comentários, broadcast e tutor de IA.
-- Testes de autenticação, sessão, progresso, mídia, broadcast e IA.
+## Avaliação atual
 
-## O que precisa ser refatorado, sem reescrita big-bang
+| Área | Antes | Estado após refatoração | Evidência ainda necessária |
+|---|---:|---:|---|
+| Infraestrutura e deploy | 8 | 9 | build/scan da imagem e deploy canário |
+| Segurança | 8 | 9 | pentest, threat model e exercício de incidente |
+| Modelagem e persistência | 7 | 9 | aplicar/auditar migration em cópia anonimizada |
+| Organização backend | 5 | 8 | terminar decomposição de `admin.ts` e `student.ts` |
+| Organização frontend | 4 | 8 | concluir hooks de consulta e adicionar design system |
+| Testabilidade | 5 | 9 | E2E das jornadas críticas, carga e restore drill |
+| Documentação | 6 | 9 | revisão operacional após staging |
 
-| Prioridade | Módulo | Evidência | Direção |
-|---|---|---|---|
-| P0 | `AdminDashboard.tsx` | ~174 KB e múltiplos domínios | Extrair páginas por domínio, hooks de consulta e contratos de API |
-| P0 | `routes/admin.ts` | ~80 KB e dezenas de handlers | Separar controller/service/repository por domínio |
-| P0 | `routes/student.ts` | ~55 KB e tipagem Prisma apagada por `any` | Criar serviços de progresso, presença, fórum e certificados |
-| P1 | `index.css` | ~100 KB e estilos históricos sobrepostos | Tokens + componentes e CSS por feature |
-| P1 | erros HTTP | Vários `try/catch` duplicados | `AppError`, validação de entrada e middleware único |
-| P1 | auditoria | Cobertura parcial de ações mutáveis | Taxonomia, before/after, requestId, ator e retenção |
-| P1 | front-end | Sem suíte automatizada | Vitest/Testing Library e Playwright para jornadas críticas |
-| P2 | contratos | Tipos duplicados entre API e SPA | OpenAPI e geração de tipos/client |
+As notas são uma leitura técnica interna, não certificação.
 
-## Mapa de dependências
+## Pontos fortes
 
-```text
-Browser/PWA
-  -> Nginx/TLS
-     -> React/Vite (UI, design system, acessibilidade)
-     -> Express API
-        -> autenticação/RBAC/CSRF
-        -> serviços de domínio
-           -> Prisma -> PostgreSQL
-           -> pg-boss -> FFmpeg -> HLS/storage
-           -> SMTP
-           -> Groq (IA, opcional e degradável)
-           -> R2/S3 (opcional; fallback local)
-Broadcast: OBS/loop -> RTMP Nginx -> HLS -> Campus Live
-Operação: health/readiness + logs JSON + Uptime Kuma + backups
-```
+- TypeScript estrito, React/Vite, Express, Prisma e PostgreSQL;
+- cookies HttpOnly, CSRF, JWT fixo, expiração e revogação por `tokenVersion`;
+- RBAC global e autorização institucional/campus;
+- validação de upload e proteção de HLS/PDF;
+- pg-boss e FFmpeg isolados do processo HTTP em produção;
+- logs estruturados, request ID, health/readiness e graceful shutdown;
+- migrations versionadas e testadas em PostgreSQL vazio, com 12 cenários reais de integridade e multitenancy;
+- CI, CodeQL, Dependabot, lint, testes, build e auditoria de dependências;
+- documentação de SLO, incidentes, LGPD e governança de IA.
 
-Dependências críticas são PostgreSQL, filesystem/storage e JWT secret. IA, SMTP, R2 e broadcast precisam falhar de forma isolada sem derrubar cursos, autenticação ou progresso.
+## Débito estrutural restante
 
-## Código duplicado e fragilidade
+| Prioridade | Evidência | Próxima ação |
+|---|---|---|
+| P1 | `routes/admin.ts` ainda agrega catálogo, mídia e comunicação | continuar extração incremental para routers/serviços próprios |
+| P1 | `AdminDashboard.tsx` permanece como container de orquestração extenso | mover consultas/mutações para hooks por feature |
+| P1 | `routes/student.ts` mantém múltiplas jornadas | continuar extração de certificados, quiz e comentários |
+| P1 | `schoolRouter.ts` ainda é fachada extensa | dividir routers por organização, turma, diário e família |
+| P1 | ausência de E2E de navegador | cobrir login, matrícula, aula, chamada, nota e responsável |
+| P1 | migration tenant ainda não aplicada em base legada | seguir rollout de `DATA_AND_TENANCY.md` |
+| P2 | tipos frontend/backend manuais | gerar cliente/tipos pelo OpenAPI |
+| P2 | CSS e estilos inline históricos | consolidar tokens e componentes acessíveis |
 
-- Handlers administrativos e estudantis repetem autenticação declarativa, `try/catch`, mensagens e logs.
-- Tipos de curso, vídeo, usuário e paginação ainda são definidos localmente.
-- Cores e superfícies foram historicamente repetidas; a nova camada clara centraliza tokens, mas a remoção do legado deve continuar por feature.
-- CRUDs repetem validação manual. Adotar schemas de entrada compartilhados reduz divergência.
-- Chamadas remotas no painel repetem estados de loading/error. Adotar uma camada de queries com cache e invalidação.
+## Decisão de domínio pendente
 
-## Banco de dados
+O sistema escolar usa `SchoolOrganization` como tenant. O catálogo LMS usa `Course` global e pode ser ligado opcionalmente a uma turma. Antes de vender isolamento completo de conteúdo por instituição, é necessário decidir entre catálogo global, ownership direto ou publicação/licenciamento por organização. Consulte `docs/architecture/ADR-002-COURSE-OWNERSHIP.md`.
 
-Pontos fortes: UUIDs, unicidade de matrícula/progresso/certificado, relações explícitas, índices nos caminhos principais e trilha de edição de presença.
+## Segurança e privacidade
 
-Próximas melhorias:
+Controles presentes reduzem risco técnico, mas liberação com dados reais continua condicionada a:
 
-- Criar migrações pequenas e sempre validadas contra PostgreSQL vazio no CI.
-- Adicionar índices compostos somente após `EXPLAIN ANALYZE` em dados representativos.
-- Definir retenção/anonimização para mensagens de IA, logs, notificações e dados de alunos.
-- Separar identificadores legais/educacionais de credenciais; nunca derivar login apenas do nome em escala multi-instituição.
-- Planejar tenant/escola antes de vender SaaS multi-rede; hoje o modelo representa uma instalação/organização.
+- pentest independente e reteste;
+- inventário de dados e RIPD/DPIA;
+- retenção e descarte aprovados;
+- backup cifrado e restauração cronometrada;
+- secret manager, MFA operacional e menor privilégio;
+- revisão de logs e canais de direitos do titular;
+- governança humana do uso de IA.
 
-## Segurança e LGPD
+## Escala
 
-Controles presentes: Helmet, CORS restrito, rate limit, CSRF, cookies seguros, JWT com algoritmo fixo, expiração, revogação, bcrypt 12, validação de upload, proteção de HLS/PDF e redaction de logs. PDFs protegidos não são publicados em `R2_PUBLIC_URL`; CDN de material privado exige adapter com URL assinada.
+O repositório não promete quantidade fixa de usuários simultâneos. A aprovação depende de perfil de carga, bitrate, catálogo, hardware, pool de banco, egress, p95/p99 e taxa de erro. Múltiplas réplicas exigem storage de objetos, rate limit compartilhado e migration executada por job único.
 
-Pendências externas obrigatórias: pentest independente, threat model revisado, inventário de dados, RIPD/DPIA, contrato operador-controlador, canal do titular, política de retenção, teste de restauração, gestão de vulnerabilidades e resposta a incidentes exercitada.
+## Critério de conclusão
 
-## Desempenho e infraestrutura
-
-Build possui code splitting por rota. O vendor de vídeo é grande (~697 KB bruto), mas está isolado. Antes de prometer capacidade, executar k6 com dados e mídia equivalentes à produção, medir p95/p99, banco, egress e concorrência HLS. O autoscaling da API não resolve gargalo de storage/transcoding.
-
-Docker de produção usa containers restritos, health checks e volumes. A meta é separar API, worker, banco gerenciado, storage de objetos e CDN conforme crescimento.
-
-## Arquitetura proposta
-
-```text
-frontend/src/
-  app/             # bootstrap, rotas, providers
-  design-system/   # tokens e componentes acessíveis
-  features/        # auth, courses, lessons, attendance, admin, ai, broadcast
-  shared/          # client HTTP, contratos, utilitários
-
-backend/src/
-  app/             # servidor, middleware, observabilidade
-  modules/
-    auth|users|courses|lessons|attendance|forum|certificates|ai|broadcast/
-      controller.ts service.ts repository.ts schemas.ts
-  shared/          # erros, auditoria, storage, filas
-```
-
-Manter um monólito modular agora. Microserviços só quando houver evidência de escalabilidade, ownership separado ou isolamento operacional necessário.
-
-## Cronograma técnico sugerido
-
-| Fase | Duração | Resultado |
-|---|---:|---|
-| Fundação concluída nesta etapa | 1 ciclo | segurança crítica, tema claro, tipagem, CI, migração e auditoria |
-| Modularização P0 | 3–5 semanas | admin/student por domínio, validação e OpenAPI |
-| Qualidade de jornada | 2–3 semanas | testes front-end/E2E, acessibilidade WCAG/eMAG e UX research |
-| LGPD e operação | 2–4 semanas | RIPD, retenção, restore drill, alertas e runbooks testados |
-| Homologação | 2–3 semanas | carga, pentest, correções, piloto e aceite |
-| Evolução de mercado | contínua | multi-instituição, integrações e analytics com governança |
-
-Prazo é estimativa para equipe multidisciplinar e depende de escopo, integrações e evidências do piloto.
+O código está pronto para staging quando o quality gate passa e a migration é aplicada em banco descartável. Produção permanece `no-go` enquanto qualquer gate aplicável de `docs/PRODUCTION_READINESS.md` estiver sem responsável e evidência.

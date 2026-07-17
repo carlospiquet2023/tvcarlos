@@ -1,4 +1,5 @@
 import { Router, type NextFunction, type Request, type RequestHandler, type Response } from 'express';
+import type { Prisma } from '@prisma/client';
 import { authenticateToken, requireRole } from '../middleware/authMiddleware';
 import prisma from '../lib/prisma';
 import logger from '../lib/logger';
@@ -8,9 +9,30 @@ import {
     PerUserRateLimiter,
     SAFE_AI_UNAVAILABLE_MESSAGE,
 } from '../services/ai/aiSupport';
+import { asyncHandler as asyncRoute, HttpError } from '../lib/http';
+import { createInputValidator } from '../lib/validation';
+
+const aiInput = createInputValidator(
+    (issue, message) => new HttpError(400, message, issue),
+);
+const {
+    requireObject,
+    rejectUnknownKeys,
+    requiredText,
+    optionalText,
+    nullableText,
+    requiredUuid,
+    optionalUuid,
+    enumValue,
+} = aiInput;
 
 const router = Router();
 const groq = new GroqClient();
+const conversationSummaryInclude = {
+    course: { select: { id: true, name: true } },
+    lesson: { select: { id: true, title: true } },
+    _count: { select: { messages: true } },
+} as const;
 const messageLimiter = new PerUserRateLimiter(
     boundedEnvironmentInteger('AI_RATE_LIMIT_MAX', 20, 1, 200),
     boundedEnvironmentInteger('AI_RATE_LIMIT_WINDOW_MS', 15 * 60_000, 10_000, 24 * 60 * 60_000),
@@ -88,11 +110,7 @@ router.get('/bootstrap', asyncRoute(async (req, res) => {
             where: { userId },
             orderBy: { updatedAt: 'desc' },
             take: 12,
-            include: {
-                course: { select: { id: true, name: true } },
-                lesson: { select: { id: true, title: true } },
-                _count: { select: { messages: true } },
-            },
+            include: conversationSummaryInclude,
         }),
     ]);
 
@@ -132,11 +150,7 @@ router.get('/conversations', asyncRoute(async (req, res) => {
         },
         orderBy: { updatedAt: 'desc' },
         take: limit,
-        include: {
-            course: { select: { id: true, name: true } },
-            lesson: { select: { id: true, title: true } },
-            _count: { select: { messages: true } },
-        },
+        include: conversationSummaryInclude,
     });
     res.json({ conversations, items: conversations });
 }));
@@ -151,11 +165,7 @@ router.post('/conversations', asyncRoute(async (req, res) => {
             lessonId: context.lessonId,
             title: input.title,
         },
-        include: {
-            course: { select: { id: true, name: true } },
-            lesson: { select: { id: true, title: true } },
-            _count: { select: { messages: true } },
-        },
+        include: conversationSummaryInclude,
     });
     res.status(201).json({ conversation });
 }));
@@ -180,7 +190,7 @@ router.get('/conversations/:id/history', asyncRoute(async (req, res) => {
 router.delete('/conversations/:id', asyncRoute(async (req, res) => {
     const id = requiredUuid(req.params.id, 'id');
     const result = await prisma.aiConversation.deleteMany({ where: { id, userId: req.user!.id } });
-    if (result.count === 0) throw new HttpError(404, 'CONVERSATION_NOT_FOUND', 'Conversa nao encontrada.');
+    if (result.count === 0) throw new HttpError(404, 'Conversa nao encontrada.', 'CONVERSATION_NOT_FOUND');
     res.status(204).send();
 }));
 
@@ -221,13 +231,13 @@ async function handleChat(req: Request, res: Response): Promise<void> {
         });
     } else {
         if (conversation.status !== 'ACTIVE') {
-            throw new HttpError(409, 'CONVERSATION_ARCHIVED', 'Esta conversa esta arquivada.');
+            throw new HttpError(409, 'Esta conversa esta arquivada.', 'CONVERSATION_ARCHIVED');
         }
         if (input.courseId && conversation.courseId !== input.courseId) {
-            throw new HttpError(400, 'CONTEXT_MISMATCH', 'O curso informado nao pertence a conversa.');
+            throw new HttpError(400, 'O curso informado nao pertence a conversa.', 'CONTEXT_MISMATCH');
         }
         if (input.lessonId && conversation.lessonId !== input.lessonId) {
-            throw new HttpError(400, 'CONTEXT_MISMATCH', 'A aula informada nao pertence a conversa.');
+            throw new HttpError(400, 'A aula informada nao pertence a conversa.', 'CONTEXT_MISMATCH');
         }
         await resolveStudentContext(req.user!.id, conversation.courseId ?? undefined, conversation.lessonId ?? undefined);
     }
@@ -271,20 +281,18 @@ async function handleChat(req: Request, res: Response): Promise<void> {
     try {
         const result = await groq.chat(messages);
         const persisted = await prisma.$transaction(async (transaction) => {
-            await transaction.aiMessage.create({
-                data: { conversationId: conversation!.id, role: 'USER', content: input.message },
-            });
-            const assistantMessage = await transaction.aiMessage.create({
-                data: {
-                    conversationId: conversation!.id,
-                    role: 'ASSISTANT',
-                    content: result.content,
-                    model: result.model,
-                    promptTokens: result.promptTokens,
-                    completionTokens: result.completionTokens,
-                    latencyMs: result.latencyMs,
+            const assistantMessage = await createConversationExchange(
+                transaction,
+                conversation!.id,
+                input.message,
+                {
+                content: result.content,
+                model: result.model,
+                promptTokens: result.promptTokens,
+                completionTokens: result.completionTokens,
+                latencyMs: result.latencyMs,
                 },
-            });
+            );
             const updatedConversation = await transaction.aiConversation.update({
                 where: { id: conversation!.id },
                 data: {
@@ -308,18 +316,16 @@ async function handleChat(req: Request, res: Response): Promise<void> {
         if (!(error instanceof AiProviderError)) throw error;
         const status = groq.status();
         const persisted = await prisma.$transaction(async (transaction) => {
-            await transaction.aiMessage.create({
-                data: { conversationId: conversation!.id, role: 'USER', content: input.message },
-            });
-            const assistantMessage = await transaction.aiMessage.create({
-                data: {
-                    conversationId: conversation!.id,
-                    role: 'ASSISTANT',
+            const assistantMessage = await createConversationExchange(
+                transaction,
+                conversation!.id,
+                input.message,
+                {
                     content: SAFE_AI_UNAVAILABLE_MESSAGE,
                     model: status.selectedModel,
                     errorCode: error.code,
                 },
-            });
+            );
             await transaction.aiConversation.update({
                 where: { id: conversation!.id },
                 data: { lastMessageAt: new Date(), model: status.selectedModel },
@@ -343,12 +349,37 @@ const conversationInclude = {
     _count: { select: { messages: true } },
 } as const;
 
+function createConversationMessage(
+    transaction: Prisma.TransactionClient,
+    data: Prisma.AiMessageUncheckedCreateInput,
+) {
+    return transaction.aiMessage.create({ data });
+}
+
+async function createConversationExchange(
+    transaction: Prisma.TransactionClient,
+    conversationId: string,
+    userContent: string,
+    assistant: Omit<Prisma.AiMessageUncheckedCreateInput, 'conversationId' | 'role'>,
+) {
+    await createConversationMessage(transaction, {
+        conversationId,
+        role: 'USER',
+        content: userContent,
+    });
+    return createConversationMessage(transaction, {
+        conversationId,
+        role: 'ASSISTANT',
+        ...assistant,
+    });
+}
+
 async function ownedConversation(userId: string, id: string) {
     const conversation = await prisma.aiConversation.findFirst({
         where: { id, userId },
         include: conversationInclude,
     });
-    if (!conversation) throw new HttpError(404, 'CONVERSATION_NOT_FOUND', 'Conversa nao encontrada.');
+    if (!conversation) throw new HttpError(404, 'Conversa nao encontrada.', 'CONVERSATION_NOT_FOUND');
     return conversation;
 }
 
@@ -365,15 +396,15 @@ async function resolveStudentContext(userId: string, requestedCourseId?: string,
                 module: { select: { course: { select: { id: true, name: true } } } },
             },
         });
-        if (!lesson) throw new HttpError(404, 'LESSON_NOT_FOUND', 'Aula nao encontrada.');
+        if (!lesson) throw new HttpError(404, 'Aula nao encontrada.', 'LESSON_NOT_FOUND');
         if (courseId && courseId !== lesson.module.course.id) {
-            throw new HttpError(400, 'CONTEXT_MISMATCH', 'A aula nao pertence ao curso informado.');
+            throw new HttpError(400, 'A aula nao pertence ao curso informado.', 'CONTEXT_MISMATCH');
         }
         courseId = lesson.module.course.id;
         course = lesson.module.course;
     } else if (courseId) {
         course = await prisma.course.findUnique({ where: { id: courseId }, select: { id: true, name: true } });
-        if (!course) throw new HttpError(404, 'COURSE_NOT_FOUND', 'Curso nao encontrado.');
+        if (!course) throw new HttpError(404, 'Curso nao encontrado.', 'COURSE_NOT_FOUND');
     }
 
     if (courseId) {
@@ -381,7 +412,7 @@ async function resolveStudentContext(userId: string, requestedCourseId?: string,
             where: { userId_courseId: { userId, courseId } },
             select: { id: true },
         });
-        if (!enrollment) throw new HttpError(403, 'ENROLLMENT_REQUIRED', 'Voce nao esta matriculado neste curso.');
+        if (!enrollment) throw new HttpError(403, 'Voce nao esta matriculado neste curso.', 'ENROLLMENT_REQUIRED');
     }
 
     return { courseId: courseId ?? null, lessonId: lessonId ?? null, course };
@@ -502,12 +533,6 @@ function requireStudent(req: Request, res: Response, next: NextFunction): void {
     next();
 }
 
-function asyncRoute(handler: (req: Request, res: Response) => Promise<unknown>): RequestHandler {
-    return (req, res, next) => {
-        void Promise.resolve(handler(req, res)).catch(next);
-    };
-}
-
 router.use((error: unknown, req: Request, res: Response, next: NextFunction) => {
     if (res.headersSent) return next(error);
     if (error instanceof HttpError) {
@@ -521,66 +546,6 @@ router.use((error: unknown, req: Request, res: Response, next: NextFunction) => 
     logger.error({ err: error, requestId: req.id }, 'Unhandled AI route error');
     res.status(500).json({ code: 'AI_INTERNAL_ERROR', message: 'Nao foi possivel concluir a operacao do professor de IA.' });
 });
-
-class HttpError extends Error {
-    constructor(
-        public readonly statusCode: number,
-        public readonly code: string,
-        public readonly safeMessage: string,
-    ) {
-        super(code);
-    }
-}
-
-function requireObject(value: unknown): Record<string, unknown> {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) {
-        throw new HttpError(400, 'INVALID_INPUT', 'Envie um objeto JSON valido.');
-    }
-    return value as Record<string, unknown>;
-}
-
-function rejectUnknownKeys(object: Record<string, unknown>, allowed: string[]) {
-    const unknown = Object.keys(object).filter((key) => !allowed.includes(key));
-    if (unknown.length) throw new HttpError(400, 'UNKNOWN_FIELDS', `Campos nao reconhecidos: ${unknown.join(', ')}.`);
-}
-
-function requiredText(value: unknown, field: string, maximum: number): string {
-    if (typeof value !== 'string' || !value.trim()) {
-        throw new HttpError(400, 'INVALID_INPUT', `${field} e obrigatorio.`);
-    }
-    const text = value.trim();
-    if (text.length > maximum) throw new HttpError(400, 'INVALID_INPUT', `${field} excede ${maximum} caracteres.`);
-    return text;
-}
-
-function optionalText(value: unknown, field: string, maximum: number): string | undefined {
-    if (value === undefined || value === null || value === '') return undefined;
-    return requiredText(value, field, maximum);
-}
-
-function nullableText(value: unknown, field: string, maximum: number): string | null {
-    return optionalText(value, field, maximum) ?? null;
-}
-
-function enumValue<const T extends readonly string[]>(value: unknown, field: string, allowed: T): T[number] {
-    if (typeof value !== 'string' || !allowed.includes(value.toUpperCase())) {
-        throw new HttpError(400, 'INVALID_INPUT', `${field} deve ser um de: ${allowed.join(', ')}.`);
-    }
-    return value.toUpperCase() as T[number];
-}
-
-function requiredUuid(value: unknown, field: string): string {
-    const text = requiredText(Array.isArray(value) ? value[0] : value, field, 64);
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(text)) {
-        throw new HttpError(400, 'INVALID_INPUT', `${field} deve ser um UUID valido.`);
-    }
-    return text;
-}
-
-function optionalUuid(value: unknown, field: string): string | undefined {
-    if (value === undefined || value === null || value === '') return undefined;
-    return requiredUuid(value, field);
-}
 
 function boundedQueryInteger(value: unknown, fallback: number, minimum: number, maximum: number): number {
     const parsed = Number(Array.isArray(value) ? value[0] : value);

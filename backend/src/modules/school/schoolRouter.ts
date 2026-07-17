@@ -13,7 +13,6 @@ import {
 } from '@prisma/client';
 import prisma from '../../lib/prisma';
 import logger from '../../lib/logger';
-import { calculateStudentRisk } from './analytics';
 import { authenticateToken } from '../../middleware/authMiddleware';
 import {
     SCHOOL_MANAGEMENT_ROLES,
@@ -34,10 +33,24 @@ import {
     integer,
     oneOf,
     optionalText,
-    slug,
     text,
     uuid,
 } from './validation';
+import {
+    assessmentForGradeEntry,
+    saveAssessmentGrades,
+    saveClassAttendance,
+} from './academicRecords';
+import { assertOpenAcademicPeriod } from './academicPolicy';
+import {
+    assertTermsDoNotOverlap,
+    getSchoolBootstrap,
+    setupSchoolOrganization,
+} from './schoolOrganizationService';
+import {
+    getSchoolDataQuality,
+    getStudentRiskAnalytics,
+} from './schoolInsightsService';
 
 const router = Router();
 const asyncHandler = (handler: (req: Request, res: Response) => Promise<void>) =>
@@ -61,88 +74,13 @@ router.get('/organizations', asyncHandler(async (req, res) => {
 }));
 
 router.post('/organizations/setup', asyncHandler(async (req, res) => {
-    if (req.user!.role !== 'ADMIN') throw new SchoolApiError(403, 'Somente administrador global pode criar instituições.');
-    const body = bodyOf(req);
-    const organizationName = text(body.name, 'name', 160);
-    const organizationSlug = slug(body.slug);
-    const campusInput = asObject(body.campus, 'campus');
-    const yearInput = asObject(body.academicYear, 'academicYear');
-    const startDate = dateOnly(yearInput.startDate, 'academicYear.startDate');
-    const endDate = dateOnly(yearInput.endDate, 'academicYear.endDate');
-    assertDateRange(startDate, endDate, 'ano letivo');
-    const terms = arrayOf(yearInput.terms, 'academicYear.terms', 12).map((raw, index) => {
-        const item = asObject(raw, `terms.${index}`);
-        const termStart = dateOnly(item.startDate, `terms.${index}.startDate`);
-        const termEnd = dateOnly(item.endDate, `terms.${index}.endDate`);
-        assertDateRange(termStart, termEnd, `período ${index + 1}`);
-        if (termStart < startDate || termEnd > endDate) throw new SchoolApiError(400, 'Período fora do ano letivo.');
-        return { name: text(item.name, `terms.${index}.name`, 80), order: index + 1, startDate: termStart, endDate: termEnd };
-    });
-    if (!terms.length) throw new SchoolApiError(400, 'Informe ao menos um período letivo.');
-    assertTermsDoNotOverlap(terms);
-
-    const organization = await prisma.$transaction(async (tx) => {
-        const created = await tx.schoolOrganization.create({
-            data: {
-                name: organizationName,
-                slug: organizationSlug,
-                legalName: optionalText(body.legalName, 'legalName', 200),
-                inepCode: optionalText(body.inepCode, 'inepCode', 20),
-                timezone: optionalText(body.timezone, 'timezone', 80) || 'America/Sao_Paulo',
-                status: 'ACTIVE',
-                memberships: { create: { userId: req.user!.id, role: 'ORGANIZATION_ADMIN' } },
-                campuses: {
-                    create: {
-                        code: text(campusInput.code, 'campus.code', 40).toUpperCase(),
-                        name: text(campusInput.name, 'campus.name', 160),
-                        inepCode: optionalText(campusInput.inepCode, 'campus.inepCode', 20),
-                        email: optionalText(campusInput.email, 'campus.email', 200),
-                        phone: optionalText(campusInput.phone, 'campus.phone', 40),
-                    }
-                },
-                academicYears: {
-                    create: {
-                        name: text(yearInput.name, 'academicYear.name', 80),
-                        startDate,
-                        endDate,
-                        status: 'ACTIVE',
-                        terms: { create: terms }
-                    }
-                }
-            },
-            select: { id: true, slug: true, name: true }
-        });
-        await audit(tx, req.user!.id, 'SCHOOL_SETUP', created.id, created.slug);
-        return created;
-    });
+    const organization = await setupSchoolOrganization(req.user!, bodyOf(req));
     res.status(201).json({ data: organization });
 }));
 
 router.get('/organizations/:organizationId/bootstrap', asyncHandler(async (req, res) => {
     const organizationId = uuid(req.params.organizationId, 'organizationId');
-    await requireOrganizationAccess(req.user!, organizationId);
-    const organization = await prisma.schoolOrganization.findUnique({
-        where: { id: organizationId },
-        include: {
-            campuses: { orderBy: { name: 'asc' } },
-            academicYears: { include: { terms: { orderBy: { order: 'asc' } } }, orderBy: { startDate: 'desc' } },
-            subjects: { where: { active: true }, orderBy: { name: 'asc' } },
-            classes: {
-                include: {
-                    campus: { select: { id: true, name: true } },
-                    academicYear: { select: { id: true, name: true, status: true } },
-                    _count: { select: { enrollments: true, offerings: true } }
-                },
-                orderBy: [{ academicYear: { startDate: 'desc' } }, { name: 'asc' }]
-            },
-            memberships: {
-                where: { active: true },
-                include: { user: { select: { id: true, name: true, email: true, role: true } }, campus: { select: { id: true, name: true } } },
-                orderBy: { user: { name: 'asc' } }
-            }
-        }
-    });
-    if (!organization) throw new SchoolApiError(404, 'Instituição não encontrada.');
+    const organization = await getSchoolBootstrap(req.user!, organizationId);
     res.json({ data: organization });
 }));
 
@@ -162,91 +100,14 @@ router.get('/organizations/:organizationId/overview', asyncHandler(async (req, r
 
 router.get('/organizations/:organizationId/data-quality', asyncHandler(async (req, res) => {
     const organizationId = uuid(req.params.organizationId, 'organizationId');
-    await requireOrganizationAccess(req.user!, organizationId, SCHOOL_MANAGEMENT_ROLES);
-    const organization = await prisma.schoolOrganization.findUnique({ where: { id: organizationId }, select: { inepCode: true } });
-    if (!organization) throw new SchoolApiError(404, 'Instituição não encontrada.');
-    const [campuses, classes, enrollments, offerings, subjects, studentsWithGuardian] = await Promise.all([
-        prisma.schoolCampus.findMany({ where: { organizationId, active: true }, select: { id: true, inepCode: true } }),
-        prisma.schoolClass.findMany({ where: { organizationId, active: true }, select: { id: true, educationStage: true, gradeLevel: true, _count: { select: { offerings: true } } } }),
-        prisma.schoolEnrollment.findMany({ where: { organizationId, status: 'ACTIVE' }, select: { studentId: true, enrollmentCode: true } }),
-        prisma.subjectOffering.findMany({ where: { organizationId, active: true }, select: { id: true, teacherId: true, weeklyMinutes: true } }),
-        prisma.schoolSubject.findMany({ where: { organizationId, active: true }, select: { id: true, workloadMinutes: true } }),
-        prisma.guardianLink.findMany({
-            where: { student: { schoolEnrollments: { some: { organizationId, status: 'ACTIVE' } } } },
-            distinct: ['studentId'], select: { studentId: true }
-        }),
-    ]);
-    const guardianIds = new Set(studentsWithGuardian.map((item) => item.studentId));
-    const checks = [
-        qualityCheck('INEP_INSTITUTION', 'Código INEP da instituição', organization.inepCode ? 1 : 0, 1, 'critical'),
-        qualityCheck('INEP_CAMPUSES', 'Código INEP das unidades', campuses.filter((item) => item.inepCode).length, campuses.length, 'critical'),
-        qualityCheck('CLASS_STAGE', 'Etapa de ensino nas turmas', classes.filter((item) => item.educationStage && item.gradeLevel).length, classes.length, 'high'),
-        qualityCheck('ENROLLMENT_CODE', 'Código de matrícula dos estudantes', enrollments.filter((item) => item.enrollmentCode).length, enrollments.length, 'critical'),
-        qualityCheck('GUARDIAN_LINK', 'Vínculo de responsável', enrollments.filter((item) => guardianIds.has(item.studentId)).length, enrollments.length, 'high'),
-        qualityCheck('CLASS_OFFERINGS', 'Matriz curricular nas turmas', classes.filter((item) => item._count.offerings > 0).length, classes.length, 'critical'),
-        qualityCheck('OFFERING_TEACHER', 'Docente atribuído às disciplinas', offerings.filter((item) => item.teacherId).length, offerings.length, 'high'),
-        qualityCheck('OFFERING_WORKLOAD', 'Carga semanal das disciplinas', offerings.filter((item) => item.weeklyMinutes > 0).length, offerings.length, 'medium'),
-        qualityCheck('SUBJECT_WORKLOAD', 'Carga total do currículo', subjects.filter((item) => item.workloadMinutes > 0).length, subjects.length, 'medium'),
-    ];
-    const score = checks.length ? Math.round(checks.reduce((sum, item) => sum + item.coveragePercent, 0) / checks.length) : 0;
-    res.json({ data: { score, generatedAt: new Date().toISOString(), checks } });
+    const report = await getSchoolDataQuality(req.user!, organizationId);
+    res.json({ data: report });
 }));
 
 router.get('/organizations/:organizationId/analytics/student-risk', asyncHandler(async (req, res) => {
     const organizationId = uuid(req.params.organizationId, 'organizationId');
-    await requireOrganizationAccess(req.user!, organizationId, [
-        'ORGANIZATION_ADMIN', 'PRINCIPAL', 'COORDINATOR', 'COUNSELOR'
-    ]);
-    const activeEnrollments = await prisma.schoolEnrollment.findMany({
-        where: { organizationId, status: 'ACTIVE' },
-        include: {
-            schoolClass: { select: { id: true, name: true, gradeLevel: true, campus: { select: { id: true, name: true } } } },
-            student: {
-                select: {
-                    id: true, name: true,
-                    classAttendance: {
-                        where: { session: { offering: { organizationId } } },
-                        select: { status: true, session: { select: { date: true } } },
-                        orderBy: { session: { date: 'desc' } }, take: 60,
-                    },
-                    assessmentGrades: {
-                        where: { status: 'PUBLISHED', score: { not: null }, assessment: { published: true, offering: { organizationId } } },
-                        select: { score: true, assessment: { select: { maxScore: true } } },
-                        orderBy: { gradedAt: 'desc' }, take: 30,
-                    },
-                    studentInterventions: {
-                        where: { organizationId, status: { in: ['OPEN', 'IN_PROGRESS', 'MONITORING'] } },
-                        select: { id: true, riskLevel: true, status: true, title: true }, take: 10,
-                    }
-                }
-            }
-        },
-        orderBy: { student: { name: 'asc' } }
-    });
-
-    const students = activeEnrollments.map((enrollment) => {
-        const attendance = enrollment.student.classAttendance;
-        const validGrades = enrollment.student.assessmentGrades.filter((item) => item.score !== null && item.assessment.maxScore > 0);
-        const interventions = enrollment.student.studentInterventions;
-        const risk = calculateStudentRisk({
-            attendanceStatuses: attendance.map((item) => item.status),
-            grades: validGrades.map((item) => ({ score: item.score, maxScore: item.assessment.maxScore })),
-            openInterventions: interventions.length,
-        });
-        return {
-            student: { id: enrollment.student.id, name: enrollment.student.name },
-            schoolClass: enrollment.schoolClass,
-            ...risk,
-        };
-    }).sort((left, right) => right.score - left.score);
-    await prisma.auditLog.create({ data: { userId: req.user!.id, action: 'STUDENT_RISK_VIEW', target: organizationId, details: `${students.length} estudantes avaliados` } });
-    res.json({
-        data: {
-            generatedAt: new Date().toISOString(),
-            policy: 'Indicador explicável de apoio. Não decide aprovação, sanção, diagnóstico ou desligamento.',
-            students,
-        }
-    });
+    const analytics = await getStudentRiskAnalytics(req.user!, organizationId);
+    res.json({ data: analytics });
 }));
 
 router.get('/integrations/oneroster/v1p2/organizations/:organizationId/roster', asyncHandler(async (req, res) => {
@@ -715,13 +576,6 @@ router.post('/offerings/:offeringId/sessions', asyncHandler(async (req, res) => 
 
 router.put('/sessions/:sessionId/attendance', asyncHandler(async (req, res) => {
     const sessionId = uuid(req.params.sessionId, 'sessionId');
-    const session = await prisma.classSession.findUnique({
-        where: { id: sessionId },
-        select: { offeringId: true, term: { select: { status: true } }, offering: { select: { schoolClassId: true, organizationId: true } } }
-    });
-    if (!session) throw new SchoolApiError(404, 'Sessão não encontrada.');
-    assertOpenAcademicPeriod(session.term.status);
-    await requireOfferingAccess(req.user!, session.offeringId);
     const body = bodyOf(req);
     const records = arrayOf(body.records, 'records', 500).map((raw, index) => {
         const item = asObject(raw, `records.${index}`);
@@ -732,25 +586,7 @@ router.put('/sessions/:sessionId/attendance', asyncHandler(async (req, res) => {
             justification: optionalText(item.justification, `records.${index}.justification`, 2_000),
         };
     });
-    assertUniqueStudents(records.map((item) => item.studentId));
-    const enrolled = await prisma.schoolEnrollment.findMany({
-        where: { schoolClassId: session.offering.schoolClassId, studentId: { in: records.map((item) => item.studentId) }, status: 'ACTIVE' },
-        select: { studentId: true }
-    });
-    const enrolledIds = new Set(enrolled.map((item) => item.studentId));
-    if (records.some((item) => !enrolledIds.has(item.studentId))) throw new SchoolApiError(400, 'Há estudante sem matrícula ativa na turma.');
-    await prisma.$transaction(async (tx) => {
-        for (const record of records) {
-            await tx.classAttendanceRecord.upsert({
-                where: { sessionId_studentId: { sessionId, studentId: record.studentId } },
-                create: { sessionId, ...record },
-                update: { status: record.status, minutesPresent: record.minutesPresent, justification: record.justification }
-            });
-        }
-        await tx.classSession.update({ where: { id: sessionId }, data: { status: 'COMPLETED' } });
-        await audit(tx, req.user!.id, 'CLASS_ATTENDANCE_BULK', sessionId, `${session.offering.organizationId}:${records.length}`);
-    });
-    res.json({ data: { sessionId, processed: records.length } });
+    res.json({ data: await saveClassAttendance(req.user!, sessionId, records) });
 }));
 
 router.post('/offerings/:offeringId/assessments', asyncHandler(async (req, res) => {
@@ -778,13 +614,7 @@ router.post('/offerings/:offeringId/assessments', asyncHandler(async (req, res) 
 
 router.put('/assessments/:assessmentId/grades', asyncHandler(async (req, res) => {
     const assessmentId = uuid(req.params.assessmentId, 'assessmentId');
-    const assessment = await prisma.assessment.findUnique({
-        where: { id: assessmentId },
-        select: { maxScore: true, offeringId: true, term: { select: { status: true } }, offering: { select: { schoolClassId: true, organizationId: true } } }
-    });
-    if (!assessment) throw new SchoolApiError(404, 'Avaliação não encontrada.');
-    assertOpenAcademicPeriod(assessment.term.status);
-    await requireOfferingAccess(req.user!, assessment.offeringId);
+    const assessment = await assessmentForGradeEntry(req.user!, assessmentId);
     const body = bodyOf(req);
     const grades = arrayOf(body.grades, 'grades', 500).map((raw, index) => {
         const item = asObject(raw, `grades.${index}`);
@@ -795,22 +625,7 @@ router.put('/assessments/:assessmentId/grades', asyncHandler(async (req, res) =>
             status: item.status ? oneOf(item.status, `grades.${index}.status`, Object.values(GradeEntryStatus)) : 'DRAFT' as GradeEntryStatus,
         };
     });
-    assertUniqueStudents(grades.map((item) => item.studentId));
-    const enrolledCount = await prisma.schoolEnrollment.count({
-        where: { schoolClassId: assessment.offering.schoolClassId, studentId: { in: grades.map((item) => item.studentId) }, status: 'ACTIVE' }
-    });
-    if (enrolledCount !== new Set(grades.map((item) => item.studentId)).size) throw new SchoolApiError(400, 'Há estudante sem matrícula ativa na turma.');
-    await prisma.$transaction(async (tx) => {
-        for (const grade of grades) {
-            await tx.assessmentGrade.upsert({
-                where: { assessmentId_studentId: { assessmentId, studentId: grade.studentId } },
-                create: { assessmentId, ...grade, gradedAt: grade.status === 'PUBLISHED' ? new Date() : null },
-                update: { score: grade.score, feedback: grade.feedback, status: grade.status, gradedAt: grade.status === 'PUBLISHED' ? new Date() : null }
-            });
-        }
-        await audit(tx, req.user!.id, 'ASSESSMENT_GRADES_BULK', assessmentId, `${assessment.offering.organizationId}:${grades.length}`);
-    });
-    res.json({ data: { assessmentId, processed: grades.length } });
+    res.json({ data: await saveAssessmentGrades(req.user!, assessmentId, assessment, grades) });
 }));
 
 router.post('/organizations/:organizationId/competencies', asyncHandler(async (req, res) => {
@@ -1071,36 +886,10 @@ async function assertTermForOffering(termId: string, offeringId: string) {
     assertOpenAcademicPeriod(match.status);
 }
 
-function assertOpenAcademicPeriod(status: string) {
-    if (status === 'CLOSED' || status === 'ARCHIVED') {
-        throw new SchoolApiError(409, 'O período letivo está fechado. Reabertura formal é necessária para alterar registros.');
-    }
-}
-
 async function assertClassOrganization(id: string, organizationId: string) {
     if (!await prisma.schoolClass.findFirst({ where: { id, organizationId }, select: { id: true } })) {
         throw new SchoolApiError(404, 'Turma não encontrada nesta instituição.');
     }
-}
-
-function assertTermsDoNotOverlap(terms: Array<{ startDate: Date; endDate: Date }>) {
-    const sorted = [...terms].sort((left, right) => left.startDate.getTime() - right.startDate.getTime());
-    for (let index = 1; index < sorted.length; index += 1) {
-        if (sorted[index].startDate.getTime() <= sorted[index - 1].endDate.getTime()) {
-            throw new SchoolApiError(400, 'Períodos letivos não podem se sobrepor.');
-        }
-    }
-}
-
-function assertUniqueStudents(studentIds: string[]) {
-    if (new Set(studentIds).size !== studentIds.length) {
-        throw new SchoolApiError(400, 'O lote contém estudante duplicado.');
-    }
-}
-
-function qualityCheck(code: string, label: string, complete: number, total: number, severity: string) {
-    const coveragePercent = total === 0 ? 100 : Math.round(complete / total * 100);
-    return { code, label, severity, complete, total, missing: Math.max(0, total - complete), coveragePercent };
 }
 
 function oneRosterUser(person: { id: string; name: string; email: string; username?: string | null }, role: string, orgId: string, now: string) {

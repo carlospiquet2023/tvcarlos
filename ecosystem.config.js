@@ -8,9 +8,7 @@
  *   pm2 logs                    (logs agregados)
  *   pm2 reload eduvault-api     (zero-downtime restart)
  *
- * IMPORTANTE: Apenas 1 instância deve rodar o pg-boss worker.
- * As demais instâncias apenas servem HTTP.
- * O env PGBOSS_WORKER=true controla qual instância roda o worker.
+ * A API e o worker possuem entrypoints distintos. O worker nunca abre HTTP.
  *
  * LOG ROTATION (instalar após primeiro deploy):
  *   pm2 install pm2-logrotate
@@ -24,7 +22,7 @@ module.exports = {
     apps: [
         {
             name: 'eduvault-api',
-            script: 'dist/server.js',
+            script: 'dist/src/main.js',
             cwd: './backend',
             instances: 'max',           // 1 processo por core
             exec_mode: 'cluster',       // Cluster mode = multi-core
@@ -47,14 +45,13 @@ module.exports = {
         },
         {
             name: 'eduvault-worker',
-            script: 'dist/server.js',
+            script: 'dist/src/worker.js',
             cwd: './backend',
             instances: 1,               // APENAS 1 worker pg-boss
             exec_mode: 'fork',
             max_memory_restart: '1G',   // Worker processa FFmpeg, precisa de mais RAM
             env: {
                 NODE_ENV: 'production',
-                PGBOSS_WORKER: 'true',  // Flag para este processo rodar o worker
             },
             error_file: './logs/worker-err.log',
             out_file: './logs/worker-out.log',

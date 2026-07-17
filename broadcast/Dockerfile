@@ -1,6 +1,7 @@
 FROM alpine:3.22
 
-RUN apk add --no-cache nginx nginx-mod-rtmp \
+RUN apk upgrade --no-cache \
+    && apk add --no-cache nginx nginx-mod-rtmp \
     && mkdir -p /var/cache/nginx/hls \
     && chown -R nginx:nginx /var/cache/nginx
 

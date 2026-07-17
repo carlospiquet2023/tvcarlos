@@ -44,7 +44,9 @@ RUN chmod 0555 ./docker-entrypoint.sh \
       /app/uploads/hls \
       /app/uploads/images \
       /app/uploads/pdfs \
-    && chown -R node:node /app/uploads
+    && chown -R node:node /app/uploads \
+    && rm -rf /usr/local/lib/node_modules/npm \
+    && rm -f /usr/local/bin/npm /usr/local/bin/npx
 
 USER node
 
