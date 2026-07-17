@@ -1,5 +1,6 @@
 import axios from 'axios';
 import api from './api';
+import { resolveMediaUrl } from './urls';
 
 export type BroadcastMode = 'live' | 'loop' | 'offline' | 'program';
 export type BroadcastMediaKind = 'hls' | 'video' | 'youtube' | 'external';
@@ -73,8 +74,6 @@ export interface BroadcastSelection {
 
 type JsonRecord = Record<string, unknown>;
 
-const API_BASE = import.meta.env.VITE_API_URL?.trim() || '';
-
 function record(value: unknown): JsonRecord {
     return typeof value === 'object' && value !== null && !Array.isArray(value)
         ? value as JsonRecord
@@ -102,11 +101,7 @@ function nullableDate(value: unknown): string | null {
     return typeof value === 'string' && value ? value : null;
 }
 
-export function absoluteMediaUrl(value: string): string {
-    if (!value) return '';
-    if (/^(https?:|blob:|data:)/i.test(value)) return value;
-    return `${API_BASE}${value.startsWith('/') ? value : `/${value}`}`;
-}
+export const absoluteMediaUrl = resolveMediaUrl;
 
 export function mediaKind(url: string): BroadcastMediaKind {
     if (/youtu(?:\.be|be\.com)|youtube-nocookie\.com/i.test(url)) return 'youtube';

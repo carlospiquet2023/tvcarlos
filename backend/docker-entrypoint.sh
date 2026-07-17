@@ -38,23 +38,37 @@ case "$MIGRATION_MODE" in
     ;;
 esac
 
-echo "[backend] aguardando banco e aplicando schema em modo $MIGRATION_MODE..."
+if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then
+  echo "[backend] aguardando banco e aplicando schema em modo $MIGRATION_MODE..."
 
-attempt=0
-until schema_command; do
-  attempt=$((attempt + 1))
-  if [ "$attempt" -ge 30 ]; then
-    echo "[backend] falha de conexao/migracao apos 30 tentativas"
-    exit 1
+  attempt=0
+  until schema_command; do
+    attempt=$((attempt + 1))
+    if [ "$attempt" -ge 30 ]; then
+      echo "[backend] falha de conexao/migracao apos 30 tentativas"
+      exit 1
+    fi
+    echo "[backend] banco indisponivel ou migracao pendente de correcao, tentativa $attempt/30..."
+    sleep 3
+  done
+
+  if [ "${SEED_ON_START:-false}" = "true" ]; then
+    echo "[backend] executando seed inicial..."
+    node dist/prisma/seed.js
   fi
-  echo "[backend] banco indisponivel ou migracao pendente de correcao, tentativa $attempt/30..."
-  sleep 3
-done
-
-if [ "${SEED_ON_START:-false}" = "true" ]; then
-  echo "[backend] executando seed inicial..."
-  node dist/prisma/seed.js
 fi
 
-echo "[backend] iniciando API"
-exec node dist/src/server.js
+case "${PROCESS_ROLE:-api}" in
+  api)
+    echo "[backend] iniciando API"
+    exec node dist/src/main.js
+    ;;
+  worker)
+    echo "[backend] iniciando worker de video"
+    exec node dist/src/worker.js
+    ;;
+  *)
+    echo "[backend] PROCESS_ROLE invalido: ${PROCESS_ROLE:-} (api ou worker)"
+    exit 1
+    ;;
+esac

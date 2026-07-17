@@ -805,6 +805,8 @@ model SchoolCampus {
   updatedAt      DateTime           @updatedAt
 
   @@unique([organizationId, code])
+  // Enables tenant-safe composite foreign keys from organization-scoped records.
+  @@unique([id, organizationId])
   @@index([organizationId, active])
   @@index([inepCode])
 }
@@ -842,6 +844,8 @@ model AcademicYear {
   updatedAt      DateTime             @updatedAt
 
   @@unique([organizationId, name])
+  // Enables tenant-safe composite foreign keys from organization-scoped records.
+  @@unique([id, organizationId])
   @@index([organizationId, status])
   @@index([startDate, endDate])
 }
@@ -880,6 +884,8 @@ model SchoolSubject {
   updatedAt       DateTime           @updatedAt
 
   @@unique([organizationId, code])
+  // Enables tenant-safe composite foreign keys from organization-scoped records.
+  @@unique([id, organizationId])
   @@index([organizationId, active])
 }
 
@@ -887,9 +893,9 @@ model SchoolClass {
   id             String             @id @default(uuid())
   organization   SchoolOrganization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   organizationId String
-  campus         SchoolCampus       @relation(fields: [campusId], references: [id], onDelete: Cascade)
+  campus         SchoolCampus       @relation(fields: [campusId, organizationId], references: [id, organizationId], onDelete: Cascade)
   campusId       String
-  academicYear   AcademicYear       @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  academicYear   AcademicYear       @relation(fields: [academicYearId, organizationId], references: [id, organizationId], onDelete: Cascade)
   academicYearId String
   course         Course?            @relation(fields: [courseId], references: [id], onDelete: SetNull)
   courseId       String?
@@ -908,6 +914,8 @@ model SchoolClass {
   updatedAt      DateTime           @updatedAt
 
   @@unique([organizationId, academicYearId, code])
+  // Enables tenant-safe composite foreign keys from dependent school records.
+  @@unique([id, organizationId])
   @@index([organizationId, active])
   @@index([campusId, academicYearId])
 }
@@ -916,7 +924,7 @@ model SchoolEnrollment {
   id             String                 @id @default(uuid())
   organization   SchoolOrganization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   organizationId String
-  schoolClass    SchoolClass            @relation(fields: [schoolClassId], references: [id], onDelete: Cascade)
+  schoolClass    SchoolClass            @relation(fields: [schoolClassId, organizationId], references: [id, organizationId], onDelete: Cascade)
   schoolClassId  String
   student        User                   @relation("StudentSchoolEnrollments", fields: [studentId], references: [id], onDelete: Cascade)
   studentId      String
@@ -930,6 +938,7 @@ model SchoolEnrollment {
 
   @@unique([schoolClassId, studentId])
   @@index([organizationId, status])
+  @@index([organizationId, studentId, status])
   @@index([studentId, status])
   @@index([enrollmentCode])
 }
@@ -956,9 +965,9 @@ model SubjectOffering {
   id                String             @id @default(uuid())
   organization      SchoolOrganization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   organizationId    String
-  schoolClass       SchoolClass        @relation(fields: [schoolClassId], references: [id], onDelete: Cascade)
+  schoolClass       SchoolClass        @relation(fields: [schoolClassId, organizationId], references: [id, organizationId], onDelete: Cascade)
   schoolClassId     String
-  subject           SchoolSubject      @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  subject           SchoolSubject      @relation(fields: [subjectId, organizationId], references: [id, organizationId], onDelete: Restrict)
   subjectId         String
   teacher           User?              @relation("OfferingTeacher", fields: [teacherId], references: [id], onDelete: SetNull)
   teacherId         String?

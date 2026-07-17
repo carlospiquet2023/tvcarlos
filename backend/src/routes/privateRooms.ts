@@ -1,26 +1,33 @@
-import { Router, Request, Response, NextFunction } from 'express';
+import { Router, Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import { authenticateToken, requireRole } from '../middleware/authMiddleware';
 import prisma from '../lib/prisma';
 import logger from '../lib/logger';
+import { asyncHandler } from '../lib/http';
+import { createInputValidator } from '../lib/validation';
 
-export const asyncRoute = (fn: (req: Request, res: Response, next: NextFunction) => Promise<unknown>) =>
-    (req: Request, res: Response, next: NextFunction) => {
-        Promise.resolve(fn(req, res, next)).catch(next);
-    };
+export const asyncRoute = asyncHandler;
+
+const privateRoomInput = createInputValidator(
+    (_issue, message) => invalidInput(message),
+    {
+        messages: {
+            required: (field) => `Missing or invalid ${field}`,
+            uuid: (field) => `Missing or invalid UUID ${field}`,
+        },
+        uuidPattern: /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+        uuidMaximum: null,
+        unwrapArrays: false,
+    },
+);
 
 export const requiredString = (value: unknown, name: string) => {
-    if (typeof value !== 'string' || !value.trim()) throw invalidInput(`Missing or invalid ${name}`);
-    return value.trim();
+    return privateRoomInput.requiredText(value, name);
 };
 
 export const requiredUuid = (value: unknown, name: string) => {
-    const id = requiredString(value, name);
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
-        throw invalidInput(`Missing or invalid UUID ${name}`);
-    }
-    return id;
+    return privateRoomInput.requiredUuid(value, name);
 };
 export const privateRoomsRouter = Router();
 export const adminPrivateRoomsRouter = Router();

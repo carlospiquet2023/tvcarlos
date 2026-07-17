@@ -1,18 +1,18 @@
 # EduVault — Guia de Deploy em Produção
 
-Deploy completo para suportar **10.000+ alunos** simultâneos em um VPS Linux.
+Guia de referência para um deploy em VPS Linux. Dimensione o ambiente a partir de SLO, simultaneidade observada, perfil de mídia e testes de carga; os números abaixo são pontos iniciais, não garantia de capacidade.
 
 ---
 
 ## Requisitos do Servidor
 
-| Componente   | Mínimo (5k)       | Recomendado (10k+)   |
-|-------------|--------------------|-----------------------|
-| CPU         | 4 vCPUs            | 8 vCPUs              |
-| RAM         | 4 GB               | 8 GB                 |
-| Disco       | 50 GB SSD          | 200 GB NVMe          |
-| OS          | Ubuntu 22.04 LTS   | Ubuntu 24.04 LTS     |
-| Banda       | 100 Mbps           | 1 Gbps               |
+| Componente | Ponto de partida | Critério de ajuste |
+|---|---:|---|
+| CPU | 4 vCPUs | latência e saturação da API/worker |
+| RAM | 4 GB | RSS, cache e concorrência FFmpeg |
+| Disco | 50 GB SSD | catálogo, retenção e derivados HLS |
+| OS | Ubuntu LTS suportado | janela de segurança da distribuição |
+| Banda | 100 Mbps | bitrate × espectadores simultâneos |
 
 ---
 
@@ -25,8 +25,8 @@ sudo apt update && sudo apt upgrade -y
 # Instalar dependências essenciais
 sudo apt install -y curl git build-essential
 
-# Node.js 20 LTS
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+# Node.js 22 LTS (faixa exigida por package.json)
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 sudo apt install -y nodejs
 
 # PM2 (gerenciamento de processos)

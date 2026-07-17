@@ -3,12 +3,12 @@
 ## Por que CloudFlare (Free Tier)?
 | Benefício | Detalhe |
 |-----------|---------|
-| **DDoS Protection** | Absorve até 100 Gbps de ataque gratuitamente |
-| **CDN Global** | Assets estáticos cacheados em 300+ PoPs mundiais |
+| **DDoS Protection** | Mitigação de borda conforme os limites do plano contratado |
+| **CDN Global** | Cache de assets estáticos na rede de borda |
 | **SSL/TLS** | Certificado universal gratuito + Full (Strict) mode |
 | **WAF Básico** | Regras automáticas contra SQLi, XSS, bots |
 | **Analytics** | Tráfego, ameaças bloqueadas, cache hit ratio |
-| **Custo** | R$ 0 — Free tier é suficiente para 10k+ alunos |
+| **Custo** | Verifique preço e limites atuais; plano gratuito não substitui capacity planning |
 
 ---
 

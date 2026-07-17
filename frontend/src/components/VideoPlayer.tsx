@@ -18,6 +18,7 @@ import 'video.js/dist/video-js.css';
 import { useAuth } from '../context/AuthContext';
 import { useConfig } from '../context/ConfigContext';
 import api from '../lib/api';
+import { API_BASE_URL, resolveMediaUrl } from '../lib/urls';
 import type Player from 'video.js/dist/types/player';
 
 interface VhsRequestOptions {
@@ -39,8 +40,6 @@ interface VideoPlayerProps {
     hlsUrl: string;
     moduleId?: string;
 }
-
-const API_BASE_URL = import.meta.env.VITE_API_URL?.trim() || '';
 
 export default function VideoPlayer({ videoId, hlsUrl, moduleId }: VideoPlayerProps) {
     const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -92,7 +91,7 @@ export default function VideoPlayer({ videoId, hlsUrl, moduleId }: VideoPlayerPr
         };
 
         const initPlayer = async () => {
-            const hlsSrc = hlsUrl.startsWith('http') ? hlsUrl : `${API_BASE_URL}${hlsUrl}`;
+            const hlsSrc = resolveMediaUrl(hlsUrl);
             const sourceType = hlsSrc.includes('.m3u8') ? 'application/x-mpegURL' : 'video/mp4';
             const hlsTarget = new URL(hlsSrc, window.location.origin);
             const apiOrigin = new URL(API_BASE_URL || window.location.origin, window.location.origin).origin;

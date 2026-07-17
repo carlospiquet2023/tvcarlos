@@ -37,6 +37,7 @@ import ReactQuill, { Quill } from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 import api from '../lib/api';
 import DOMPurify from 'dompurify';
+import { resolveMediaUrl } from '../lib/urls';
 
 // ─── Register custom fonts with Quill ───
 const Font = Quill.import('formats/font') as { whitelist: string[] };
@@ -49,8 +50,6 @@ const FONT_LIST = [
 ];
 Font.whitelist = FONT_LIST;
 Quill.register('formats/font', Font, true);
-
-const API_BASE = import.meta.env.VITE_API_URL?.trim() || '';
 
 // ─── Block Types ───
 export type BlockType = 'text' | 'image' | 'two-columns' | 'highlight' | 'example' | 'solution' | 'tip' | 'warning' | 'formula' | 'heading' | 'html-css';
@@ -266,7 +265,7 @@ function ImageEditor({ data, onChange, token }: { data: Record<string, string>; 
         <div className="be-image-editor">
             {data.url ? (
                 <div className="be-image-dropzone has-image" onClick={() => fileRef.current?.click()}>
-                    <img src={data.url.startsWith('http') ? data.url : `${API_BASE}${data.url}`} alt="Preview" />
+                    <img src={resolveMediaUrl(data.url)} alt="Preview" />
                 </div>
             ) : (
                 <div className="be-image-dropzone" onClick={() => fileRef.current?.click()}>
@@ -552,7 +551,7 @@ function renderBlock(block: ContentBlock) {
             const rawUrl = block.data.url || '';
             const isRelativeUpload = /^\/uploads\/images\/[a-zA-Z0-9._-]+$/.test(rawUrl);
             const isHttpImage = /^https?:\/\//i.test(rawUrl);
-            const src = isRelativeUpload ? `${API_BASE}${rawUrl}` : isHttpImage ? rawUrl : '';
+            const src = isRelativeUpload || isHttpImage ? resolveMediaUrl(rawUrl) : '';
             const align = block.data.align || 'center';
             return (
                 <figure className={`br-image align-${align}`} style={bgStyle}>

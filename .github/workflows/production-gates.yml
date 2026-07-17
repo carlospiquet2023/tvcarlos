@@ -1,0 +1,77 @@
+name: Production Operational Gates
+
+on:
+  workflow_dispatch:
+    inputs:
+      staging_base_url:
+        description: Public staging frontend URL (uses the secret when empty)
+        required: false
+        type: string
+      staging_api_url:
+        description: Staging API URL reachable by the runner (uses the secret when empty)
+        required: false
+        type: string
+  schedule:
+    - cron: "17 6 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-operational-gates
+  cancel-in-progress: false
+
+jobs:
+  restore-drill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: staging
+    env:
+      RESTORE_SOURCE_DATABASE_URL: ${{ secrets.RESTORE_SOURCE_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Require restore source secret
+        shell: bash
+        run: |
+          if [[ -z "$RESTORE_SOURCE_DATABASE_URL" ]]; then
+            echo "RESTORE_SOURCE_DATABASE_URL must be configured in the staging environment." >&2
+            exit 2
+          fi
+      - name: Run isolated backup and restore drill
+        run: bash scripts/backup-restore-drill.sh
+
+  staging-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: staging
+    env:
+      STAGING_BASE_URL: ${{ inputs.staging_base_url || secrets.STAGING_BASE_URL }}
+      STAGING_API_URL: ${{ inputs.staging_api_url || secrets.STAGING_API_URL }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Require staging URLs
+        shell: bash
+        run: |
+          if [[ -z "$STAGING_BASE_URL" || -z "$STAGING_API_URL" ]]; then
+            echo "STAGING_BASE_URL and STAGING_API_URL must be provided as inputs or staging environment secrets." >&2
+            exit 2
+          fi
+      - name: Run public staging smoke test
+        run: node scripts/staging-smoke.mjs
+      - name: Run dynamic HTTP security gate
+        run: node scripts/security-gate.mjs
+        env:
+          SECURITY_TARGET_URL: ${{ env.STAGING_API_URL }}
+          SECURITY_ALLOWED_ORIGIN: ${{ env.STAGING_BASE_URL }}
+          SECURITY_TIMEOUT_MS: 20000
+      - name: Run staging load gate
+        run: node scripts/load-gate.mjs
+        env:
+          LOAD_TARGET_URL: ${{ env.STAGING_API_URL }}
+          LOAD_PATH: /health/ready
+          LOAD_REQUESTS: 1000
+          LOAD_CONCURRENCY: 20
+          LOAD_MAX_P95_MS: 350

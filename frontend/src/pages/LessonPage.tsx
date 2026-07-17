@@ -19,12 +19,7 @@ import {
 import axios from 'axios';
 import api from '../lib/api';
 import DOMPurify from 'dompurify';
-
-const API_BASE = import.meta.env.VITE_API_URL?.trim() || '';
-
-function assetUrl(value: string): string {
-    return /^https?:\/\//i.test(value) ? value : `${API_BASE}${value}`;
-}
+import { resolveMediaUrl } from '../lib/urls';
 const LazyVideoPlayer = lazy(() => import('../components/VideoPlayer'));
 
 interface LessonData {
@@ -331,7 +326,7 @@ export default function LessonPage() {
                         <ChevronLeft size={20} />
                     </button>
                     {config.logoUrl && (
-                        <img src={assetUrl(config.logoUrl)} alt={config.platformName} className="lp-logo-img" />
+                        <img src={resolveMediaUrl(config.logoUrl)} alt={config.platformName} className="lp-logo-img" />
                     )}
                     <div className="lp-header-info">
                         <span className="lp-header-breadcrumb">{lesson.module.course.name}</span>

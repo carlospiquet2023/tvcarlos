@@ -21,9 +21,8 @@ import {
 import api from '../lib/api';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { resolveMediaUrl } from '../lib/urls';
 import './StudentDashboard.css';
-
-const API_BASE = import.meta.env.VITE_API_URL?.trim() || '';
 
 interface Video {
     id: string;
@@ -299,12 +298,6 @@ export default function StudentDashboard() {
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
-    const getThumbUrl = (url: string | null | undefined): string | null => {
-        if (!url) return null;
-        if (url.startsWith('http')) return url;
-        return `${API_BASE}${url}`;
-    };
-
     if (loading) {
         return (
             <div className="sd-loading">
@@ -385,7 +378,7 @@ export default function StudentDashboard() {
             <header className="sd-header sd-portal-header">
                 <div className="sd-header-left">
                     {config.logoUrl ? (
-                        <img src={getThumbUrl(config.logoUrl) || ''} alt={config.platformName} className="sd-logo-img" />
+                        <img src={resolveMediaUrl(config.logoUrl)} alt={config.platformName} className="sd-logo-img" />
                     ) : (
                         <ShieldCheck size={30} aria-hidden="true" />
                     )}
@@ -471,7 +464,7 @@ export default function StudentDashboard() {
                 </aside>
 
                 <main className="sd-main sd-portal-main" id="inicio">
-                    {config.bannerUrl && <div className="sd-banner"><img src={getThumbUrl(config.bannerUrl) || ''} alt="" className="sd-banner-img" /></div>}
+                    {config.bannerUrl && <div className="sd-banner"><img src={resolveMediaUrl(config.bannerUrl)} alt="" className="sd-banner-img" /></div>}
 
                     {activeView !== 'dashboard' && (
                         <section className="sd-student-module" aria-live="polite">
@@ -554,7 +547,7 @@ export default function StudentDashboard() {
                                 {dashboardCourses.length === 0 ? (
                                     <div className="sd-portal-empty"><GraduationCap size={38} /><strong>{searchQuery ? 'Nenhum curso corresponde à busca.' : 'Nenhum curso matriculado.'}</strong><p>{searchQuery ? 'Tente outro termo.' : 'Aguarde a matrícula pela instituição.'}</p></div>
                                 ) : dashboardCourses.slice(0, 6).map(course => {
-                                    const thumbUrl = getThumbUrl(course.lastWatchedVideo?.thumbnailUrl || course.thumbnailUrl);
+                                    const thumbUrl = resolveMediaUrl(course.lastWatchedVideo?.thumbnailUrl || course.thumbnailUrl);
                                     const preferredVideo = getPreferredVideoId(course);
                                     return (
                                         <article key={course.id} className="sd-course-row" onMouseEnter={() => prefetchLessonResources(preferredVideo)}>

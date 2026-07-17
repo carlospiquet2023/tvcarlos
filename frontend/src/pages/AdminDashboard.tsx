@@ -1,91 +1,55 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useConfig } from '../context/ConfigContext';
-import { Users, BookOpen, Activity, Plus, Trash2, Settings, Save, Eye, EyeOff, CheckCircle, AlertCircle, Upload, Edit3, RefreshCw, Monitor, X, FileSpreadsheet, FileDown, CalendarDays, ClipboardList, BarChart3, Download, Bell, ChevronUp, ChevronDown, Video, ExternalLink, ShieldCheck, Flag, Ban, Scale, AlertTriangle, RadioTower, Key, School, Activity as ActivityIcon, Search, Menu, LogOut, UserCheck, FileVideo, Database, Server, Clock3, Layers3, UserCog, MessageCircle, Library, LockKeyhole, UserX } from 'lucide-react';
+import { Save, Eye, EyeOff, CheckCircle, AlertCircle, X } from 'lucide-react';
 import axios from 'axios';
 import api from '../lib/api';
 import 'react-quill-new/dist/quill.snow.css';
-import DOMPurify from 'dompurify';
-import BlockEditor, { BlockRenderer, type ContentBlock, parseContentField } from '../components/BlockEditor';
+import { type ContentBlock, parseContentField } from '../components/BlockEditor';
 import ConfirmModal from '../components/ConfirmModal';
 import BroadcastAdminPanel from '../components/BroadcastAdminPanel';
 import PrivateRoomAdminPanel from '../components/PrivateRoomAdminPanel';
+import { AdminAudit } from '../features/admin/components/AdminAudit';
+import { AdminAttendance } from '../features/admin/components/AdminAttendance';
+import { AdminCourses } from '../features/admin/components/AdminCourses';
+import { AdminHeader } from '../features/admin/components/AdminHeader';
+import { AdminLiveClasses } from '../features/admin/components/AdminLiveClasses';
+import { AdminModeration } from '../features/admin/components/AdminModeration';
+import { AdminNotifications } from '../features/admin/components/AdminNotifications';
+import { AdminOverview } from '../features/admin/components/AdminOverview';
+import { AdminPunishment } from '../features/admin/components/AdminPunishment';
+import { AdminReports } from '../features/admin/components/AdminReports';
+import { AdminSidebar } from '../features/admin/components/AdminSidebar';
+import { AdminUsers } from '../features/admin/components/AdminUsers';
+import { AdminUserSecurityModal } from '../features/admin/components/AdminUserSecurityModal';
+import { AdminVideoEditor } from '../features/admin/components/AdminVideoEditor';
+import type {
+    AdminTab,
+    AppealData,
+    AttendanceData,
+    AuditLogData,
+    BanData,
+    CourseData,
+    CourseReport,
+    EmailDeliveryData,
+    EmailStatusData,
+    FlaggedComment,
+    HealthData,
+    LiveClassData,
+    ModuleData,
+    StatsData,
+    UserData,
+    ViolationData
+} from '../features/admin/types';
+import { buildOverviewCourseRows, buildUserUpdatePayload, formatAdminDate } from '../features/admin/utils';
+import { resolveMediaUrl } from '../lib/urls';
 import './AdminDashboard.css';
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
-
-interface StatsData {
-    totalUsers: number;
-    totalCourses: number;
-    totalVideos: number;
-    processingVideos: number;
-    readyVideos: number;
-    pendingVideos: number;
-    errorVideos: number;
-    totalEnrollments: number;
-    totalModules: number;
-    totalLiveClasses: number;
-}
-
-interface UserData {
-    id: string;
-    name: string;
-    email: string;
-    role: string;
-    accessBlocked: boolean;
-    accessBlockedAt?: string | null;
-    accessBlockedReason?: string | null;
-    createdAt: string;
-}
-
-interface ModuleData {
-    id: string;
-    name: string;
-    pdfUrl: string | null;
-    videos: VideoData[];
-    order?: number;
-}
-
-interface VideoData { id: string; title: string; description: string | null; content: string | null; thumbnailUrl?: string | null; status: string; order: number; }
-interface EnrollmentData { id: string; enrollmentRole: 'STUDENT' | 'TEACHER'; user: { id: string; name: string; email: string }; }
-
-interface CourseData {
-    id: string;
-    name: string;
-    description: string;
-    thumbnailUrl: string | null;
-    calendarUrl: string | null;
-    modules: ModuleData[];
-    enrollments: EnrollmentData[];
-    order?: number;
-}
-
-interface HealthData { uptime: number; memory: { process: number }; services: { database: string; storage: string }; }
-interface AuditLogData { id: string; action: string; target?: string | null; details?: string | null; createdAt: string; user?: { name: string } | null; }
-interface CourseReport { id: string; name: string; totalStudents: number; totalVideos: number; completionRate: number; completedLessons: number; totalPossibleLessons: number; }
-interface LiveClassData { id: string; title: string; status: string; startAt: string; endAt?: string | null; zoomJoinUrl?: string | null; course?: { name: string } | null; module?: { name: string } | null; }
-interface FlaggedComment { id: string; text: string; flagged: boolean; createdAt: string; user: { name: string; role: string }; video: { title: string; module: { course: { name: string } } }; reports: { id: string; reason: string; user: { name: string } }[]; }
-interface ViolationData { id: string; word: string; severity: string; autoAction?: string | null; createdAt: string; user: { name: string }; }
-interface BanData { id: string; active: boolean; banType: string; reason: string; createdAt: string; expiresAt?: string | null; user: { name: string }; }
-interface AppealData { id: string; status: string; reason: string; adminNote?: string | null; createdAt: string; user: { name: string; email: string }; }
-interface AttendanceEditData { oldStatus: string; newStatus: string; justification: string; editedBy?: { name: string } | null; }
-interface AttendanceData { id?: string; userId: string; status: string; watchTimeSeconds?: number; autoDetected?: boolean; user?: { name: string; email: string }; edits?: AttendanceEditData[]; }
-interface EmailStatusData { configured: boolean; missing: string[]; host: string | null; port: number; secure: boolean; from: string | null; }
-interface EmailDeliveryData { configured: boolean; eligible?: number; attempted: number; sent: number; failed: number; }
-
-function roleLabel(role: string): string {
-    return ({ ADMIN: 'Administrador', TEACHER: 'Professor', STUDENT: 'Aluno', STAFF: 'Equipe escolar', GUARDIAN: 'Responsável' } as Record<string, string>)[role] || role;
-}
-
-function auditActionLabel(action: string): string {
-    return action.replace(/_/g, ' ').toLocaleLowerCase('pt-BR').replace(/^./, value => value.toUpperCase());
-}
 
 export default function AdminDashboard() {
     const { token, user, logout, login: doLogin } = useAuth();
     const { config } = useConfig();
     const isTeacher = user?.role === 'TEACHER';
-    const [activeTab, setActiveTab] = useState(isTeacher ? 'courses' : 'overview');
+    const [activeTab, setActiveTab] = useState<AdminTab>(isTeacher ? 'courses' : 'overview');
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
     const [stats, setStats] = useState<StatsData | null>(null);
     const [users, setUsers] = useState<UserData[]>([]);
@@ -361,6 +325,21 @@ export default function AdminDashboard() {
         } catch { alert('Erro ao deletar'); }
     };
 
+    const handleUpdateUser = async (targetUser: UserData) => {
+        try {
+            const payload = buildUserUpdatePayload(targetUser, editUserData);
+            if (Object.keys(payload).length > 0) {
+                await api.put(`/api/admin/users/${targetUser.id}`, payload, { headers: { Authorization: `Bearer ${token}` } });
+                await fetchData();
+            }
+            setEditingUserId(null);
+        } catch (error: unknown) {
+            alert(axios.isAxiosError<{ message?: string }>(error)
+                ? error.response?.data?.message || 'Erro ao atualizar usuário.'
+                : 'Erro ao atualizar usuário.');
+        }
+    };
+
     const handleCreateCourse = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
@@ -500,6 +479,11 @@ export default function AdminDashboard() {
         } finally {
             setUploadingImage(false);
         }
+    };
+
+    const handleCourseThumbnailUpload = async (file: File) => {
+        const url = await handleImageUpload(file);
+        if (url) setNewCourse(current => ({ ...current, thumbnailUrl: url }));
     };
 
     // Upload PDF for module material or course calendar
@@ -867,23 +851,8 @@ export default function AdminDashboard() {
     };
 
     const overviewTeachers = useMemo(() => users.filter(item => item.role === 'TEACHER').length, [users]);
-    const overviewCourseRows = useMemo(() => {
-        if (reports.length > 0) return reports.slice(0, 5);
-        return courses.slice(0, 5).map(course => ({
-            id: course.id,
-            name: course.name,
-            totalStudents: course.enrollments.filter(enrollment => enrollment.enrollmentRole === 'STUDENT').length,
-            totalVideos: course.modules.reduce((total, module) => total + module.videos.length, 0),
-            completionRate: 0,
-            completedLessons: 0,
-            totalPossibleLessons: 0
-        }));
-    }, [courses, reports]);
-    const maxCourseStudents = Math.max(1, ...overviewCourseRows.map(course => course.totalStudents));
-    const adminDate = useMemo(() => {
-        const value = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }).format(new Date());
-        return value.charAt(0).toUpperCase() + value.slice(1);
-    }, []);
+    const overviewCourseRows = useMemo(() => buildOverviewCourseRows(courses, reports), [courses, reports]);
+    const adminDate = useMemo(() => formatAdminDate(new Date()), []);
 
     const handleGlobalSearch = (event: React.FormEvent) => {
         event.preventDefault();
@@ -971,1396 +940,217 @@ export default function AdminDashboard() {
     return (
         <>
         <div className={`admin-root ${sidebarCollapsed ? 'admin-sidebar-collapsed' : ''}`}>
-            <header className="admin-header admin-pro-header">
-                <div className="admin-header-brand">
-                    {config.logoUrl ? (
-                        <img src={`${API_BASE}${config.logoUrl}`} alt={config.platformName} />
-                    ) : <ShieldCheck size={31} aria-hidden="true" />}
-                    <h2 className="admin-brand">
-                        <span style={{ color: config.nameColor1 }}>{config.namePart1}</span>
-                        <span style={{ color: config.nameColor2 }}>{config.namePart2}</span>
-                        <em>{isTeacher ? 'Professor' : 'Admin'}</em>
-                    </h2>
-                    <button type="button" className="admin-menu-btn" onClick={() => setSidebarCollapsed(value => !value)} aria-label={sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'} aria-expanded={!sidebarCollapsed}><Menu size={20} /></button>
-                </div>
-
-                {!isTeacher && (
-                    <form className="admin-global-search" onSubmit={handleGlobalSearch}>
-                        <Search size={17} aria-hidden="true" />
-                        <input value={globalSearch} onChange={event => setGlobalSearch(event.target.value)} placeholder="Buscar alunos por nome ou e-mail..." aria-label="Busca global" />
-                    </form>
-                )}
-
-                <div className="admin-header-right">
-                    {!isTeacher && <button type="button" className="admin-header-icon" onClick={() => setActiveTab('notifications')} title="Notificações"><Bell size={18} /></button>}
-                    <span className="admin-avatar">{user?.name?.charAt(0).toUpperCase()}</span>
-                    <span className="admin-user-info"><strong>{user?.name}</strong><small>{roleLabel(user?.role || '')}</small></span>
-                    <button onClick={logout} className="admin-logout-btn" title="Sair"><LogOut size={17} /><span>Sair</span></button>
-                </div>
-            </header>
+            <AdminHeader
+                config={config}
+                globalSearch={globalSearch}
+                isTeacher={isTeacher}
+                sidebarCollapsed={sidebarCollapsed}
+                user={user}
+                onGlobalSearchChange={setGlobalSearch}
+                onGlobalSearchSubmit={handleGlobalSearch}
+                onLogout={logout}
+                onSelectTab={setActiveTab}
+                onToggleSidebar={() => setSidebarCollapsed(value => !value)}
+            />
 
             <div className="admin-layout">
-                {/* Sidebar Tabs */}
-                <aside className="admin-sidebar">
-                    {!isTeacher && (
-                    <button onClick={() => setActiveTab('overview')} className={`admin-nav-btn ${activeTab === 'overview' ? 'active' : ''}`}>
-                        <Activity size={20} /> Visão Geral
-                    </button>
-                    )}
-                    <span className="admin-sidebar-section-label">Gestão acadêmica</span>
-                    <button onClick={() => setActiveTab('courses')} className={`admin-nav-btn ${activeTab === 'courses' ? 'active' : ''}`}>
-                        <BookOpen size={20} /> {isTeacher ? 'Meus Cursos' : 'Cursos e Conteúdos'}
-                    </button>
-                    <button onClick={() => window.location.assign('/school')} className="admin-nav-btn">
-                        <School size={20} /> Escola 360
-                    </button>
-                    {!isTeacher && (
-                    <>
-                    <button onClick={() => setActiveTab('live')} className={`admin-nav-btn ${activeTab === 'live' ? 'active' : ''}`}>
-                        <Video size={20} /> Aulas ao Vivo
-                    </button>
-                    <button onClick={() => setActiveTab('attendance')} className={`admin-nav-btn ${activeTab === 'attendance' ? 'active' : ''}`}>
-                        <CheckCircle size={20} /> Presença
-                    </button>
-                    </>
-                    )}
-
-                    {!isTeacher && <span className="admin-sidebar-section-label">Usuários e acessos</span>}
-                    {!isTeacher && (
-                    <button onClick={() => setActiveTab('users')} className={`admin-nav-btn ${activeTab === 'users' ? 'active' : ''}`}>
-                        <Users size={20} /> Usuários
-                    </button>
-                    )}
-                    {!isTeacher && (
-                    <>
-                    <button onClick={() => setActiveTab('audit')} className={`admin-nav-btn ${activeTab === 'audit' ? 'active' : ''}`}>
-                        <ClipboardList size={20} /> Logs do Sistema
-                    </button>
-                    <button onClick={() => setActiveTab('reports')} className={`admin-nav-btn ${activeTab === 'reports' ? 'active' : ''}`}>
-                        <BarChart3 size={20} /> Relatórios de Acesso
-                    </button>
-                    <span className="admin-sidebar-section-label">Comunicação e segurança</span>
-                    <button onClick={() => setActiveTab('notifications')} className={`admin-nav-btn ${activeTab === 'notifications' ? 'active' : ''}`}>
-                        <Bell size={20} /> Notificações
-                    </button>
-                    <button onClick={() => setActiveTab('moderation')} className={`admin-nav-btn ${activeTab === 'moderation' ? 'active' : ''}`}>
-                        <ShieldCheck size={20} /> Moderação
-                        {flaggedTotal > 0 && <span className="admin-nav-badge">{flaggedTotal}</span>}
-                    </button>
-                    <button onClick={() => setActiveTab('punishment')} className={`admin-nav-btn ${activeTab === 'punishment' ? 'active' : ''}`}>
-                        <Ban size={20} /> Punições
-                    </button>
-                    <span className="admin-sidebar-section-label">Experiências</span>
-                    <button onClick={() => setActiveTab('broadcast')} className={`admin-nav-btn ${activeTab === 'broadcast' ? 'active' : ''}`}>
-                        <RadioTower size={20} /> Campus ao Vivo
-                    </button>
-                    </>
-                    )}
-
-                    <button onClick={() => setActiveTab('privaterooms')} className={`admin-nav-btn ${activeTab === 'privaterooms' ? 'active' : ''}`}>
-                        <Key size={20} /> Salas Privadas
-                    </button>
-
-                    <span className="admin-sidebar-section-label">Configurações</span>
-                    <button onClick={() => setActiveTab('settings')} className={`admin-nav-btn ${activeTab === 'settings' ? 'active' : ''}`}>
-                        <Settings size={20} /> Configurações
-                    </button>
-                </aside>
+                <AdminSidebar activeTab={activeTab} flaggedTotal={flaggedTotal} isTeacher={isTeacher} onSelectTab={setActiveTab} />
 
                 {/* Main Content Area */}
                 <main className="admin-main">
 
                     {/* TAB: OVERVIEW */}
                     {activeTab === 'overview' && stats && (
-                        <div className="admin-fade-in admin-overview">
-                            <section className="admin-overview-welcome">
-                                <div><span>Painel executivo</span><h1>Olá, {user?.name?.split(' ')[0] || 'Administrador'}! <span aria-hidden="true">👋</span></h1><p>Aqui está o resumo operacional da plataforma {config.platformName}.</p></div>
-                                <time><CalendarDays size={17} /> {adminDate}</time>
-                            </section>
-
-                            <section className="admin-overview-kpis" aria-label="Indicadores da plataforma">
-                                <article><span className="violet"><Users /></span><div><small>Total de alunos</small><strong>{stats.totalUsers.toLocaleString('pt-BR')}</strong><p>contas estudantis</p></div></article>
-                                <article><span className="blue"><BookOpen /></span><div><small>Cursos ativos</small><strong>{stats.totalCourses.toLocaleString('pt-BR')}</strong><p>catálogo publicado</p></div></article>
-                                <article><span className="green"><FileVideo /></span><div><small>Aulas publicadas</small><strong>{stats.readyVideos.toLocaleString('pt-BR')}</strong><p>de {stats.totalVideos} vídeos</p></div></article>
-                                <article><span className="amber"><UserCheck /></span><div><small>Matrículas</small><strong>{stats.totalEnrollments.toLocaleString('pt-BR')}</strong><p>vínculos ativos</p></div></article>
-                                <article><span className="violet"><Layers3 /></span><div><small>Módulos</small><strong>{stats.totalModules.toLocaleString('pt-BR')}</strong><p>trilhas organizadas</p></div></article>
-                                <article><span className="blue"><Video /></span><div><small>Aulas ao vivo</small><strong>{stats.totalLiveClasses.toLocaleString('pt-BR')}</strong><p>encontros cadastrados</p></div></article>
-                            </section>
-
-                            <div className="admin-overview-primary-grid">
-                                <section className="admin-overview-panel admin-course-chart">
-                                    <header><div><span>Aprendizagem</span><h2>Alunos por curso</h2></div><button type="button" onClick={() => setActiveTab('reports')}>Ver relatório <ChevronDown size={14} /></button></header>
-                                    <div className="admin-course-bars">
-                                        {overviewCourseRows.length === 0 ? <p className="admin-overview-empty">Ainda não há cursos com matrículas.</p> : overviewCourseRows.map((course, index) => (
-                                            <div key={course.id}><span>{course.name}</span><div><i style={{ width: `${Math.max(6, (course.totalStudents / maxCourseStudents) * 100)}%`, '--bar-index': index } as React.CSSProperties} /></div><strong>{course.totalStudents}</strong></div>
-                                        ))}
-                                    </div>
-                                </section>
-
-                                <section className="admin-overview-panel admin-live-activity">
-                                    <header><div><span>Auditoria</span><h2>Atividade em tempo real</h2></div><em><i /> Online agora</em></header>
-                                    <div>
-                                        {auditLogs.length === 0 ? <p className="admin-overview-empty">Nenhuma ação recente registrada.</p> : auditLogs.slice(0, 5).map(log => (
-                                            <article key={log.id}><span><ActivityIcon size={16} /></span><div><small>{auditActionLabel(log.action)}</small><strong>{log.user?.name || 'Sistema'}</strong><p>{log.target || log.details || 'Ação auditada'}</p></div><time>{new Date(log.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</time></article>
-                                        ))}
-                                    </div>
-                                    <button type="button" className="admin-panel-link" onClick={() => setActiveTab('audit')}>Ver todas as atividades <ChevronDown size={14} /></button>
-                                </section>
-                            </div>
-
-                            <div className="admin-overview-secondary-grid">
-                                <section className="admin-overview-panel admin-course-table-panel">
-                                    <header><div><span>Conteúdo</span><h2>Cursos com maior alcance</h2></div><Library size={19} /></header>
-                                    <div className="admin-overview-table-wrap"><table><thead><tr><th>Curso</th><th>Alunos</th><th>Aulas</th><th>Conclusão</th></tr></thead><tbody>{overviewCourseRows.map(course => <tr key={course.id}><td>{course.name}</td><td>{course.totalStudents}</td><td>{course.totalVideos}</td><td><span>{course.completionRate}%</span></td></tr>)}</tbody></table></div>
-                                    <button type="button" className="admin-panel-link" onClick={() => setActiveTab('courses')}>Ver todos os cursos <ChevronDown size={14} /></button>
-                                </section>
-
-                                <section className="admin-overview-panel admin-health-panel">
-                                    <header><div><span>Infraestrutura</span><h2>Saúde da plataforma</h2></div><Server size={19} /></header>
-                                    <div className="admin-health-list">
-                                        <article><span><Database /></span><div><strong>Banco de dados</strong><small>Persistência principal</small></div><em className={healthData?.services.database === 'up' ? 'ok' : 'error'}>{healthData?.services.database === 'up' ? 'Operacional' : 'Indisponível'}</em></article>
-                                        <article><span><FileVideo /></span><div><strong>Armazenamento</strong><small>Vídeos e documentos</small></div><em className={healthData?.services.storage === 'up' ? 'ok' : 'error'}>{healthData?.services.storage === 'up' ? 'Operacional' : 'Indisponível'}</em></article>
-                                        <article><span><Clock3 /></span><div><strong>Tempo online</strong><small>Processo da aplicação</small></div><em>{healthData ? `${Math.floor(healthData.uptime / 3600)}h` : '—'}</em></article>
-                                    </div>
-                                    <button type="button" className="admin-panel-link" onClick={() => setActiveTab('audit')}>Abrir observabilidade <ChevronDown size={14} /></button>
-                                </section>
-
-                                <section className="admin-overview-panel admin-pending-panel">
-                                    <header><div><span>Operação</span><h2>Pendências</h2></div><AlertTriangle size={19} /></header>
-                                    <div>
-                                        <button type="button" onClick={() => setActiveTab('courses')}><Upload /><span>Vídeos processando</span><strong>{stats.processingVideos}</strong></button>
-                                        <button type="button" onClick={() => setActiveTab('courses')}><Clock3 /><span>Vídeos pendentes</span><strong>{stats.pendingVideos}</strong></button>
-                                        <button type="button" onClick={() => setActiveTab('courses')}><AlertCircle /><span>Falhas de mídia</span><strong className="danger">{stats.errorVideos}</strong></button>
-                                        <button type="button" onClick={() => setActiveTab('moderation')}><MessageCircle /><span>Itens em moderação</span><strong>{flaggedTotal}</strong></button>
-                                    </div>
-                                </section>
-                            </div>
-
-                            <section className="admin-quick-summary">
-                                <h2>Resumo rápido</h2><div>
-                                    <article><Users /><span><small>Usuários cadastrados</small><strong>{userTotal.toLocaleString('pt-BR')}</strong></span></article>
-                                    <article><UserCog /><span><small>Professores</small><strong>{overviewTeachers}</strong></span></article>
-                                    <article><FileVideo /><span><small>Conteúdos</small><strong>{stats.totalVideos}</strong></span></article>
-                                    <article><ActivityIcon /><span><small>Eventos recentes</small><strong>{auditLogs.length}</strong></span></article>
-                                </div>
-                            </section>
-                        </div>
+                        <AdminOverview
+                            adminDate={adminDate}
+                            auditLogs={auditLogs}
+                            courseRows={overviewCourseRows}
+                            flaggedTotal={flaggedTotal}
+                            healthData={healthData}
+                            platformName={config.platformName}
+                            stats={stats}
+                            teacherTotal={overviewTeachers}
+                            userName={user?.name}
+                            userTotal={userTotal}
+                            onSelectTab={setActiveTab}
+                        />
                     )}
 
                     {/* TAB: USERS */}
                     {activeTab === 'users' && (
-                        <div className="admin-fade-in">
-                            <h2 className="admin-page-title">Gerenciar Alunos</h2>
-
-                            <div className="admin-card">
-                                <h3>Cadastrar Novo Acesso</h3>
-                                <form onSubmit={handleCreateUser} className="admin-form-row">
-                                    <input placeholder="Nome" value={newUser.name} onChange={e => setNewUser({ ...newUser, name: e.target.value })} required className="admin-input" />
-                                    <input type="email" placeholder="Email" value={newUser.email} onChange={e => setNewUser({ ...newUser, email: e.target.value })} required className="admin-input" />
-                                    <input type="password" placeholder="Senha" value={newUser.password} onChange={e => setNewUser({ ...newUser, password: e.target.value })} required className="admin-input" />
-                                    <select value={newUser.role} onChange={e => setNewUser({ ...newUser, role: e.target.value })} className="admin-input">
-                                        <option value="STUDENT">Aluno</option>
-                                        <option value="TEACHER">Professor</option>
-                                        <option value="ADMIN">Admin</option>
-                                        <option value="STAFF">Equipe escolar</option>
-                                        <option value="GUARDIAN">Responsável</option>
-                                    </select>
-                                    <button type="submit" className="admin-btn-primary">
-                                        <Plus size={16} /> Salvar
-                                    </button>
-                                </form>
-                            </div>
-
-                            {/* Excel Upload Card */}
-                            <div className="admin-card">
-                                <h3><FileSpreadsheet size={18} /> Importar Alunos via Excel</h3>
-                                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '0.75rem' }}>
-                                    Cabeçários: <strong>aluno</strong>, <strong>matricula</strong>, <strong>turma</strong>, <strong>cpf</strong> e <strong>email</strong> (recomendado). Sem um e-mail real, o sistema gera apenas um login técnico e não há como entregar as credenciais ao aluno.
-                                </p>
-                                <div className="admin-form-row">
-                                    <input
-                                        type="file"
-                                        accept=".xlsx,.xls"
-                                        onChange={e => {
-                                            if (e.target.files && e.target.files[0]) {
-                                                handleExcelUpload(e.target.files[0]);
-                                                e.target.value = '';
-                                            }
-                                        }}
-                                        disabled={excelUploading}
-                                        style={{ fontSize: '0.85rem', color: 'var(--text-muted)', flex: 1 }}
-                                    />
-                                    {excelUploading && <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Processando...</span>}
-                                </div>
-                                {excelResults && (
-                                    <div className="excel-results">
-                                        <h4>Resultado da Importação ({excelResults.length} alunos)</h4>
-                                        {excelEmailDelivery && (
-                                            <p style={{ margin: '0.65rem 0', color: excelEmailDelivery.configured ? 'var(--text-secondary)' : '#92400e', fontSize: '0.85rem' }}>
-                                                {excelEmailDelivery.configured
-                                                    ? `E-mails elegíveis: ${excelEmailDelivery.eligible || 0}. Entregues: ${excelEmailDelivery.sent}. Falhas: ${excelEmailDelivery.failed}.`
-                                                    : `SMTP não configurado: ${(excelEmailDelivery.eligible || 0)} credencial(is) com e-mail real não foram enviadas.`}
-                                            </p>
-                                        )}
-                                        <table className="admin-table">
-                                            <thead>
-                                                <tr>
-                                                    <th>Nome</th>
-                                                    <th>Email</th>
-                                                    <th>Senha</th>
-                                                    <th>Matriculado em</th>
-                                                    <th>Status</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {excelResults.map((r, i) => (
-                                                    <tr key={i}>
-                                                        <td>{r.name}</td>
-                                                        <td>{r.email}</td>
-                                                        <td>{r.password ? <code>{r.password}</code> : '—'}</td>
-                                                        <td>{r.enrolled.length > 0 ? r.enrolled.join(', ') : '—'}</td>
-                                                        <td>
-                                                            {r.error ? (
-                                                                <span className="admin-status-badge error">{r.error}</span>
-                                                            ) : (
-                                                                <span className="admin-status-badge ready">OK</span>
-                                                            )}
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className="admin-search-bar" style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-                                <input
-                                    type="text"
-                                    placeholder="Buscar por nome ou email..."
-                                    value={userSearchInput}
-                                    onChange={e => setUserSearchInput(e.target.value)}
-                                    onKeyDown={e => { if (e.key === 'Enter') setUserSearch(userSearchInput); }}
-                                    className="admin-input"
-                                    style={{ flex: 1 }}
-                                />
-                                <button onClick={() => setUserSearch(userSearchInput)} className="admin-btn primary" style={{ whiteSpace: 'nowrap' }}>
-                                    Buscar
-                                </button>
-                                {userSearch && (
-                                    <button onClick={() => { setUserSearchInput(''); setUserSearch(''); }} className="admin-btn" style={{ whiteSpace: 'nowrap' }}>
-                                        Limpar
-                                    </button>
-                                )}
-                                <span style={{ alignSelf: 'center', fontSize: '0.85rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                                    {userTotal} usuário(s)
-                                </span>
-                            </div>
-
-                            <table className="admin-table">
-                                <thead>
-                                    <tr>
-                                        <th>Nome</th>
-                                        <th>Email</th>
-                                        <th>Permissão</th>
-                                        <th>Status de acesso</th>
-                                        <th>Ações</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {users.map(u => (
-                                        <tr key={u.id}>
-                                            <td>
-                                                {editingUserId === u.id ? (
-                                                    <input value={editUserData.name} onChange={e => setEditUserData({ ...editUserData, name: e.target.value })} className="admin-input" style={{ margin: 0, padding: '0.3rem 0.5rem' }} />
-                                                ) : u.name}
-                                            </td>
-                                            <td>
-                                                {editingUserId === u.id ? (
-                                                    <input type="email" value={editUserData.email} onChange={e => setEditUserData({ ...editUserData, email: e.target.value })} className="admin-input" style={{ margin: 0, padding: '0.3rem 0.5rem' }} />
-                                                ) : u.email}
-                                            </td>
-                                            <td>
-                                                {editingUserId === u.id ? (
-                                                    <select value={editUserData.role} onChange={e => setEditUserData({ ...editUserData, role: e.target.value })} className="admin-input" style={{ margin: 0, padding: '0.3rem 0.5rem' }}>
-                                                        <option value="STUDENT">Aluno</option>
-                                                        <option value="TEACHER">Professor</option>
-                                                        <option value="ADMIN">Admin</option>
-                                                        <option value="STAFF">Equipe escolar</option>
-                                                        <option value="GUARDIAN">Responsável</option>
-                                                    </select>
-                                                 ) : <span className={`admin-role-badge ${u.role.toLowerCase()}`}>{roleLabel(u.role)}</span>}
-                                             </td>
-                                            <td>
-                                                <span className={`admin-access-badge ${u.accessBlocked ? 'blocked' : 'active'}`} title={u.accessBlockedReason || undefined}>
-                                                    {u.accessBlocked ? 'Bloqueado' : 'Ativo'}
-                                                </span>
-                                            </td>
-                                            <td><div className="admin-user-actions">
-                                                {editingUserId === u.id ? (
-                                                    <>
-                                                        <button onClick={async () => {
-                                                            try {
-                                                                const payload: Record<string, string> = {};
-                                                                if (editUserData.name !== u.name) payload.name = editUserData.name;
-                                                                if (editUserData.email !== u.email) payload.email = editUserData.email;
-                                                                if (editUserData.role !== u.role) payload.role = editUserData.role;
-                                                                if (Object.keys(payload).length > 0) {
-                                                                    await api.put(`/api/admin/users/${u.id}`, payload, { headers: { Authorization: `Bearer ${token}` } });
-                                                                    fetchData();
-                                                                }
-                                                                setEditingUserId(null);
-                                                            } catch (error: unknown) {
-                                                                alert(axios.isAxiosError<{ message?: string }>(error)
-                                                                    ? error.response?.data?.message || 'Erro ao atualizar usuário.'
-                                                                    : 'Erro ao atualizar usuário.');
-                                                            }
-                                                        }} className="admin-btn-icon" style={{ color: '#22c55e' }} title="Salvar">
-                                                            <Save size={18} />
-                                                        </button>
-                                                        <button onClick={() => setEditingUserId(null)} className="admin-btn-icon" title="Cancelar">
-                                                            <X size={18} />
-                                                        </button>
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <button onClick={() => { setEditingUserId(u.id); setEditUserData({ name: u.name, email: u.email, role: u.role }); }} className="admin-btn-icon" title="Editar dados">
-                                                            <Edit3 size={18} />
-                                                        </button>
-                                                        {u.id !== user?.id && (
-                                                            <>
-                                                                <button onClick={() => openUserSecurityAction('password', u)} className="admin-btn-icon primary" title="Redefinir senha sem apagar dados">
-                                                                    <LockKeyhole size={18} />
-                                                                </button>
-                                                                <button onClick={() => setConfirmAction({ message: `Revogar todas as sessões de "${u.name}"? A pessoa precisará entrar novamente.`, action: () => void handleRevokeUserSessions(u) })} className="admin-btn-icon" title="Revogar sessões">
-                                                                    <LogOut size={18} />
-                                                                </button>
-                                                                {u.accessBlocked ? (
-                                                                    <button onClick={() => setConfirmAction({ message: `Liberar novamente o acesso de "${u.name}"?`, action: () => void handleUnblockUser(u) })} className="admin-btn-icon primary" title="Liberar acesso">
-                                                                        <UserCheck size={18} />
-                                                                    </button>
-                                                                ) : (
-                                                                    <button onClick={() => openUserSecurityAction('block', u)} className="admin-btn-icon danger" title="Bloquear acesso e revogar sessões">
-                                                                        <UserX size={18} />
-                                                                    </button>
-                                                                )}
-                                                                <button onClick={() => setConfirmAction({ message: `Remover "${u.name}"? Esta ação apaga os dados relacionados e deve ser usada somente quando exigido.`, action: () => handleDeleteUser(u.id) })} className="admin-btn-icon danger" title="Excluir definitivamente">
-                                                                    <Trash2 size={18} />
-                                                                </button>
-                                                            </>
-                                                        )}
-                                                    </>
-                                                )}
-                                            </div></td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-
-                            {/* Paginação */}
-                            {userTotalPages > 1 && (
-                                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.75rem', marginTop: '1rem' }}>
-                                    <button
-                                        onClick={() => setUserPage(p => Math.max(1, p - 1))}
-                                        disabled={userPage <= 1}
-                                        className="admin-btn"
-                                        style={{ padding: '0.4rem 1rem' }}
-                                    >
-                                        ← Anterior
-                                    </button>
-                                    <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
-                                        Página {userPage} de {userTotalPages}
-                                    </span>
-                                    <button
-                                        onClick={() => setUserPage(p => Math.min(userTotalPages, p + 1))}
-                                        disabled={userPage >= userTotalPages}
-                                        className="admin-btn"
-                                        style={{ padding: '0.4rem 1rem' }}
-                                    >
-                                        Próxima →
-                                    </button>
-                                </div>
-                            )}
-
-                            <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end' }}>
-                                <button onClick={handleExportStudents} className="admin-btn-primary" style={{ gap: '0.5rem' }}>
-                                    <Download size={16} /> Exportar Alunos (Excel)
-                                </button>
-                            </div>
-                        </div>
+                        <AdminUsers
+                            currentUserId={user?.id}
+                            editForm={editUserData}
+                            editingUserId={editingUserId}
+                            excelDelivery={excelEmailDelivery}
+                            excelResults={excelResults}
+                            excelUploading={excelUploading}
+                            newUser={newUser}
+                            page={userPage}
+                            search={userSearch}
+                            searchInput={userSearchInput}
+                            total={userTotal}
+                            totalPages={userTotalPages}
+                            users={users}
+                            onCancelEdit={() => setEditingUserId(null)}
+                            onClearSearch={() => { setUserSearchInput(''); setUserSearch(''); }}
+                            onCreateUser={handleCreateUser}
+                            onDeleteUser={handleDeleteUser}
+                            onEditFormChange={setEditUserData}
+                            onExcelUpload={handleExcelUpload}
+                            onExport={handleExportStudents}
+                            onNewUserChange={setNewUser}
+                            onOpenSecurity={openUserSecurityAction}
+                            onPageChange={setUserPage}
+                            onRequestConfirmation={(message, action) => setConfirmAction({ message, action })}
+                            onRevokeSessions={handleRevokeUserSessions}
+                            onSaveUser={handleUpdateUser}
+                            onSearch={() => setUserSearch(userSearchInput)}
+                            onSearchInputChange={setUserSearchInput}
+                            onStartEdit={targetUser => {
+                                setEditingUserId(targetUser.id);
+                                setEditUserData({ name: targetUser.name, email: targetUser.email, role: targetUser.role });
+                            }}
+                            onUnblockUser={handleUnblockUser}
+                        />
                     )}
 
                     {/* TAB: COURSES */}
                     {activeTab === 'courses' && (
-                        <div className="admin-fade-in">
-                            <h2 className="admin-page-title">{isTeacher ? 'Meus Cursos' : 'Gerenciar Cursos'}</h2>
-
-                            {!isTeacher && (
-                            <div className="admin-card">
-                                <h3>Criar Novo Curso</h3>
-                                <form onSubmit={handleCreateCourse} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem' }}>
-                                    <div className="admin-form-row">
-                                        <input placeholder="Nome do Curso (Ex: Módulo Intensivo OAB)" value={newCourse.name} onChange={e => setNewCourse({ ...newCourse, name: e.target.value })} required className="admin-input" style={{ flex: 2 }} />
-                                        <input placeholder="Descrição" value={newCourse.description} onChange={e => setNewCourse({ ...newCourse, description: e.target.value })} className="admin-input" style={{ flex: 2 }} />
-                                    </div>
-                                    <div className="admin-form-row" style={{ alignItems: 'center' }}>
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                                            <Upload size={16} /> Thumbnail:
-                                        </label>
-                                        <input
-                                            type="file"
-                                            accept="image/*"
-                                            onChange={async (e) => {
-                                                if (e.target.files?.[0]) {
-                                                    const url = await handleImageUpload(e.target.files[0]);
-                                                    if (url) setNewCourse(prev => ({ ...prev, thumbnailUrl: url }));
-                                                }
-                                            }}
-                                            style={{ fontSize: '0.8rem', color: 'var(--text-muted)', flex: 1 }}
-                                        />
-                                        {newCourse.thumbnailUrl && (
-                                            <img src={`${API_BASE}${newCourse.thumbnailUrl}`} alt="Preview" style={{ width: '48px', height: '48px', borderRadius: '8px', objectFit: 'cover', border: '1px solid var(--glass-border)' }} />
-                                        )}
-                                        <button type="submit" disabled={uploadingImage} className="admin-btn-primary">
-                                            <Plus size={16} /> Salvar
-                                        </button>
-                                    </div>
-                                </form>
-                            </div>
-                            )}
-
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-                                {courses.map(c => (
-                                    <div key={c.id} className="admin-course-card">
-
-                                        {/* Course Header */}
-                                        <div className="admin-course-header">
-                                            <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
-                                                {!isTeacher && (
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                                                    <button onClick={() => handleReorderCourse(c.id, 'up')} className="admin-btn-icon" title="Mover para cima" style={{ padding: '0.2rem' }}>
-                                                        <ChevronUp size={16} />
-                                                    </button>
-                                                    <button onClick={() => handleReorderCourse(c.id, 'down')} className="admin-btn-icon" title="Mover para baixo" style={{ padding: '0.2rem' }}>
-                                                        <ChevronDown size={16} />
-                                                    </button>
-                                                </div>
-                                                )}
-                                                {c.thumbnailUrl && (
-                                                    <img src={`${API_BASE}${c.thumbnailUrl}`} alt={c.name} className="admin-course-thumb" />
-                                                )}
-                                                <div>
-                                                    <h3 className="admin-course-name">{c.name}</h3>
-                                                    <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem' }}>{c.description}</p>
-                                                </div>
-                                            </div>
-                                            {!isTeacher && (
-                                            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                                                <label className="admin-btn-calendar" title="Upload Calendário PDF">
-                                                    <CalendarDays size={16} />
-                                                    {c.calendarUrl ? 'Trocar Calendário' : 'Calendário PDF'}
-                                                    <input
-                                                        type="file"
-                                                        accept="application/pdf"
-                                                        style={{ display: 'none' }}
-                                                        onChange={e => {
-                                                            if (e.target.files?.[0]) handleUploadCalendar(c.id, e.target.files[0]);
-                                                        }}
-                                                    />
-                                                </label>
-                                                {c.calendarUrl && (
-                                                    <>
-                                                        <a href={`${API_BASE}${c.calendarUrl}`} target="_blank" rel="noopener noreferrer" className="admin-btn-icon primary" title="Ver Calendário">
-                                                            <Eye size={16} />
-                                                        </a>
-                                                        <button onClick={() => handleRemoveCalendar(c.id)} className="admin-btn-icon danger" title="Remover Calendário">
-                                                            <X size={16} />
-                                                        </button>
-                                                    </>
-                                                )}
-                                                <button onClick={() => setConfirmAction({ message: `Deletar curso "${c.name}"? Todos os módulos e vídeos serão removidos.`, action: () => handleDeleteCourse(c.id) })} className="admin-btn-danger">
-                                                    <Trash2 size={18} /> Deletar Curso
-                                                </button>
-                                            </div>
-                                            )}
-                                        </div>
-
-                                        <div className={isTeacher ? '' : 'admin-course-grid'}>
-
-                                            {/* Left Column: Modules & Videos */}
-                                            <div>
-                                                <h4 className="admin-section-label">Grade Curricular (Módulos e Aulas)</h4>
-
-                                                {/* Add Module Form */}
-                                                <form onSubmit={handleCreateModule} className="admin-form-row" style={{ marginBottom: '1.5rem' }}>
-                                                    <input
-                                                        placeholder="Nome do Novo Módulo"
-                                                        required
-                                                        value={newModule.courseId === c.id ? newModule.name : ''}
-                                                        onChange={e => setNewModule({ courseId: c.id, name: e.target.value })}
-                                                        className="admin-input"
-                                                    />
-                                                    <button type="submit" disabled={!newModule.name || newModule.courseId !== c.id} className="admin-btn-success">
-                                                        <Plus size={16} /> Módulo
-                                                    </button>
-                                                </form>
-
-                                                {/* Modules List */}
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                                    {c.modules.map(m => (
-                                                        <div key={m.id} className="admin-module-block">
-
-                                                            <div className="admin-module-header">
-                                                                <strong className="admin-module-name">{m.name}</strong>
-                                                                <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
-                                                                    <label className="admin-btn-icon primary" title="Upload Material PDF" style={{ cursor: 'pointer' }}>
-                                                                        <FileDown size={16} />
-                                                                        <input
-                                                                            type="file"
-                                                                            accept="application/pdf"
-                                                                            style={{ display: 'none' }}
-                                                                            onChange={e => {
-                                                                                if (e.target.files?.[0]) handleUploadModulePdf(m.id, e.target.files[0]);
-                                                                            }}
-                                                                        />
-                                                                    </label>
-                                                                    {m.pdfUrl && (
-                                                                        <>
-                                                                            <a href={`${API_BASE}${m.pdfUrl}`} target="_blank" rel="noopener noreferrer" className="admin-pdf-badge" title="PDF anexado — clique para ver">
-                                                                                📄 PDF
-                                                                            </a>
-                                                                            <button onClick={() => handleRemoveModulePdf(m.id)} className="admin-btn-icon danger" title="Remover PDF">
-                                                                                <X size={14} />
-                                                                            </button>
-                                                                        </>
-                                                                    )}
-                                                                    <button onClick={() => setConfirmAction({ message: `Deletar módulo "${m.name}"? Vídeos serão removidos.`, action: () => handleDeleteModule(m.id) })} className="admin-btn-icon danger">
-                                                                        <Trash2 size={16} />
-                                                                    </button>
-                                                                </div>
-                                                            </div>
-
-                                                            <div style={{ padding: '1rem' }}>
-                                                                {/* Videos List */}
-                                                                {m.videos && m.videos.length > 0 ? (
-                                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem' }}>
-                                                                        {m.videos.map(v => (
-                                                                            <div key={v.id} className="admin-video-item">
-                                                                                <div className="admin-video-row">
-                                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', overflow: 'hidden' }}>
-                                                                                        <span style={{ color: 'var(--text-muted)' }}>Aula {v.order + 1}</span>
-                                                                                        <span className="admin-video-title">{v.title}</span>
-                                                                                        {v.status === 'READY' ? (
-                                                                                            <span className="admin-status-badge ready">PRONTO</span>
-                                                                                        ) : v.status === 'PROCESSING' ? (
-                                                                                            <span className="admin-status-badge processing">PROCESSANDO</span>
-                                                                                        ) : v.status === 'PENDING' ? (
-                                                                                            <span className="admin-status-badge processing">PENDENTE</span>
-                                                                                        ) : (
-                                                                                            <span className="admin-status-badge error">ERRO</span>
-                                                                                        )}
-                                                                                    </div>
-                                                                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                                                                        <button onClick={() => openVideoEditor(v)} className="admin-btn-icon primary">
-                                                                                            <Edit3 size={14} />
-                                                                                        </button>
-                                                                                        {!isTeacher && (v.status === 'ERROR' || v.status === 'PENDING') && (
-                                                                                            <button onClick={() => setConfirmAction({ message: `Reprocessar este vídeo?`, action: () => handleReprocessVideo(v.id) })} className="admin-btn-icon primary" title="Reprocessar">
-                                                                                                <RefreshCw size={14} />
-                                                                                            </button>
-                                                                                        )}
-                                                                                        {!isTeacher && (
-                                                                                        <button onClick={() => setConfirmAction({ message: `Deletar vídeo "${v.title}"?`, action: () => handleDeleteVideo(v.id) })} className="admin-btn-icon danger">
-                                                                                            <Trash2 size={14} />
-                                                                                        </button>
-                                                                                        )}
-                                                                                    </div>
-                                                                                </div>
-                                                                                {editingVideoId === v.id && (
-                                                                                    <div className="admin-edit-inline-badge">
-                                                                                        <Edit3 size={12} /> Editando — modal aberto
-                                                                                    </div>
-                                                                                )}
-                                                                            </div>
-                                                                        ))}
-                                                                    </div>
-                                                                ) : (
-                                                                    <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1rem', fontStyle: 'italic' }}>Nenhuma aula neste módulo.</p>
-                                                                )}
-
-                                                                {/* Upload Video Form */}
-                                                                <form onSubmit={handleUploadVideo} className="admin-upload-zone">
-                                                                    <span className="admin-upload-label">Adicionar Nova Aula</span>
-                                                                    <input
-                                                                        placeholder="Título do Vídeo"
-                                                                        required
-                                                                        value={uploadData.moduleId === m.id ? uploadData.title : ''}
-                                                                        onChange={e => setUploadData({ ...uploadData, moduleId: m.id, title: e.target.value })}
-                                                                        className="admin-input-sm"
-                                                                    />
-                                                                    <div className="admin-form-row">
-                                                                        <input
-                                                                            type="file"
-                                                                            accept="video/mp4,video/mkv"
-                                                                            required
-                                                                            onChange={e => {
-                                                                                if (e.target.files && e.target.files.length > 0) {
-                                                                                    setUploadData(prev => ({ ...prev, moduleId: m.id, file: e.target.files![0] }));
-                                                                                }
-                                                                            }}
-                                                                            style={{ fontSize: '0.8rem', color: 'var(--text-muted)', flex: 1 }}
-                                                                        />
-                                                                        <button
-                                                                            type="submit"
-                                                                            disabled={uploading || uploadData.moduleId !== m.id}
-                                                                            className="admin-btn-primary-sm"
-                                                                        >
-                                                                            {uploading && uploadData.moduleId === m.id ? 'Enviando...' : 'Upload MP4'}
-                                                                        </button>
-                                                                    </div>
-                                                                    {uploading && uploadData.moduleId === m.id && uploadProgress > 0 && (
-                                                                        <div className="upload-progress-bar">
-                                                                            <div className="upload-progress-fill" style={{ width: `${uploadProgress}%` }} />
-                                                                            <span className="upload-progress-text">{uploadProgress}%</span>
-                                                                        </div>
-                                                                    )}
-                                                                </form>
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                    {c.modules.length === 0 && (
-                                                        <div className="admin-empty-box">
-                                                            Nenhum módulo criado. Crie um módulo primeiro para adicionar aulas.
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-
-                                            {/* Right Column: Enrollments */}
-                                            {!isTeacher && (
-                                            <div>
-                                                <h4 className="admin-section-label">Alunos Matriculados</h4>
-
-                                                {/* Enroll Student Form */}
-                                                <form onSubmit={(e) => handleEnrollStudent(e, c.id)} className="admin-form-row" style={{ marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-                                                    <select
-                                                        required
-                                                        value={enrollmentData.courseId === c.id ? enrollmentData.userId : ''}
-                                                        onChange={e => setEnrollmentData(prev => ({ ...prev, courseId: c.id, userId: e.target.value }))}
-                                                        className="admin-select"
-                                                        style={{ flex: 2 }}
-                                                    >
-                                                        <option value="">Selecione um usuário...</option>
-                                                        {users.filter(u => u.role === 'STUDENT' || u.role === 'TEACHER').map(u => (
-                                                            <option key={u.id} value={u.id}>{u.name} ({u.email}) — {u.role === 'TEACHER' ? 'Professor' : 'Aluno'}</option>
-                                                        ))}
-                                                    </select>
-                                                    <select
-                                                        value={enrollmentData.courseId === c.id ? (enrollmentData.enrollmentRole || 'STUDENT') : 'STUDENT'}
-                                                        onChange={e => setEnrollmentData(prev => ({ ...prev, courseId: c.id, enrollmentRole: e.target.value }))}
-                                                        className="admin-select"
-                                                        style={{ flex: 1 }}
-                                                    >
-                                                        <option value="STUDENT">Aluno</option>
-                                                        <option value="TEACHER">Professor</option>
-                                                    </select>
-                                                    <button type="submit" disabled={!enrollmentData.userId || enrollmentData.courseId !== c.id} className="admin-btn-primary">
-                                                        Matricular
-                                                    </button>
-                                                </form>
-                                                <button onClick={() => setConfirmAction({ message: 'Matricular TODOS os alunos neste curso?', action: () => handleEnrollAllStudents(c.id) })} className="admin-btn-primary" style={{ marginBottom: '1.5rem', background: 'var(--accent, #ec4899)', width: '100%' }}>
-                                                    <Users size={14} /> Matricular Todos os Alunos
-                                                </button>
-
-                                                {/* Enrollments List */}
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                                    {c.enrollments && c.enrollments.length > 0 ? (
-                                                        c.enrollments.map((e) => (
-                                                            <div key={e.id} className="admin-enrollment-item">
-                                                                <div>
-                                                                    <strong style={{ fontSize: '0.95rem' }}>{e.user.name}</strong>
-                                                                    <span style={{ fontSize: '0.75rem', padding: '0.1rem 0.4rem', borderRadius: '4px', background: e.enrollmentRole === 'TEACHER' ? 'var(--accent, #8b5cf6)' : 'var(--primary, #3b82f6)', color: '#fff', marginLeft: '0.4rem' }}>
-                                                                        {e.enrollmentRole === 'TEACHER' ? 'Professor' : 'Aluno'}
-                                                                    </span>
-                                                                    <span className="admin-enrollment-email">{e.user.email}</span>
-                                                                </div>
-                                                                <button onClick={() => setConfirmAction({ message: `Remover matrícula de ${e.user.name}?`, action: () => handleRemoveEnrollment(e.id) })} className="admin-btn-icon danger" title="Remover Matrícula">
-                                                                    <Trash2 size={16} />
-                                                                </button>
-                                                            </div>
-                                                        ))
-                                                    ) : (
-                                                        <div className="admin-empty-box">
-                                                            Nenhum aluno matriculado neste curso.
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
+                        <AdminCourses
+                            courses={courses}
+                            editingVideoId={editingVideoId}
+                            enrollment={enrollmentData}
+                            isTeacher={isTeacher}
+                            moduleForm={newModule}
+                            courseForm={newCourse}
+                            upload={uploadData}
+                            uploadProgress={uploadProgress}
+                            uploading={uploading}
+                            uploadingImage={uploadingImage}
+                            users={users}
+                            onCourseFormChange={setNewCourse}
+                            onCourseThumbnailUpload={handleCourseThumbnailUpload}
+                            onCreateCourse={handleCreateCourse}
+                            onCreateModule={handleCreateModule}
+                            onDeleteCourse={handleDeleteCourse}
+                            onDeleteModule={handleDeleteModule}
+                            onDeleteVideo={handleDeleteVideo}
+                            onEnroll={handleEnrollStudent}
+                            onEnrollAll={handleEnrollAllStudents}
+                            onEnrollmentChange={setEnrollmentData}
+                            onModuleFormChange={setNewModule}
+                            onOpenVideoEditor={openVideoEditor}
+                            onRemoveCalendar={handleRemoveCalendar}
+                            onRemoveEnrollment={handleRemoveEnrollment}
+                            onRemoveModulePdf={handleRemoveModulePdf}
+                            onReorderCourse={handleReorderCourse}
+                            onReprocessVideo={handleReprocessVideo}
+                            onRequestConfirmation={(message, action) => setConfirmAction({ message, action })}
+                            onUploadCalendar={handleUploadCalendar}
+                            onUploadChange={setUploadData}
+                            onUploadModulePdf={handleUploadModulePdf}
+                            onUploadVideo={handleUploadVideo}
+                        />
                     )}
 
                     {/* TAB: AUDIT LOG */}
                     {activeTab === 'audit' && (
-                        <div className="admin-fade-in">
-                            {healthData && (
-                                <div style={{ marginBottom: '2rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-                                    <div className="stat-card" style={{ flex: 1, minWidth: '200px' }}>
-                                        <div className="stat-icon"><ActivityIcon size={24} /></div>
-                                        <div className="stat-info">
-                                            <h3>Uptime do Servidor</h3>
-                                            <div className="stat-value">{Math.floor(healthData.uptime / 3600)}h {Math.floor((healthData.uptime % 3600) / 60)}m</div>
-                                        </div>
-                                    </div>
-                                    <div className="stat-card" style={{ flex: 1, minWidth: '200px' }}>
-                                        <div className="stat-icon"><Monitor size={24} /></div>
-                                        <div className="stat-info">
-                                            <h3>Uso de Memória</h3>
-                                            <div className="stat-value">{Math.round(healthData.memory.process / 1024 / 1024)} MB</div>
-                                        </div>
-                                    </div>
-                                    <div className="stat-card" style={{ flex: 1, minWidth: '200px' }}>
-                                        <div className="stat-icon"><Settings size={24} /></div>
-                                        <div className="stat-info">
-                                            <h3>Status dos Serviços</h3>
-                                            <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem' }}>
-                                                <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.85rem' }}>
-                                                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: healthData.services.database === 'up' ? '#10b981' : '#ef4444' }}></span>
-                                                    DB
-                                                </span>
-                                                <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.85rem' }}>
-                                                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: healthData.services.storage === 'up' ? '#10b981' : '#ef4444' }}></span>
-                                                    Storage
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-
-                            <h2 className="admin-page-title">Audit Log</h2>
-                            <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>Registro de todas as ações administrativas na plataforma.</p>
-
-                            <table className="admin-table">
-                                <thead>
-                                    <tr>
-                                        <th>Data</th>
-                                        <th>Usuário</th>
-                                        <th>Ação</th>
-                                        <th>Alvo</th>
-                                        <th>Detalhes</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {auditLogs.map(log => (
-                                        <tr key={log.id}>
-                                            <td style={{ whiteSpace: 'nowrap', fontSize: '0.85rem' }}>{new Date(log.createdAt).toLocaleString('pt-BR')}</td>
-                                            <td>{log.user?.name || '—'}</td>
-                                            <td><span className="admin-status-badge ready">{log.action}</span></td>
-                                            <td style={{ fontSize: '0.85rem', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{log.target || '—'}</td>
-                                            <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)', maxWidth: '250px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{log.details || '—'}</td>
-                                        </tr>
-                                    ))}
-                                    {auditLogs.length === 0 && (
-                                        <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>Nenhum registro encontrado.</td></tr>
-                                    )}
-                                </tbody>
-                            </table>
-
-                            {auditTotalPages > 1 && (
-                                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.75rem', marginTop: '1rem' }}>
-                                    <button onClick={() => setAuditPage(p => Math.max(1, p - 1))} disabled={auditPage <= 1} className="admin-btn" style={{ padding: '0.4rem 1rem' }}>
-                                        ← Anterior
-                                    </button>
-                                    <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
-                                        Página {auditPage} de {auditTotalPages}
-                                    </span>
-                                    <button onClick={() => setAuditPage(p => Math.min(auditTotalPages, p + 1))} disabled={auditPage >= auditTotalPages} className="admin-btn" style={{ padding: '0.4rem 1rem' }}>
-                                        Próxima →
-                                    </button>
-                                </div>
-                            )}
-                        </div>
+                        <AdminAudit
+                            health={healthData}
+                            logs={auditLogs}
+                            page={auditPage}
+                            totalPages={auditTotalPages}
+                            onPageChange={setAuditPage}
+                        />
                     )}
 
                     {/* TAB: REPORTS */}
                     {activeTab === 'reports' && (
-                        <div className="admin-fade-in">
-                            <h2 className="admin-page-title">Relatórios dos Cursos</h2>
-                            <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>Visão geral de progresso e conclusão por curso.</p>
-
-                            <div className="admin-stats-grid" style={{ gap: '1.5rem' }}>
-                                {reports.map(r => (
-                                    <div key={r.id} className="admin-stat-card" style={{ position: 'relative', overflow: 'hidden' }}>
-                                        <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem' }}>{r.name}</h3>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-                                            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{r.totalStudents} alunos</span>
-                                            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{r.totalVideos} aulas</span>
-                                        </div>
-                                        <div className="report-progress-bar">
-                                            <div className="report-progress-fill" style={{ width: `${r.completionRate}%` }} />
-                                        </div>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem' }}>
-                                            <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{r.completionRate}% conclusão</span>
-                                            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{r.completedLessons}/{r.totalPossibleLessons} aulas</span>
-                                        </div>
-                                    </div>
-                                ))}
-                                {reports.length === 0 && (
-                                    <div className="admin-empty-box">Nenhum curso encontrado.</div>
-                                )}
-                            </div>
-                        </div>
+                        <AdminReports reports={reports} />
                     )}
 
                     {/* TAB: NOTIFICATIONS */}
                     {activeTab === 'notifications' && (
-                        <div className="admin-fade-in">
-                            <h2 className="admin-page-title">Enviar Notificação</h2>
-                            <p style={{ color: 'var(--text-muted)', marginBottom: '1rem' }}>Envie um aviso para o painel e, quando o SMTP estiver ativo, também para o e-mail real dos alunos.</p>
-
-                            <div className="admin-card" style={{ marginBottom: '1rem', borderLeft: `4px solid ${emailStatus?.configured ? '#15803d' : '#d97706'}` }}>
-                                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem' }}>
-                                    {emailStatus?.configured ? <CheckCircle size={20} color="#15803d" /> : <AlertTriangle size={20} color="#b45309" />}
-                                    <div>
-                                        <strong>{emailStatus?.configured ? 'Entrega por e-mail ativa' : 'Entrega por e-mail desativada'}</strong>
-                                        <p style={{ margin: '0.3rem 0 0', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                                            {emailStatus?.configured
-                                                ? `Servidor ${emailStatus.host}:${emailStatus.port} · Remetente ${emailStatus.from}`
-                                                : `Configure no Railway: ${emailStatus?.missing?.join(', ') || 'carregando diagnóstico...'}. Os avisos continuam funcionando dentro da plataforma.`}
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="admin-card">
-                                <form onSubmit={handleSendNotification} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                    <input
-                                        placeholder="Título da notificação"
-                                        value={notifForm.title}
-                                        onChange={e => setNotifForm({ ...notifForm, title: e.target.value })}
-                                        required
-                                        className="admin-input"
-                                    />
-                                    <textarea
-                                        placeholder="Mensagem..."
-                                        value={notifForm.message}
-                                        onChange={e => setNotifForm({ ...notifForm, message: e.target.value })}
-                                        required
-                                        className="admin-input"
-                                        style={{ minHeight: '100px', resize: 'vertical' }}
-                                    />
-                                    <button type="submit" className="admin-btn-primary" style={{ alignSelf: 'flex-start' }}>
-                                        <Bell size={16} /> Enviar para todos os alunos
-                                    </button>
-                                    {notificationFeedback && (
-                                        <p role="status" style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{notificationFeedback}</p>
-                                    )}
-                                </form>
-                            </div>
-                        </div>
+                        <AdminNotifications
+                            emailStatus={emailStatus}
+                            feedback={notificationFeedback}
+                            form={notifForm}
+                            onChange={setNotifForm}
+                            onSubmit={handleSendNotification}
+                        />
                     )}
 
-                    {/* TAB: LIVE CLASSES */}
                     {activeTab === 'live' && (
-                        <div className="admin-fade-in">
-                            <h2 className="admin-page-title">Aulas ao Vivo (Zoom)</h2>
-                            <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
-                                Agende aulas ao vivo e compartilhe o link do Zoom com os alunos matriculados.
-                            </p>
-
-                            {/* Form: Nova Aula ao Vivo */}
-                            <div className="admin-card" style={{ marginBottom: '2rem' }}>
-                                <h3>Agendar Nova Aula ao Vivo</h3>
-                                <form onSubmit={handleCreateLive} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '1rem' }}>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                                        <select
-                                            value={liveForm.courseId}
-                                            onChange={e => setLiveForm({ ...liveForm, courseId: e.target.value, moduleId: '' })}
-                                            required
-                                            className="admin-input"
-                                        >
-                                            <option value="">Selecionar Curso *</option>
-                                            {courses.map(c => (
-                                                <option key={c.id} value={c.id}>{c.name}</option>
-                                            ))}
-                                        </select>
-                                        <select
-                                            value={liveForm.moduleId}
-                                            onChange={e => setLiveForm({ ...liveForm, moduleId: e.target.value })}
-                                            className="admin-input"
-                                        >
-                                            <option value="">Módulo (opcional)</option>
-                                            {liveForm.courseId && courses.find(c => c.id === liveForm.courseId)?.modules.map(m => (
-                                                <option key={m.id} value={m.id}>{m.name}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    <input
-                                        placeholder="Título da aula *"
-                                        value={liveForm.title}
-                                        onChange={e => setLiveForm({ ...liveForm, title: e.target.value })}
-                                        required
-                                        className="admin-input"
-                                    />
-                                    <input
-                                        placeholder="Descrição (opcional)"
-                                        value={liveForm.description}
-                                        onChange={e => setLiveForm({ ...liveForm, description: e.target.value })}
-                                        className="admin-input"
-                                    />
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                                        <div>
-                                            <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>Data/Hora Início *</label>
-                                            <input
-                                                type="datetime-local"
-                                                value={liveForm.startAt}
-                                                onChange={e => setLiveForm({ ...liveForm, startAt: e.target.value })}
-                                                required
-                                                className="admin-input"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>Data/Hora Fim (opcional)</label>
-                                            <input
-                                                type="datetime-local"
-                                                value={liveForm.endAt}
-                                                onChange={e => setLiveForm({ ...liveForm, endAt: e.target.value })}
-                                                className="admin-input"
-                                            />
-                                        </div>
-                                    </div>
-                                    <input
-                                        placeholder="Link do Zoom (Join URL) *"
-                                        value={liveForm.zoomJoinUrl}
-                                        onChange={e => setLiveForm({ ...liveForm, zoomJoinUrl: e.target.value })}
-                                        required
-                                        className="admin-input"
-                                    />
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                                        <input
-                                            placeholder="Link do Host (Start URL, opcional)"
-                                            value={liveForm.zoomStartUrl}
-                                            onChange={e => setLiveForm({ ...liveForm, zoomStartUrl: e.target.value })}
-                                            className="admin-input"
-                                        />
-                                        <input
-                                            placeholder="Meeting ID (opcional)"
-                                            value={liveForm.zoomMeetingId}
-                                            onChange={e => setLiveForm({ ...liveForm, zoomMeetingId: e.target.value })}
-                                            className="admin-input"
-                                        />
-                                    </div>
-                                    <button type="submit" className="admin-btn-primary" style={{ alignSelf: 'flex-start' }}>
-                                        <Plus size={16} /> Agendar Aula ao Vivo
-                                    </button>
-                                </form>
-                            </div>
-
-                            {/* List: Aulas Agendadas */}
-                            <div className="admin-card">
-                                <h3>Aulas Agendadas</h3>
-                                {liveClasses.length === 0 ? (
-                                    <div className="admin-empty-box">Nenhuma aula ao vivo agendada.</div>
-                                ) : (
-                                    <div className="live-class-list">
-                                        {liveClasses.map((lc) => (
-                                            <div key={lc.id} className={`live-class-item status-${lc.status.toLowerCase()}`}>
-                                                <div className="live-class-info">
-                                                    <div className="live-class-header">
-                                                        <strong>{lc.title}</strong>
-                                                        <span className={`live-status-badge ${lc.status.toLowerCase()}`}>
-                                                            {lc.status === 'SCHEDULED' ? '📅 Agendada' : lc.status === 'LIVE' ? '🔴 Ao Vivo' : lc.status === 'ENDED' ? '✅ Encerrada' : '🎬 Gravada'}
-                                                        </span>
-                                                    </div>
-                                                    <div className="live-class-meta">
-                                                        <span>📚 {lc.course?.name}</span>
-                                                        {lc.module && <span>📁 {lc.module.name}</span>}
-                                                        <span>🕐 {new Date(lc.startAt).toLocaleString('pt-BR')}</span>
-                                                        {lc.endAt && <span>→ {new Date(lc.endAt).toLocaleString('pt-BR')}</span>}
-                                                    </div>
-                                                    {lc.zoomJoinUrl && (
-                                                        <a href={lc.zoomJoinUrl} target="_blank" rel="noopener noreferrer" className="live-zoom-link">
-                                                            <ExternalLink size={14} /> Link do Zoom
-                                                        </a>
-                                                    )}
-                                                </div>
-                                                <div className="live-class-actions">
-                                                    {editingLiveId === lc.id ? (
-                                                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                                                            <select
-                                                                value={editingLiveStatus}
-                                                                onChange={e => setEditingLiveStatus(e.target.value)}
-                                                                className="admin-input"
-                                                                style={{ width: 'auto', minWidth: '140px' }}
-                                                            >
-                                                                <option value="SCHEDULED">Agendada</option>
-                                                                <option value="LIVE">Ao Vivo</option>
-                                                                <option value="ENDED">Encerrada</option>
-                                                            </select>
-                                                            <button onClick={() => handleUpdateLive(lc.id)} className="admin-btn-primary" style={{ padding: '0.4rem 0.75rem' }}>
-                                                                <Save size={14} />
-                                                            </button>
-                                                            <button onClick={() => setEditingLiveId(null)} className="admin-btn-secondary" style={{ padding: '0.4rem 0.75rem' }}>
-                                                                <X size={14} />
-                                                            </button>
-                                                        </div>
-                                                    ) : (
-                                                        <>
-                                                            <button
-                                                                onClick={() => { setEditingLiveId(lc.id); setEditingLiveStatus(lc.status); }}
-                                                                className="admin-btn-secondary"
-                                                                style={{ padding: '0.4rem 0.75rem' }}
-                                                                title="Alterar status"
-                                                            >
-                                                                <Edit3 size={14} />
-                                                            </button>
-                                                            <button
-                                                                onClick={() => handleDeleteLive(lc.id, lc.title)}
-                                                                className="admin-btn-danger"
-                                                                style={{ padding: '0.4rem 0.75rem' }}
-                                                                title="Remover"
-                                                            >
-                                                                <Trash2 size={14} />
-                                                            </button>
-                                                        </>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
+                        <AdminLiveClasses
+                            classes={liveClasses}
+                            courses={courses}
+                            editingId={editingLiveId}
+                            editingStatus={editingLiveStatus}
+                            form={liveForm}
+                            onCreate={handleCreateLive}
+                            onDelete={handleDeleteLive}
+                            onEditingChange={(id, status) => {
+                                setEditingLiveId(id);
+                                if (status) setEditingLiveStatus(status);
+                            }}
+                            onFormChange={setLiveForm}
+                            onStatusChange={setEditingLiveStatus}
+                            onUpdate={handleUpdateLive}
+                        />
                     )}
 
-                    {/* TAB: MODERATION */}
+
                     {activeTab === 'moderation' && (
-                        <div className="admin-fade-in">
-                            <h2 className="admin-page-title">Moderação de Comentários</h2>
-                            <p style={{ color: '#94a3b8', marginBottom: '1.5rem' }}>
-                                Comentários flagrados automaticamente pelo filtro de profanidade ou denunciados por alunos.
-                            </p>
-
-                            {flaggedComments.length === 0 ? (
-                                <div style={{ textAlign: 'center', padding: '3rem', color: '#64748b' }}>
-                                    <ShieldCheck size={48} style={{ marginBottom: '1rem', opacity: 0.5 }} />
-                                    <h3>Tudo limpo!</h3>
-                                    <p>Nenhum comentário pendente de moderação.</p>
-                                </div>
-                            ) : (
-                                <div className="admin-moderation-list">
-                                    {flaggedComments.map((c) => (
-                                        <div key={c.id} className="admin-mod-card">
-                                            <div className="admin-mod-header">
-                                                <div className="admin-mod-user">
-                                                    <strong>{c.user.name}</strong>
-                                                    <span className="admin-mod-role">{c.user.role}</span>
-                                                    <span className="admin-mod-time">{new Date(c.createdAt).toLocaleString('pt-BR')}</span>
-                                                </div>
-                                                <div className="admin-mod-lesson">
-                                                    {c.video.module.course.name} → {c.video.title}
-                                                </div>
-                                            </div>
-                                            <div className="admin-mod-text">{c.text}</div>
-                                            {c.flagged && (
-                                                <span className="admin-mod-flag auto">
-                                                    <Flag size={12} /> Filtro automático
-                                                </span>
-                                            )}
-                                            {c.reports.length > 0 && (
-                                                <div className="admin-mod-reports">
-                                                    <strong><Flag size={12} /> {c.reports.length} denúncia(s):</strong>
-                                                    {c.reports.map((r) => (
-                                                        <div key={r.id} className="admin-mod-report-item">
-                                                            <span>{r.user.name}:</span> {r.reason}
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            )}
-                                            <div className="admin-mod-actions">
-                                                <button
-                                                    className="admin-btn admin-btn-sm admin-btn-success"
-                                                    onClick={async () => {
-                                                        try {
-                                                            await api.put(`/api/admin/comments/${c.id}/approve`, {}, {
-                                                                headers: { Authorization: `Bearer ${token}` }
-                                                            });
-                                                            fetchData();
-                                                        } catch { /* ignore */ }
-                                                    }}
-                                                >
-                                                    <CheckCircle size={14} /> Aprovar
-                                                </button>
-                                                <button
-                                                    className="admin-btn admin-btn-sm admin-btn-danger"
-                                                    onClick={async () => {
-                                                        try {
-                                                            await api.delete(`/api/admin/comments/${c.id}`, {
-                                                                headers: { Authorization: `Bearer ${token}` }
-                                                            });
-                                                            fetchData();
-                                                        } catch { /* ignore */ }
-                                                    }}
-                                                >
-                                                    <Trash2 size={14} /> Remover
-                                                </button>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-
-                            {flaggedTotalPages > 1 && (
-                                <div className="admin-pagination">
-                                    <button disabled={flaggedPage <= 1} onClick={() => setFlaggedPage(p => p - 1)}>Anterior</button>
-                                    <span>Página {flaggedPage} de {flaggedTotalPages}</span>
-                                    <button disabled={flaggedPage >= flaggedTotalPages} onClick={() => setFlaggedPage(p => p + 1)}>Próxima</button>
-                                </div>
-                            )}
-                        </div>
+                        <AdminModeration
+                            comments={flaggedComments}
+                            page={flaggedPage}
+                            totalPages={flaggedTotalPages}
+                            onApprove={async id => {
+                                await api.put(`/api/admin/comments/${id}/approve`, {}, { headers: { Authorization: `Bearer ${token}` } });
+                                await fetchData();
+                            }}
+                            onPageChange={setFlaggedPage}
+                            onRemove={async id => {
+                                await api.delete(`/api/admin/comments/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+                                await fetchData();
+                            }}
+                        />
                     )}
 
-                    {/* TAB: PUNISHMENT */}
+
                     {activeTab === 'punishment' && (
-                        <div className="admin-fade-in">
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                                <h2 className="admin-page-title" style={{ margin: 0 }}>Sistema de Punições</h2>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                    <label className="punishment-toggle-label">
-                                        <span style={{ color: punishmentEnabled ? '#22c55e' : '#ef4444', fontWeight: 600 }}>
-                                            {punishmentEnabled ? 'Ativo' : 'Desativado'}
-                                        </span>
-                                        <button
-                                            className={`punishment-toggle-btn ${punishmentEnabled ? 'active' : ''}`}
-                                            onClick={async () => {
-                                                try {
-                                                    const res = await api.put('/api/admin/punishment-toggle', {}, {
-                                                        headers: { Authorization: `Bearer ${token}` }
-                                                    });
-                                                    setPunishmentEnabled(res.data.forumPunishmentEnabled);
-                                                } catch { /* ignore */ }
-                                            }}
-                                        >
-                                            <span className="punishment-toggle-thumb" />
-                                        </button>
-                                    </label>
-                                    <button className="admin-btn admin-btn-sm" onClick={() => fetchData()}>
-                                        <RefreshCw size={14} /> Atualizar
-                                    </button>
-                                </div>
-                            </div>
-
-                            {!punishmentEnabled && (
-                                <div className="punishment-warning">
-                                    <AlertTriangle size={20} />
-                                    <span>O sistema de punição automática está <strong>desativado</strong>. Violações serão registradas, mas bans não serão aplicados automaticamente.</span>
-                                </div>
-                            )}
-
-                            {/* Seção: Recursos (Appeals) */}
-                            <div className="punishment-section">
-                                <h3><Scale size={18} /> Recursos dos Alunos</h3>
-                                <div className="punishment-filter-row">
-                                    {['PENDING', 'APPROVED', 'REJECTED'].map(s => (
-                                        <button
-                                            key={s}
-                                            className={`punishment-filter-btn ${appealFilter === s ? 'active' : ''}`}
-                                            onClick={() => setAppealFilter(s)}
-                                        >
-                                            {s === 'PENDING' ? 'Pendentes' : s === 'APPROVED' ? 'Aprovados' : 'Rejeitados'}
-                                        </button>
-                                    ))}
-                                </div>
-                                {appeals.length === 0 ? (
-                                    <p className="punishment-empty">Nenhum recurso {appealFilter === 'PENDING' ? 'pendente' : appealFilter === 'APPROVED' ? 'aprovado' : 'rejeitado'}.</p>
-                                ) : (
-                                    <div className="punishment-list">
-                                        {appeals.map((a) => (
-                                            <div key={a.id} className="punishment-card appeal-card">
-                                                <div className="punishment-card-header">
-                                                    <strong>{a.user.name}</strong>
-                                                    <span className="punishment-card-email">{a.user.email}</span>
-                                                    <span className="punishment-card-time">{new Date(a.createdAt).toLocaleString('pt-BR')}</span>
-                                                </div>
-                                                <div className="punishment-card-body">
-                                                    <p className="punishment-card-reason">{a.reason}</p>
-                                                </div>
-                                                {a.status === 'PENDING' && (
-                                                    <div className="punishment-card-actions">
-                                                        <button
-                                                            className="admin-btn admin-btn-sm admin-btn-success"
-                                                            onClick={async () => {
-                                                                try {
-                                                                    await api.put(`/api/admin/appeals/${a.id}`, { status: 'APPROVED', adminNote: 'Recurso aceito' }, {
-                                                                        headers: { Authorization: `Bearer ${token}` }
-                                                                    });
-                                                                    fetchData();
-                                                                } catch { /* ignore */ }
-                                                            }}
-                                                        >
-                                                            <CheckCircle size={14} /> Aprovar
-                                                        </button>
-                                                        <button
-                                                            className="admin-btn admin-btn-sm admin-btn-danger"
-                                                            onClick={async () => {
-                                                                try {
-                                                                    await api.put(`/api/admin/appeals/${a.id}`, { status: 'REJECTED', adminNote: 'Recurso negado' }, {
-                                                                        headers: { Authorization: `Bearer ${token}` }
-                                                                    });
-                                                                    fetchData();
-                                                                } catch { /* ignore */ }
-                                                            }}
-                                                        >
-                                                            <X size={14} /> Rejeitar
-                                                        </button>
-                                                    </div>
-                                                )}
-                                                {a.adminNote && (
-                                                    <div className="punishment-card-note">Nota: {a.adminNote}</div>
-                                                )}
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Seção: Bans Ativos */}
-                            <div className="punishment-section">
-                                <h3><Ban size={18} /> Bans</h3>
-                                {bans.length === 0 ? (
-                                    <p className="punishment-empty">Nenhum ban registrado.</p>
-                                ) : (
-                                    <div className="punishment-list">
-                                        {bans.map((b) => (
-                                            <div key={b.id} className={`punishment-card ban-card ${b.active ? 'ban-active' : 'ban-expired'}`}>
-                                                <div className="punishment-card-header">
-                                                    <strong>{b.user.name}</strong>
-                                                    <span className={`punishment-ban-type ${b.banType.toLowerCase()}`}>{b.banType.replace('_', ' ')}</span>
-                                                    <span className={`punishment-ban-status ${b.active ? 'active' : 'inactive'}`}>
-                                                        {b.active ? 'ATIVO' : 'Expirado'}
-                                                    </span>
-                                                </div>
-                                                <div className="punishment-card-body">
-                                                    <p><strong>Motivo:</strong> {b.reason}</p>
-                                                    <p><strong>Criado:</strong> {new Date(b.createdAt).toLocaleString('pt-BR')}</p>
-                                                    {b.expiresAt && <p><strong>Expira:</strong> {new Date(b.expiresAt).toLocaleString('pt-BR')}</p>}
-                                                    {!b.expiresAt && <p><strong>Permanente</strong></p>}
-                                                </div>
-                                                {b.active && (
-                                                    <div className="punishment-card-actions">
-                                                        <button
-                                                            className="admin-btn admin-btn-sm admin-btn-warning"
-                                                            onClick={async () => {
-                                                                try {
-                                                                    await api.put(`/api/admin/bans/${b.id}/lift`, {}, {
-                                                                        headers: { Authorization: `Bearer ${token}` }
-                                                                    });
-                                                                    fetchData();
-                                                                } catch { /* ignore */ }
-                                                            }}
-                                                        >
-                                                            Revogar Ban
-                                                        </button>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Seção: Ban Manual */}
-                            <div className="punishment-section">
-                                <h3><Plus size={18} /> Aplicar Ban Manual</h3>
-                                <div className="punishment-manual-form">
-                                    <select
-                                        value={manualBanForm.userId}
-                                        onChange={e => setManualBanForm({ ...manualBanForm, userId: e.target.value })}
-                                        className="admin-input"
-                                    >
-                                        <option value="">Selecione o aluno...</option>
-                                        {users.filter(u => u.role === 'STUDENT').map(u => (
-                                            <option key={u.id} value={u.id}>{u.name} ({u.email})</option>
-                                        ))}
-                                    </select>
-                                    <select
-                                        value={manualBanForm.banType}
-                                        onChange={e => setManualBanForm({ ...manualBanForm, banType: e.target.value })}
-                                        className="admin-input"
-                                    >
-                                        <option value="TEMP_1D">1 Dia</option>
-                                        <option value="TEMP_2D">2 Dias</option>
-                                        <option value="TEMP_10D">10 Dias</option>
-                                        <option value="PERMANENT">Permanente</option>
-                                    </select>
-                                    <input
-                                        type="text"
-                                        value={manualBanForm.reason}
-                                        onChange={e => setManualBanForm({ ...manualBanForm, reason: e.target.value })}
-                                        placeholder="Motivo do ban..."
-                                        className="admin-input"
-                                    />
-                                    <button
-                                        className="admin-btn admin-btn-danger"
-                                        disabled={!manualBanForm.userId || !manualBanForm.reason.trim()}
-                                        onClick={async () => {
-                                            try {
-                                                await api.post('/api/admin/bans', manualBanForm, {
-                                                    headers: { Authorization: `Bearer ${token}` }
-                                                });
-                                                setManualBanForm({ userId: '', reason: '', banType: 'TEMP_1D' });
-                                                fetchData();
-                                            } catch { /* ignore */ }
-                                        }}
-                                    >
-                                        <Ban size={14} /> Aplicar Ban
-                                    </button>
-                                </div>
-                            </div>
-
-                            {/* Seção: Histórico de Violações */}
-                            <div className="punishment-section">
-                                <h3><AlertTriangle size={18} /> Histórico de Violações</h3>
-                                {violations.length === 0 ? (
-                                    <p className="punishment-empty">Nenhuma violação registrada.</p>
-                                ) : (
-                                    <div className="punishment-table-wrap">
-                                        <table className="punishment-table">
-                                            <thead>
-                                                <tr>
-                                                    <th>Aluno</th>
-                                                    <th>Palavra</th>
-                                                    <th>Severidade</th>
-                                                    <th>Ação</th>
-                                                    <th>Data</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {violations.map((v) => (
-                                                    <tr key={v.id}>
-                                                        <td>{v.user.name}</td>
-                                                        <td className="punishment-word">{v.word}</td>
-                                                        <td>
-                                                            <span className={`punishment-severity ${v.severity.toLowerCase()}`}>
-                                                                {v.severity === 'LIGHT' ? 'Leve' : v.severity === 'MEDIUM' ? 'Média' : 'Grave'}
-                                                            </span>
-                                                        </td>
-                                                        <td className="punishment-action-label">{v.autoAction}</td>
-                                                        <td>{new Date(v.createdAt).toLocaleString('pt-BR')}</td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
+                        <AdminPunishment
+                            appeals={appeals}
+                            appealFilter={appealFilter}
+                            bans={bans}
+                            enabled={punishmentEnabled}
+                            manualBan={manualBanForm}
+                            users={users}
+                            violations={violations}
+                            onAppealFilterChange={setAppealFilter}
+                            onApplyBan={async () => {
+                                await api.post('/api/admin/bans', manualBanForm, { headers: { Authorization: `Bearer ${token}` } });
+                                setManualBanForm({ userId: '', reason: '', banType: 'TEMP_1D' });
+                                await fetchData();
+                            }}
+                            onLiftBan={async id => {
+                                await api.put(`/api/admin/bans/${id}/lift`, {}, { headers: { Authorization: `Bearer ${token}` } });
+                                await fetchData();
+                            }}
+                            onManualBanChange={setManualBanForm}
+                            onRefresh={() => void fetchData()}
+                            onReviewAppeal={async (id, status) => {
+                                await api.put(`/api/admin/appeals/${id}`, { status, adminNote: status === 'APPROVED' ? 'Recurso aceito' : 'Recurso negado' }, { headers: { Authorization: `Bearer ${token}` } });
+                                await fetchData();
+                            }}
+                            onToggle={async () => {
+                                const response = await api.put('/api/admin/punishment-toggle', {}, { headers: { Authorization: `Bearer ${token}` } });
+                                setPunishmentEnabled(response.data.forumPunishmentEnabled);
+                            }}
+                        />
                     )}
+
 
                     {activeTab === 'broadcast' && user?.role === 'ADMIN' && (
                         <div className="admin-fade-in">
@@ -2573,7 +1363,7 @@ export default function AdminDashboard() {
                                         <label>Logo da Plataforma</label>
                                         {brandingForm.logoUrl && (
                                             <div style={{ marginBottom: '1rem' }}>
-                                                <img src={`${API_BASE}${brandingForm.logoUrl}`} alt="Logo Preview" style={{ maxHeight: '60px', borderRadius: '8px', border: '1px solid var(--glass-border)' }} />
+                                                <img src={resolveMediaUrl(brandingForm.logoUrl)} alt="Logo Preview" style={{ maxHeight: '60px', borderRadius: '8px', border: '1px solid var(--glass-border)' }} />
                                             </div>
                                         )}
                                         <input
@@ -2590,7 +1380,7 @@ export default function AdminDashboard() {
                                         <label>Banner do Dashboard (Aluno)</label>
                                         {brandingForm.bannerUrl && (
                                             <div style={{ marginBottom: '1rem' }}>
-                                                <img src={`${API_BASE}${brandingForm.bannerUrl}`} alt="Banner Preview" style={{ maxHeight: '120px', width: '100%', objectFit: 'cover', borderRadius: '12px', border: '1px solid var(--glass-border)' }} />
+                                                <img src={resolveMediaUrl(brandingForm.bannerUrl)} alt="Banner Preview" style={{ maxHeight: '120px', width: '100%', objectFit: 'cover', borderRadius: '12px', border: '1px solid var(--glass-border)' }} />
                                                 <button
                                                     type="button"
                                                     onClick={() => setBrandingForm({ ...brandingForm, bannerUrl: '' })}
@@ -2622,350 +1412,79 @@ export default function AdminDashboard() {
                         </div>
                     )}
 
-                    {/* TAB: ATTENDANCE */}
                     {activeTab === 'attendance' && (
-                        <div className="admin-fade-in">
-                            <h2 className="admin-page-title">Controle de Presença</h2>
-
-                            {/* Attendance Config Card */}
-                            <div className="admin-card" style={{ marginBottom: '2rem' }}>
-                                <h3 style={{ marginBottom: '1rem' }}>Configurações de Presença</h3>
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem', alignItems: 'flex-end' }}>
-                                    <div>
-                                        <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.3rem' }}>Sistema de Presença</label>
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-                                            <input
-                                                type="checkbox"
-                                                checked={attendanceConfig.attendanceEnabled}
-                                                onChange={e => setAttendanceConfig(prev => ({ ...prev, attendanceEnabled: e.target.checked }))}
-                                                style={{ width: '18px', height: '18px' }}
-                                            />
-                                            <span style={{ fontWeight: 600 }}>{attendanceConfig.attendanceEnabled ? 'Ativado' : 'Desativado'}</span>
-                                        </label>
-                                    </div>
-                                    <div>
-                                        <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.3rem' }}>Tempo Mínimo (minutos)</label>
-                                        <input
-                                            type="number"
-                                            min={1}
-                                            max={180}
-                                            value={attendanceConfig.attendanceMinMinutes}
-                                            onChange={e => setAttendanceConfig(prev => ({ ...prev, attendanceMinMinutes: parseInt(e.target.value) || 20 }))}
-                                            className="admin-input"
-                                            style={{ width: '120px' }}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.3rem' }}>Modo</label>
-                                        <select
-                                            value={attendanceConfig.attendanceMode}
-                                            onChange={e => setAttendanceConfig(prev => ({ ...prev, attendanceMode: e.target.value }))}
-                                            className="admin-select"
-                                            style={{ minWidth: '200px' }}
-                                        >
-                                            <option value="DATE_ONLY">Somente na Data do Módulo</option>
-                                            <option value="FREE">Livre (Qualquer Data)</option>
-                                        </select>
-                                    </div>
-                                    <button onClick={handleSaveAttendanceConfig} className="admin-btn-primary">
-                                        <Save size={16} /> Salvar Configuração
-                                    </button>
-                                </div>
-                            </div>
-
-                            {/* Attendance Filter */}
-                            <div className="admin-card" style={{ marginBottom: '1.5rem' }}>
-                                <h3 style={{ marginBottom: '1rem' }}>Filtrar Presença</h3>
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'flex-end' }}>
-                                    <div>
-                                        <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.3rem' }}>Curso</label>
-                                        <select
-                                            value={attendanceFilter.courseId}
-                                            onChange={e => {
-                                                const courseId = e.target.value;
-                                                setAttendanceFilter(prev => ({ ...prev, courseId, moduleId: '' }));
-                                                const course = courses.find(c => c.id === courseId);
-                                                setAttendanceModules(course?.modules || []);
-                                                setAttendanceData([]);
-                                            }}
-                                            className="admin-select"
-                                            style={{ minWidth: '250px' }}
-                                        >
-                                            <option value="">Selecione um curso...</option>
-                                            {courses.map(c => (
-                                                <option key={c.id} value={c.id}>{c.name}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.3rem' }}>Módulo</label>
-                                        <select
-                                            value={attendanceFilter.moduleId}
-                                            onChange={e => setAttendanceFilter(prev => ({ ...prev, moduleId: e.target.value }))}
-                                            className="admin-select"
-                                            style={{ minWidth: '250px' }}
-                                            disabled={!attendanceFilter.courseId}
-                                        >
-                                            <option value="">Selecione um módulo...</option>
-                                            {attendanceModules.map((m) => (
-                                                <option key={m.id} value={m.id}>{m.name}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.3rem' }}>Data</label>
-                                        <input
-                                            type="date"
-                                            value={attendanceFilter.date}
-                                            onChange={e => setAttendanceFilter(prev => ({ ...prev, date: e.target.value }))}
-                                            className="admin-input"
-                                        />
-                                    </div>
-                                    <button
-                                        onClick={fetchAttendance}
-                                        disabled={!attendanceFilter.moduleId || !attendanceFilter.date}
-                                        className="admin-btn-primary"
-                                    >
-                                        <Eye size={16} /> Buscar
-                                    </button>
-                                </div>
-                            </div>
-
-                            {/* Attendance List */}
-                            {attendanceData.length > 0 && (
-                                <div className="admin-card">
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                                        <h3>Lista de Presença — {attendanceData.length} aluno(s)</h3>
-                                        <div style={{ display: 'flex', gap: '1rem', fontSize: '0.9rem' }}>
-                                            <span style={{ color: '#22c55e', fontWeight: 600 }}>
-                                                ✓ Presentes: {attendanceData.filter((a) => a.status === 'PRESENT').length}
-                                            </span>
-                                            <span style={{ color: '#ef4444', fontWeight: 600 }}>
-                                                ✗ Ausentes: {attendanceData.filter((a) => a.status === 'ABSENT').length}
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    <div style={{ overflowX: 'auto' }}>
-                                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                                            <thead>
-                                                <tr style={{ borderBottom: '2px solid var(--glass-border)', textAlign: 'left' }}>
-                                                    <th style={{ padding: '0.75rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Aluno</th>
-                                                    <th style={{ padding: '0.75rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Email</th>
-                                                    <th style={{ padding: '0.75rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Tempo Assistido</th>
-                                                    <th style={{ padding: '0.75rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Status</th>
-                                                    <th style={{ padding: '0.75rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Detecção</th>
-                                                    <th style={{ padding: '0.75rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Ações</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {attendanceData.map((att, idx) => (
-                                                    <tr key={att.id || `absent-${att.userId}`} style={{ borderBottom: '1px solid var(--glass-border)', background: idx % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)' }}>
-                                                        <td style={{ padding: '0.75rem', fontWeight: 500 }}>{att.user?.name || 'N/A'}</td>
-                                                        <td style={{ padding: '0.75rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>{att.user?.email || 'N/A'}</td>
-                                                        <td style={{ padding: '0.75rem' }}>
-                                                            {Math.floor((att.watchTimeSeconds || 0) / 60)}min {(att.watchTimeSeconds || 0) % 60}s
-                                                        </td>
-                                                        <td style={{ padding: '0.75rem' }}>
-                                                            <span style={{
-                                                                padding: '0.2rem 0.6rem',
-                                                                borderRadius: '6px',
-                                                                fontSize: '0.8rem',
-                                                                fontWeight: 600,
-                                                                background: att.status === 'PRESENT' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
-                                                                color: att.status === 'PRESENT' ? '#22c55e' : '#ef4444'
-                                                            }}>
-                                                                {att.status === 'PRESENT' ? '✓ Presente' : '✗ Ausente'}
-                                                            </span>
-                                                        </td>
-                                                        <td style={{ padding: '0.75rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                                                            {att.autoDetected ? '🤖 Auto' : att.id ? '✏️ Manual' : '—'}
-                                                        </td>
-                                                        <td style={{ padding: '0.75rem' }}>
-                                                            <button
-                                                                onClick={() => {
-                                                                    setAttendanceEditModal({
-                                                                        id: att.id || '',
-                                                                        userId: att.userId,
-                                                                        moduleId: attendanceFilter.moduleId,
-                                                                        date: attendanceFilter.date,
-                                                                        currentStatus: att.status
-                                                                    });
-                                                                    setAttendanceEditForm({
-                                                                        status: att.status === 'PRESENT' ? 'ABSENT' : 'PRESENT',
-                                                                        justification: ''
-                                                                    });
-                                                                }}
-                                                                className="admin-btn-icon primary"
-                                                                title="Editar presença"
-                                                            >
-                                                                <Edit3 size={14} />
-                                                            </button>
-                                                            {/* Show edit history */}
-                                                            {att.edits && att.edits.length > 0 && (
-                                                                <span title={att.edits.map((ed) => `${ed.editedBy?.name}: ${ed.oldStatus}→${ed.newStatus} - ${ed.justification}`).join('\n')} style={{ marginLeft: '0.5rem', cursor: 'help', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                                                                    📝 {att.edits.length} edição(ões)
-                                                                </span>
-                                                            )}
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            )}
-
-                            {attendanceFilter.moduleId && attendanceFilter.date && attendanceData.length === 0 && (
-                                <div className="admin-empty-box">
-                                    Nenhum registro de presença encontrado para este módulo e data.
-                                </div>
-                            )}
-                        </div>
+                        <AdminAttendance
+                            config={attendanceConfig}
+                            courses={courses}
+                            data={attendanceData}
+                            editForm={attendanceEditForm}
+                            editModal={attendanceEditModal}
+                            filter={attendanceFilter}
+                            modules={attendanceModules}
+                            onBeginEdit={attendance => {
+                                setAttendanceEditModal({
+                                    id: attendance.id || '',
+                                    userId: attendance.userId,
+                                    moduleId: attendanceFilter.moduleId,
+                                    date: attendanceFilter.date,
+                                    currentStatus: attendance.status
+                                });
+                                setAttendanceEditForm({
+                                    status: attendance.status === 'PRESENT' ? 'ABSENT' : 'PRESENT',
+                                    justification: ''
+                                });
+                            }}
+                            onCloseEdit={() => setAttendanceEditModal(null)}
+                            onConfigChange={setAttendanceConfig}
+                            onCourseChange={courseId => {
+                                setAttendanceFilter(current => ({ ...current, courseId, moduleId: '' }));
+                                setAttendanceModules(courses.find(course => course.id === courseId)?.modules || []);
+                                setAttendanceData([]);
+                            }}
+                            onEditFormChange={setAttendanceEditForm}
+                            onFetch={fetchAttendance}
+                            onFilterChange={setAttendanceFilter}
+                            onSaveConfig={handleSaveAttendanceConfig}
+                            onSubmitEdit={handleAttendanceEdit}
+                        />
                     )}
 
-                    {/* Attendance Edit Modal */}
-                    {attendanceEditModal && (
-                        <div className="modal-overlay" onClick={() => setAttendanceEditModal(null)}>
-                            <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
-                                <h3 style={{ marginBottom: '1rem' }}>Editar Presença</h3>
-                                <p style={{ color: 'var(--text-muted)', marginBottom: '1rem', fontSize: '0.9rem' }}>
-                                    Status atual: <strong>{attendanceEditModal.currentStatus === 'PRESENT' ? 'Presente' : 'Ausente'}</strong>
-                                </p>
-                                <div style={{ marginBottom: '1rem' }}>
-                                    <label style={{ fontSize: '0.85rem', display: 'block', marginBottom: '0.3rem' }}>Novo Status</label>
-                                    <select
-                                        value={attendanceEditForm.status}
-                                        onChange={e => setAttendanceEditForm(prev => ({ ...prev, status: e.target.value }))}
-                                        className="admin-select"
-                                    >
-                                        <option value="PRESENT">Presente</option>
-                                        <option value="ABSENT">Ausente</option>
-                                    </select>
-                                </div>
-                                <div style={{ marginBottom: '1.5rem' }}>
-                                    <label style={{ fontSize: '0.85rem', display: 'block', marginBottom: '0.3rem' }}>Justificativa *</label>
-                                    <textarea
-                                        value={attendanceEditForm.justification}
-                                        onChange={e => setAttendanceEditForm(prev => ({ ...prev, justification: e.target.value }))}
-                                        className="admin-input"
-                                        rows={3}
-                                        placeholder="Motivo da alteração (obrigatório)..."
-                                        required
-                                        style={{ width: '100%', resize: 'vertical' }}
-                                    />
-                                    <small style={{ color: 'var(--text-muted)' }}>Esta justificativa será registrada no log de auditoria.</small>
-                                </div>
-                                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
-                                    <button onClick={() => setAttendanceEditModal(null)} className="admin-btn-danger" style={{ background: 'transparent', border: '1px solid var(--glass-border)', color: 'var(--text-primary)' }}>
-                                        Cancelar
-                                    </button>
-                                    <button onClick={handleAttendanceEdit} disabled={!attendanceEditForm.justification.trim()} className="admin-btn-primary">
-                                        <Save size={16} /> Salvar
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
 
                 </main>
             </div>
         </div>
 
-        {/* Full-screen Editor Modal */}
         {editingVideoId && (
-            <div className="editor-modal-overlay" onClick={() => { setEditingVideoId(null); setEditBlocks([]); setEditorModalMode('edit'); }}>
-                <div className="editor-modal" onClick={e => e.stopPropagation()}>
-                    <div className="editor-modal-header">
-                        <h2>Editar Aula</h2>
-                        <div className="editor-modal-actions">
-                            <div className="editor-modal-tabs">
-                                <button className={`editor-modal-tab ${editorModalMode === 'edit' ? 'active' : ''}`} onClick={() => setEditorModalMode('edit')}>
-                                    <Edit3 size={14} /> Editor
-                                </button>
-                                <button className={`editor-modal-tab ${editorModalMode === 'preview' ? 'active' : ''}`} onClick={() => setEditorModalMode('preview')}>
-                                    <Eye size={14} /> Visualizar como Aluno
-                                </button>
-                            </div>
-                            <button className="editor-modal-save" onClick={() => handleEditVideo(editingVideoId)}>
-                                <Save size={14} /> Salvar
-                            </button>
-                            <button className="editor-modal-close" onClick={() => { setEditingVideoId(null); setEditBlocks([]); setEditorModalMode('edit'); }}>
-                                <X size={18} />
-                            </button>
-                        </div>
-                    </div>
-                    <div className="editor-modal-body">
-                        {editorModalMode === 'edit' ? (
-                            <div className="editor-modal-edit">
-                                <div className="editor-modal-fields">
-                                    <input value={editVideoData.title} onChange={e => setEditVideoData({ ...editVideoData, title: e.target.value })} placeholder="Título da aula" className="admin-input" />
-                                    <input value={editVideoData.description} onChange={e => setEditVideoData({ ...editVideoData, description: e.target.value })} placeholder="Descrição" className="admin-input" />
-                                </div>
-                                <BlockEditor blocks={editBlocks} onChange={setEditBlocks} token={token || ''} />
-                            </div>
-                        ) : (
-                            <div className="editor-modal-preview">
-                                <div className="lp-sheet">
-                                    <h1 style={{ fontSize: '1.6rem', fontWeight: 700, color: '#1e293b', marginBottom: '1rem' }}>{editVideoData.title}</h1>
-                                    {editVideoData.description && <p style={{ color: '#64748b', marginBottom: '1.5rem' }}>{editVideoData.description}</p>}
-                                    {editBlocks.length > 0 ? (
-                                        <BlockRenderer blocks={editBlocks} />
-                                    ) : editVideoData.content ? (
-                                        <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(editVideoData.content) }} />
-                                    ) : (
-                                        <p style={{ color: '#94a3b8', fontStyle: 'italic' }}>Nenhum conteúdo adicionado ainda.</p>
-                                    )}
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </div>
+            <AdminVideoEditor
+                blocks={editBlocks}
+                form={editVideoData}
+                mode={editorModalMode}
+                token={token || ''}
+                onBlocksChange={setEditBlocks}
+                onClose={() => {
+                    setEditingVideoId(null);
+                    setEditBlocks([]);
+                    setEditorModalMode('edit');
+                }}
+                onFormChange={setEditVideoData}
+                onModeChange={setEditorModalMode}
+                onSave={() => void handleEditVideo(editingVideoId)}
+            />
         )}
+
 
         {userSecurityAction && (
-            <div className="modal-overlay" onClick={() => !userSecurityLoading && setUserSecurityAction(null)}>
-                <form className="modal-content admin-user-security-modal" onSubmit={handleUserSecuritySubmit} onClick={event => event.stopPropagation()}>
-                    <button type="button" className="confirm-modal-close" onClick={() => setUserSecurityAction(null)} aria-label="Fechar"><X size={18} /></button>
-                    <span className={`admin-security-modal-icon ${userSecurityAction.mode}`}>
-                        {userSecurityAction.mode === 'password' ? <LockKeyhole size={27} /> : <UserX size={27} />}
-                    </span>
-                    <div>
-                        <small>{userSecurityAction.mode === 'password' ? 'CREDENCIAIS' : 'CONTROLE DE ACESSO'}</small>
-                        <h2>{userSecurityAction.mode === 'password' ? 'Redefinir senha' : 'Bloquear usuário'}</h2>
-                        <p>{userSecurityAction.user.name} · {userSecurityAction.user.email}</p>
-                    </div>
-
-                    {userSecurityAction.mode === 'password' ? (
-                        <>
-                            <label>Nova senha
-                                <input type="password" className="admin-input" value={userSecurityForm.password} onChange={event => setUserSecurityForm(current => ({ ...current, password: event.target.value }))} minLength={8} autoComplete="new-password" required />
-                            </label>
-                            <label>Confirmar nova senha
-                                <input type="password" className="admin-input" value={userSecurityForm.confirmPassword} onChange={event => setUserSecurityForm(current => ({ ...current, confirmPassword: event.target.value }))} minLength={8} autoComplete="new-password" required />
-                            </label>
-                            <p className="admin-security-note">Matrículas, progresso, certificados e histórico serão preservados. As sessões atuais serão encerradas e a troca da senha será exigida no próximo acesso.</p>
-                        </>
-                    ) : (
-                        <>
-                            <label>Motivo do bloqueio
-                                <textarea className="admin-textarea" value={userSecurityForm.reason} onChange={event => setUserSecurityForm(current => ({ ...current, reason: event.target.value }))} maxLength={500} placeholder="Ex.: suspensão temporária determinada pela direção" required />
-                            </label>
-                            <p className="admin-security-note">O acesso às aulas e APIs será interrompido e todas as sessões serão revogadas. Nenhum dado acadêmico será apagado.</p>
-                        </>
-                    )}
-
-                    {userSecurityError && <div className="settings-alert error">{userSecurityError}</div>}
-                    <div className="admin-security-modal-actions">
-                        <button type="button" className="admin-btn" onClick={() => setUserSecurityAction(null)} disabled={userSecurityLoading}>Cancelar</button>
-                        <button type="submit" className={userSecurityAction.mode === 'block' ? 'admin-btn-danger solid' : 'admin-btn-primary'} disabled={userSecurityLoading}>
-                            {userSecurityLoading ? 'Processando...' : userSecurityAction.mode === 'password' ? 'Redefinir e revogar sessões' : 'Bloquear acesso'}
-                        </button>
-                    </div>
-                </form>
-            </div>
+            <AdminUserSecurityModal
+                action={userSecurityAction}
+                error={userSecurityError}
+                form={userSecurityForm}
+                loading={userSecurityLoading}
+                onChange={setUserSecurityForm}
+                onClose={() => setUserSecurityAction(null)}
+                onSubmit={handleUserSecuritySubmit}
+            />
         )}
+
 
         {/* Confirm Modal */}
         <ConfirmModal

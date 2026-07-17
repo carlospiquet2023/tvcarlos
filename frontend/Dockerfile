@@ -20,7 +20,8 @@ ARG LISTEN_PORT=5173
 COPY ${NGINX_CONF} /etc/nginx/conf.d/default.conf
 COPY --from=builder --chown=nginx:nginx /app/dist /usr/share/nginx/html
 
-RUN chown -R nginx:nginx /usr/share/nginx/html /var/cache/nginx /var/run \
+RUN apk upgrade --no-cache \
+    && chown -R nginx:nginx /usr/share/nginx/html /var/cache/nginx /var/run \
     && sed -i '/user  nginx;/d' /etc/nginx/nginx.conf
 
 USER nginx

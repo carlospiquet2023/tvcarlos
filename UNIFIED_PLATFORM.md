@@ -8,12 +8,15 @@ Este stack mantém uma única entrada web e integra o núcleo educacional ao bro
 |---|---|---|
 | `frontend` | SPA, gateway `/api`, aulas `/hls` e TV `/broadcast` | 5173 em desenvolvimento; 80 em produção |
 | `backend` | identidade, ensino, autorização RTMP, IA e auditoria | 4000 apenas local em desenvolvimento; interno em produção |
+| `video-worker` | consumidor pg-boss e transcodificação FFmpeg | sem porta; processo isolado da API |
 | `broadcast` | ingestão RTMP, geração HLS e status de `stream`/`loop` | 1935 conforme bind; HTTP 8080 somente interno |
 | `broadcast-loop` | playlist FFmpeg opcional | profile `broadcast-loop`, sem porta pública |
 | `db` | PostgreSQL e fila pg-boss | 5432 apenas local em desenvolvimento |
 | `uploads-init` | corrige uma vez por inicialização a posse do volume para o usuário não-root | sem rede |
 
 Redes `broadcast-net`/`broadcast-prod-net` são internas. O serviço RTMP também participa de uma rede de borda exclusiva para que a porta publicada funcione sem colocá-lo na rede do banco. Os containers de aplicação usam filesystem somente leitura, capabilities removidas, `no-new-privileges`, diretórios temporários em `tmpfs` e logs com rotação.
+
+A API e o worker possuem entrypoints diferentes: `dist/src/main.js` e `dist/src/worker.js`. Em produção a API não executa FFmpeg. O worker aguarda a API ficar saudável, garantindo que migrations sejam aplicadas por um único processo antes do consumo da fila.
 
 ## Inicialização
 
@@ -44,6 +47,8 @@ O Compose de produção entrega HTTP na porta 80. TLS deve terminar em Caddy, Tr
 ### Banco novo, banco legado e administrador inicial
 
 O backend usa `prisma migrate deploy`; ele não executa mais `db push` silenciosamente. A migration inicial versionada fica em `backend/prisma/migrations/20260710210000_initial_unified_platform`.
+
+Migrations de integridade multi-tenant podem criar constraints `NOT VALID` para permitir auditoria de bases legadas antes da validação. Siga o procedimento de `docs/architecture/DATA_AND_TENANCY.md`; não marque uma constraint como validada sem corrigir as linhas reportadas.
 
 Para uma instalação nova, `docker compose up` aplica a migration automaticamente. Em seguida, crie o primeiro administrador uma única vez:
 
@@ -123,3 +128,7 @@ Checklist antes do corte:
 ## Limites atuais
 
 O volume local permite operação em um único host Docker. Para múltiplos hosts/réplicas, migre originais e HLS gravado para storage S3/R2 privado com URLs assinadas; mantenha FFmpeg em workers dedicados e use rate limit distribuído. Migrações de banco devem ser executadas por um job único e versionado antes de escalar o backend.
+
+O catálogo `Course` ainda é global. O isolamento por `SchoolOrganization` cobre a operação escolar, mas não implica ownership institucional do conteúdo LMS. A decisão e as alternativas estão em `docs/architecture/ADR-002-COURSE-OWNERSHIP.md`.
+
+Para limites de módulos, transações, testes e critérios arquiteturais, consulte `ARCHITECTURE.md`.

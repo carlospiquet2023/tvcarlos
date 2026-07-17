@@ -108,10 +108,10 @@ pm2 env 0 | grep JWT_SECRET
 | # | Ação | Comando |
 |---|------|---------|
 | 1 | Verificar se PostgreSQL está online | `sudo systemctl status postgresql` |
-| 2 | Testar conexão do Prisma | `cd /app/backend && npx prisma db pull` |
+| 2 | Testar conexão sem alterar schema | `psql "$DATABASE_URL" -c "SELECT 1"` |
 | 3 | Verificar variáveis de ambiente | `pm2 env 0` (checar DATABASE_URL, JWT_SECRET) |
 | 4 | Restart se variáveis estão OK | `pm2 restart all` |
-| 5 | Se erro de migration | `cd /app/backend && npx prisma db push` |
+| 5 | Se erro de migration | `cd /app/backend && npx prisma migrate status`; interromper deploy, corrigir a migration e restaurar backup se necessário. Nunca usar `db push` em produção |
 
 ---
 
@@ -148,10 +148,10 @@ df -h /
 |---|------|--------|
 | 1 | Se FFmpeg não encontrado | `sudo apt install ffmpeg` |
 | 2 | Se disco > 90% | Limpar vídeos mp4 originais antigos já convertidos |
-| 3 | Se job travado em PROCESSING | Reprocessar pelo admin: DELETE /api/admin/videos/:id/reprocess |
+| 3 | Se job travado em PROCESSING | Reprocessar pelo admin: `POST /api/admin/videos/:id/reprocess` |
 | 4 | Se worker morto | `pm2 restart eduvault-worker` |
 | 5 | Se muitos erros | Verificar `pm2 logs eduvault-worker --err --lines 200` |
-| 6 | Jobs em active há > 2h | `sudo -u postgres psql -d eduvault -c "UPDATE pgboss.job SET state='failed' WHERE state='active' AND createdon < now() - interval '2 hours';"` |
+| 6 | Jobs ativos há mais de 2h | preservar logs e job ID; reiniciar o worker e usar o fluxo de reprocessamento. Não editar tabelas internas do pg-boss manualmente |
 
 ---
 
@@ -185,7 +185,7 @@ ss -s
 |---|----------|------|
 | 1 | CPU > 90% por FFmpeg | Esperar processamento acabar ou `pm2 restart eduvault-worker` |
 | 2 | RAM > 90% | `pm2 restart all` (libera memória dos processos Node) |
-| 3 | Muitas slow queries | `sudo -u postgres psql -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE state = 'active' AND query_start < now() - interval '30 seconds';"` |
+| 3 | Muitas slow queries | inspecionar `pg_stat_activity` e o slow query log; cancelar somente o PID confirmado, preservando transações críticas |
 | 4 | Pool de conexões lotado | Verificar `connection_limit` na DATABASE_URL (recomendado: 20) |
 | 5 | Disco lento (VPS barata) | Considerar migrar para SSD ou otimizar queries |
 

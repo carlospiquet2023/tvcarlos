@@ -15,7 +15,6 @@
  */
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcrypt';
-import crypto from 'crypto';
 import fs from 'fs';
 import fsp from 'fs/promises';
 import path from 'path';
@@ -32,31 +31,17 @@ import {
     isEmailConfigured,
     sendBulkEmails,
     sendGenericEmail,
-    sendResetPasswordEmail,
-    sendStudentCredentialsEmail
+    sendResetPasswordEmail
 } from '../lib/email';
 import ExcelJS from 'exceljs';
-
-// ============================================================
-// HELPER: Registrar ação no Audit Log
-// ============================================================
-async function auditLog(userId: string, action: string, target: string, details?: string) {
-    try {
-        await prisma.auditLog.create({ data: { userId, action, target, details } });
-    } catch (err) {
-        logger.error(err, 'Falha ao registrar audit log');
-    }
-}
-
-const VALID_ROLES = ['ADMIN', 'TEACHER', 'STUDENT', 'STAFF', 'GUARDIAN'] as const;
-
-function passwordValidationMessage(password: unknown): string | null {
-    if (typeof password !== 'string' || password.length < 8) return 'A senha deve ter pelo menos 8 caracteres.';
-    if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
-        return 'A senha deve conter letras maiúsculas, minúsculas e números.';
-    }
-    return null;
-}
+import {
+    importStudentsFromWorkbook,
+    isDeliverableEmailAddress,
+    StudentImportInputError,
+} from '../modules/admin/studentImport';
+import { attemptEmailDelivery, auditLog } from '../modules/admin/adminSupport';
+import { passwordValidationMessage } from '../modules/admin/userAdminPolicy';
+import userAdminRouter from '../modules/admin/userAdminRouter';
 
 // ============================================================
 // HELPER: Verificar se TEACHER tem acesso ao curso
@@ -89,17 +74,60 @@ async function canAccessVideo(userId: string, role: string, videoId: string): Pr
     return canAccessCourse(userId, role, video.module.courseId);
 }
 
+async function requireModuleAccess(req: Request, res: Response, moduleId: string): Promise<boolean> {
+    if (await canAccessModule(req.user!.id, req.user!.role, moduleId)) return true;
+    res.status(403).json({ message: 'Acesso negado a este módulo.' });
+    return false;
+}
+
+async function requireLiveClass(id: string, res: Response) {
+    const liveClass = await prisma.liveClass.findUnique({ where: { id } });
+    if (!liveClass) res.status(404).json({ message: 'Aula ao vivo não encontrada.' });
+    return liveClass;
+}
+
+function createUploadStorage(resolveDirectory: () => string): multer.StorageEngine {
+    return multer.diskStorage({
+        destination: (_req, _file, cb) => {
+            const directory = resolveDirectory();
+            if (!fs.existsSync(directory)) fs.mkdirSync(directory, { recursive: true });
+            cb(null, directory);
+        },
+        filename: (_req, file, cb) => {
+            cb(null, uuidv4() + path.extname(file.originalname));
+        },
+    });
+}
+
+interface VideoFileReference {
+    id: string;
+    originalUrl: string | null;
+}
+
+async function cleanupVideoFiles(videos: VideoFileReference[]): Promise<void> {
+    const hlsStorage = path.resolve(process.env.HLS_STORAGE_PATH || './uploads/hls');
+    await Promise.all(videos.map(async (video) => {
+        try {
+            if (video.originalUrl) {
+                await fsp.access(video.originalUrl).then(() => fsp.unlink(video.originalUrl!)).catch(() => {});
+            }
+            await fsp.rm(path.join(hlsStorage, video.id), { recursive: true, force: true }).catch(() => {});
+        } catch (cleanupError) {
+            console.error(`Aviso: falha ao limpar arquivos do vídeo ${video.id}:`, cleanupError);
+        }
+    }));
+}
+
+function pagination(query: Request['query'], defaultLimit: number, maximumLimit: number) {
+    const page = Math.max(1, parseInt(query.page as string) || 1);
+    const limit = Math.min(maximumLimit, Math.max(1, parseInt(query.limit as string) || defaultLimit));
+    return { page, limit, skip: (page - 1) * limit };
+}
+
 // Image upload config
-const imageStorage = multer.diskStorage({
-    destination: (_req, _file, cb) => {
-        const dir = path.resolve(process.env.IMAGE_STORAGE_PATH || './uploads/images');
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-        cb(null, dir);
-    },
-    filename: (_req, file, cb) => {
-        cb(null, uuidv4() + path.extname(file.originalname));
-    }
-});
+const imageStorage = createUploadStorage(
+    () => path.resolve(process.env.IMAGE_STORAGE_PATH || './uploads/images'),
+);
 const uploadImage = multer({
     storage: imageStorage,
     fileFilter: (_req, file, cb) => {
@@ -110,16 +138,7 @@ const uploadImage = multer({
 });
 
 // Excel upload config (temp storage — file is read into memory then deleted)
-const excelStorage = multer.diskStorage({
-    destination: (_req, _file, cb) => {
-        const dir = path.resolve('./uploads/temp');
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-        cb(null, dir);
-    },
-    filename: (_req, file, cb) => {
-        cb(null, uuidv4() + path.extname(file.originalname));
-    }
-});
+const excelStorage = createUploadStorage(() => path.resolve('./uploads/temp'));
 const uploadExcel = multer({
     storage: excelStorage,
     fileFilter: (_req, file, cb) => {
@@ -131,16 +150,9 @@ const uploadExcel = multer({
 });
 
 // PDF upload config
-const pdfStorage = multer.diskStorage({
-    destination: (_req, _file, cb) => {
-        const dir = path.resolve(process.env.PDF_STORAGE_PATH || './uploads/pdfs');
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-        cb(null, dir);
-    },
-    filename: (_req, file, cb) => {
-        cb(null, uuidv4() + path.extname(file.originalname));
-    }
-});
+const pdfStorage = createUploadStorage(
+    () => path.resolve(process.env.PDF_STORAGE_PATH || './uploads/pdfs'),
+);
 const uploadPdf = multer({
     storage: pdfStorage,
     fileFilter: (_req, file, cb) => {
@@ -152,179 +164,13 @@ const uploadPdf = multer({
 
 const router = Router();
 
-interface EmailDeliveryStatus {
-    configured: boolean;
-    sent: boolean;
-}
-
-async function attemptEmailDelivery(send: () => Promise<void>, context: Record<string, unknown>, recipient?: string): Promise<EmailDeliveryStatus> {
-    if (!isEmailConfigured()) return { configured: false, sent: false };
-    if (recipient && !isDeliverableEmailAddress(recipient)) return { configured: true, sent: false };
-    try {
-        await send();
-        return { configured: true, sent: true };
-    } catch (error) {
-        logger.error({ error, ...context }, 'Falha ao entregar e-mail');
-        return { configured: true, sent: false };
-    }
-}
-
 router.get('/email/status', authenticateToken, requireRole(['ADMIN']), (_req: Request, res: Response): void => {
     res.json(getEmailConfigurationStatus());
 });
 
-// ============================================================
-// GERENCIAMENTO DE ALUNOS (Users)
-// ============================================================
-
-// Listar usuários (com paginação e busca)
-router.get('/users', authenticateToken, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<void> => {
-    try {
-        const page = Math.max(1, parseInt(req.query.page as string) || 1);
-        const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 50));
-        const search = (req.query.search as string || '').trim();
-        const skip = (page - 1) * limit;
-
-        const where = search ? {
-            OR: [
-                { name: { contains: search, mode: 'insensitive' as const } },
-                { email: { contains: search, mode: 'insensitive' as const } }
-            ]
-        } : {};
-
-        const [users, total] = await Promise.all([
-            prisma.user.findMany({
-                where,
-                select: { id: true, name: true, email: true, role: true, accessBlocked: true, accessBlockedAt: true, accessBlockedReason: true, createdAt: true },
-                orderBy: { createdAt: 'desc' },
-                skip,
-                take: limit
-            }),
-            prisma.user.count({ where })
-        ]);
-
-        res.json({ data: users, total, page, limit, totalPages: Math.ceil(total / limit) });
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: 'Erro ao listar usuários.' });
-    }
-});
-
-// Criar novo usuário (aluno/professor)
-router.post('/users', authenticateToken, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<void> => {
-    try {
-        const { name, email, password, role } = req.body;
-
-        if (!name || !email || !password) {
-            res.status(400).json({ message: 'Nome, e-mail e senha são obrigatórios.' });
-            return;
-        }
-
-        // ISSUE-05: Validar role contra enum
-        const userRole = role || 'STUDENT';
-        if (!VALID_ROLES.includes(userRole)) {
-            res.status(400).json({ message: `Role inválida. Valores aceitos: ${VALID_ROLES.join(', ')}` });
-            return;
-        }
-
-        const passwordError = passwordValidationMessage(password);
-        if (passwordError) {
-            res.status(400).json({ message: passwordError });
-            return;
-        }
-
-        const existing = await prisma.user.findUnique({ where: { email } });
-        if (existing) {
-            res.status(409).json({ message: 'Este e-mail já está cadastrado no sistema.' });
-            return;
-        }
-
-        const hashedPassword = await bcrypt.hash(password, 12);
-        const user = await prisma.user.create({
-            data: { name, email, password: hashedPassword, role: userRole },
-            select: { id: true, name: true, email: true, role: true, accessBlocked: true, accessBlockedAt: true, accessBlockedReason: true, createdAt: true }
-        });
-
-        await auditLog(req.user!.id, 'CREATE_USER', user.id, `Criou usuário ${name} (${email})`);
-        const emailDelivery = await attemptEmailDelivery(() => sendStudentCredentialsEmail({
-            to: user.email,
-            studentName: user.name,
-            login: user.email,
-            password
-        }), { action: 'CREATE_USER', userId: user.id }, user.email);
-        res.status(201).json({ ...user, emailDelivery });
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: 'Erro ao criar usuário.' });
-    }
-});
-
-// Editar usuário
-router.put('/users/:id', authenticateToken, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<void> => {
-    try {
-        const id = req.params.id as string;
-        const { name, email, role, password } = req.body;
-
-        // ISSUE-04: Validar role contra enum
-        if (role && !VALID_ROLES.includes(role)) {
-            res.status(400).json({ message: `Role inválida. Valores aceitos: ${VALID_ROLES.join(', ')}` });
-            return;
-        }
-
-        const data: Record<string, unknown> = {};
-        if (name) data.name = name;
-        if (email) data.email = email;
-        if (role) data.role = role;
-        if (password) {
-            const passwordError = passwordValidationMessage(password);
-            if (passwordError) {
-                res.status(400).json({ message: passwordError });
-                return;
-            }
-            data.password = await bcrypt.hash(password, 12);
-            data.passwordChangedAt = new Date();
-            data.mustChangePassword = true;
-            data.tokenVersion = { increment: 1 };
-        }
-
-        const user = await prisma.user.update({
-            where: { id },
-            data,
-            select: { id: true, name: true, email: true, role: true, accessBlocked: true, accessBlockedAt: true, accessBlockedReason: true, createdAt: true }
-        });
-
-        await auditLog(req.user!.id, 'UPDATE_USER', user.id, `Atualizou o usuário ${user.email}${password ? ' e redefiniu a senha' : ''}`);
-        res.json(user);
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: 'Erro ao atualizar usuário.' });
-    }
-});
-
-// Deletar usuário (com transaction) — ISSUE-01: Guard contra auto-delete
-router.delete('/users/:id', authenticateToken, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<void> => {
-    try {
-        const id = req.params.id as string;
-
-        // ISSUE-01: Impedir que o admin se auto-delete
-        if (id === req.user!.id) {
-            res.status(403).json({ message: 'Não é possível remover sua própria conta.' });
-            return;
-        }
-
-        await prisma.$transaction([
-            prisma.videoHistory.deleteMany({ where: { userId: id } }),
-            prisma.courseEnrollment.deleteMany({ where: { userId: id } }),
-            prisma.user.delete({ where: { id } })
-        ]);
-
-        await auditLog(req.user!.id, 'DELETE_USER', id, `Removeu usuário ${id}`);
-        res.json({ message: 'Usuário removido com sucesso.' });
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: 'Erro ao remover usuário.' });
-    }
-});
+// Gerenciamento de usuários é isolado para manter este roteador focado nos
+// demais recursos administrativos. O sub-roteador preserva `/users/*`.
+router.use('/users', userAdminRouter);
 
 // ============================================================
 // GERENCIAMENTO DE CURSOS
@@ -333,9 +179,7 @@ router.delete('/users/:id', authenticateToken, requireRole(['ADMIN']), async (re
 // Listar cursos (com paginação)
 router.get('/courses', authenticateToken, requireRole(['ADMIN', 'TEACHER']), async (req: Request, res: Response): Promise<void> => {
     try {
-        const page = Math.max(1, parseInt(req.query.page as string) || 1);
-        const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string) || 20));
-        const skip = (page - 1) * limit;
+        const { page, limit, skip } = pagination(req.query, 20, 50);
 
         // TEACHER: filtra apenas cursos onde está matriculado como TEACHER
         const courseFilter = req.user!.role === 'TEACHER'
@@ -424,7 +268,6 @@ router.put('/courses/:id', authenticateToken, requireRole(['ADMIN']), async (req
 router.delete('/courses/:id', authenticateToken, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<void> => {
     try {
         const id = req.params.id as string;
-        const hlsStorage = path.resolve(process.env.HLS_STORAGE_PATH || './uploads/hls');
 
         // Coletar paths dos vídeos ANTES da transação
         const modules = await prisma.module.findMany({
@@ -457,17 +300,7 @@ router.delete('/courses/:id', authenticateToken, requireRole(['ADMIN']), async (
         });
 
         // ISSUE-19: Cleanup de arquivos no disco FORA da transação (async)
-        await Promise.all(videosToClean.map(async (video) => {
-            try {
-                if (video.originalUrl) {
-                    await fsp.access(video.originalUrl).then(() => fsp.unlink(video.originalUrl!)).catch(() => {});
-                }
-                const hlsDir = path.join(hlsStorage, video.id);
-                await fsp.rm(hlsDir, { recursive: true, force: true }).catch(() => {});
-            } catch (cleanupErr) {
-                console.error(`Aviso: falha ao limpar arquivos do vídeo ${video.id}:`, cleanupErr);
-            }
-        }));
+        await cleanupVideoFiles(videosToClean);
 
         await auditLog(req.user!.id, 'DELETE_COURSE', id, `Deletou curso ${id} e ${videosToClean.length} vídeos`);
         res.json({ message: 'Curso e todos os dados associados foram removidos.' });
@@ -505,10 +338,7 @@ router.post('/modules', authenticateToken, requireRole(['ADMIN', 'TEACHER']), as
 router.put('/modules/:id', authenticateToken, requireRole(['ADMIN', 'TEACHER']), async (req: Request, res: Response): Promise<void> => {
     try {
         const id = req.params.id as string;
-        if (!await canAccessModule(req.user!.id, req.user!.role, id)) {
-            res.status(403).json({ message: 'Acesso negado a este módulo.' });
-            return;
-        }
+        if (!await requireModuleAccess(req, res, id)) return;
         const { name, order, pdfUrl } = req.body;
         const data: Record<string, unknown> = {};
         if (name !== undefined) data.name = name;
@@ -526,12 +356,7 @@ router.put('/modules/:id', authenticateToken, requireRole(['ADMIN', 'TEACHER']),
 router.delete('/modules/:id', authenticateToken, requireRole(['ADMIN', 'TEACHER']), async (req: Request, res: Response): Promise<void> => {
     try {
         const id = req.params.id as string;
-        if (!await canAccessModule(req.user!.id, req.user!.role, id)) {
-            res.status(403).json({ message: 'Acesso negado a este módulo.' });
-            return;
-        }
-        const hlsStorage = path.resolve(process.env.HLS_STORAGE_PATH || './uploads/hls');
-
+        if (!await requireModuleAccess(req, res, id)) return;
         // Coletar paths antes da transação
         const videosToClean = await prisma.video.findMany({
             where: { moduleId: id },
@@ -545,17 +370,7 @@ router.delete('/modules/:id', authenticateToken, requireRole(['ADMIN', 'TEACHER'
         ]);
 
         // Disk cleanup fora da transação (async)
-        await Promise.all(videosToClean.map(async (video) => {
-            try {
-                if (video.originalUrl) {
-                    await fsp.access(video.originalUrl).then(() => fsp.unlink(video.originalUrl!)).catch(() => {});
-                }
-                const hlsDir = path.join(hlsStorage, video.id);
-                await fsp.rm(hlsDir, { recursive: true, force: true }).catch(() => {});
-            } catch (cleanupErr) {
-                console.error(`Aviso: falha ao limpar arquivos do vídeo ${video.id}:`, cleanupErr);
-            }
-        }));
+        await cleanupVideoFiles(videosToClean);
 
         await auditLog(req.user!.id, 'DELETE_MODULE', id, `Removeu módulo e ${videosToClean.length} vídeos`);
         res.json({ message: 'Módulo removido com sucesso.' });
@@ -764,7 +579,6 @@ router.put('/videos/:id', authenticateToken, requireRole(['ADMIN', 'TEACHER']), 
 router.delete('/videos/:id', authenticateToken, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<void> => {
     try {
         const id = req.params.id as string;
-        const hlsStorage = path.resolve(process.env.HLS_STORAGE_PATH || './uploads/hls');
 
         // ISSUE-09: Buscar paths antes de deletar
         const video = await prisma.video.findUnique({
@@ -778,15 +592,7 @@ router.delete('/videos/:id', authenticateToken, requireRole(['ADMIN']), async (r
         ]);
 
         // Cleanup de arquivos no disco (async)
-        try {
-            if (video?.originalUrl) {
-                await fsp.access(video.originalUrl).then(() => fsp.unlink(video.originalUrl!)).catch(() => {});
-            }
-            const hlsDir = path.join(hlsStorage, id);
-            await fsp.rm(hlsDir, { recursive: true, force: true }).catch(() => {});
-        } catch (cleanupErr) {
-            console.error(`Aviso: falha ao limpar arquivos do vídeo ${id}:`, cleanupErr);
-        }
+        await cleanupVideoFiles([{ id, originalUrl: video?.originalUrl ?? null }]);
 
         await auditLog(req.user!.id, 'DELETE_VIDEO', id, `Removeu vídeo ${id}`);
         res.json({ message: 'Vídeo removido com sucesso.' });
@@ -1182,239 +988,29 @@ router.put('/config', authenticateToken, requireRole(['ADMIN']), async (req: Req
 // ============================================================
 // IMPORTAÇÃO DE ALUNOS VIA EXCEL
 // ============================================================
-// Cabeçários esperados: aluno, matricula, turma, cpf e email (opcional, recomendado)
-// - Com email real, ele é usado como login e recebe as credenciais.
-// - Sem email, o sistema gera um login técnico @alunos.com que não recebe mensagens.
-// - Turma = nome do curso → matricula automaticamente
-
-function normalizeHeader(h: string): string {
-    return h.toString().trim().toLowerCase()
-        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^a-z0-9]/g, '');
-}
-
-function generateCredentials(name: string, cpf: string): { email: string; password: string } {
-    const parts = name.trim().split(/\s+/).filter(Boolean);
-    const first = (parts[0] || 'aluno').toLowerCase().replace(/[^a-z]/g, '');
-    const second = (parts[1] || '').toLowerCase().replace(/[^a-z]/g, '');
-    const email = `${first}${second}@alunos.com`;
-
-    // Senha segura: 4 chars aleatórios hex + 4 dígitos do CPF + 2 chars aleatórios
-    // Exemplo: a3f1-1234-Bx (imprevisível, mas curta o bastante para distribuir)
-    const cpfDigits = cpf.replace(/\D/g, '');
-    const last4 = cpfDigits.slice(-4) || '0000';
-    const randHex = crypto.randomBytes(3).toString('hex').slice(0, 4);
-    const randSuffix = crypto.randomBytes(2).toString('base64url').slice(0, 2);
-    const password = `${randHex}${last4}${randSuffix}`;
-
-    return { email, password };
-}
-
-function isValidEmailAddress(value: string): boolean {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) && value.length <= 254;
-}
-
-function isDeliverableEmailAddress(value: string): boolean {
-    return isValidEmailAddress(value) && !value.toLowerCase().endsWith('@alunos.com');
-}
-
 router.post('/upload-students-excel', authenticateToken, requireRole(['ADMIN']), uploadExcel.single('file'), async (req: Request, res: Response): Promise<void> => {
     const filePath = req.file?.path;
     try {
-        if (!req.file || !filePath) {
+        if (!filePath) {
             res.status(400).json({ message: 'Nenhum arquivo enviado.' });
             return;
         }
-
-        const workbook = new ExcelJS.Workbook();
-        await workbook.xlsx.readFile(filePath);
-        const sheet = workbook.worksheets[0];
-        if (!sheet) {
-            res.status(400).json({ message: 'A planilha não possui abas.' });
-            return;
-        }
-
-        const headerRow = sheet.getRow(1);
-        const headers: string[] = [];
-        for (let column = 1; column <= headerRow.cellCount; column += 1) {
-            headers.push(excelCellText(headerRow.getCell(column).value));
-        }
-        const rawRows: Record<string, string>[] = [];
-        const maxRows = Math.min(sheet.actualRowCount, 5_001);
-        for (let rowNumber = 2; rowNumber <= maxRows; rowNumber += 1) {
-            const row = sheet.getRow(rowNumber);
-            const record: Record<string, string> = {};
-            headers.forEach((header, index) => {
-                if (header) record[header] = row.getCell(index + 1).text.trim();
-            });
-            if (Object.values(record).some(Boolean)) rawRows.push(record);
-        }
-
-        if (sheet.actualRowCount > 5_001) {
-            res.status(400).json({ message: 'A planilha excede o limite de 5.000 alunos por importação.' });
-            return;
-        }
-
-        if (rawRows.length === 0) {
-            res.status(400).json({ message: 'Planilha vazia.' });
-            return;
-        }
-
-        // Normalize headers
-        const headerMap: Record<string, string> = {};
-        const rawHeaders = Object.keys(rawRows[0]);
-        for (const h of rawHeaders) {
-            const norm = normalizeHeader(h);
-            if (norm.includes('aluno') || norm.includes('nome')) headerMap['aluno'] = h;
-            else if (norm.includes('matricula')) headerMap['matricula'] = h;
-            else if (norm.includes('turma') || norm.includes('curso')) headerMap['turma'] = h;
-            else if (norm.includes('cpf')) headerMap['cpf'] = h;
-            else if (norm.includes('email')) headerMap['email'] = h;
-        }
-
-        if (!headerMap['aluno'] || !headerMap['cpf']) {
-            res.status(400).json({ message: 'Cabeçários obrigatórios: aluno (ou nome) e cpf.' });
-            return;
-        }
-
-        // Fetch all courses for matching turma
-        const allCourses = await prisma.course.findMany({ select: { id: true, name: true } });
-
-        // Pre-fetch all existing users by email for batch lookup
-        const allEmails = rawRows.map(row => {
-            const studentName = (row[headerMap['aluno']] || '').toString().trim();
-            const cpf = (row[headerMap['cpf']] || '').toString().trim();
-            if (!studentName || !cpf) return null;
-            const suppliedEmail = headerMap['email'] ? (row[headerMap['email']] || '').toString().trim().toLowerCase() : '';
-            if (suppliedEmail && !isValidEmailAddress(suppliedEmail)) return null;
-            return suppliedEmail || generateCredentials(studentName, cpf).email;
-        }).filter((e): e is string => e !== null);
-
-        const existingUsers = await prisma.user.findMany({
-            where: { email: { in: allEmails } },
-            select: { id: true, email: true }
-        });
-        const userByEmail = new Map(existingUsers.map(u => [u.email, u]));
-
-        // Pre-fetch existing enrollments for batch lookup
-        const existingEnrollments = await prisma.courseEnrollment.findMany({
-            where: { user: { email: { in: allEmails } } },
-            select: { userId: true, courseId: true }
-        });
-        const enrollmentSet = new Set(existingEnrollments.map(e => `${e.userId}_${e.courseId}`));
-
-        const results: { name: string; email: string; password: string; enrolled: string[]; error?: string }[] = [];
-
-        // Process rows — only create what's needed
-        const usersToCreate: { name: string; email: string; username: string; password: string; role: 'STUDENT' }[] = [];
-        const credentialsMap = new Map<string, { name: string; password: string; turma: string; isNew: boolean; deliverable: boolean }>();
-
-        for (const row of rawRows) {
-            const studentName = (row[headerMap['aluno']] || '').toString().trim();
-            const cpf = (row[headerMap['cpf']] || '').toString().trim();
-            const turma = headerMap['turma'] ? (row[headerMap['turma']] || '').toString().trim() : '';
-            const suppliedEmail = headerMap['email'] ? (row[headerMap['email']] || '').toString().trim().toLowerCase() : '';
-
-            if (!studentName || !cpf) {
-                results.push({ name: studentName || '(vazio)', email: '', password: '', enrolled: [], error: 'Nome ou CPF em branco' });
-                continue;
-            }
-
-            if (suppliedEmail && !isValidEmailAddress(suppliedEmail)) {
-                results.push({ name: studentName, email: suppliedEmail, password: '', enrolled: [], error: 'E-mail inválido' });
-                continue;
-            }
-
-            const generated = generateCredentials(studentName, cpf);
-            const email = suppliedEmail || generated.email;
-            if (credentialsMap.has(email)) {
-                results.push({ name: studentName, email, password: '', enrolled: [], error: 'E-mail duplicado na planilha' });
-                continue;
-            }
-
-            const isNew = !userByEmail.has(email);
-            const password = isNew ? generated.password : '';
-            credentialsMap.set(email, { name: studentName, password, turma, isNew, deliverable: Boolean(suppliedEmail) });
-
-            if (isNew) {
-                const hashedPassword = await bcrypt.hash(password, 12);
-                usersToCreate.push({ name: studentName, email, username: email, password: hashedPassword, role: 'STUDENT' });
-            }
-        }
-
-        // Batch create users (skipDuplicates handles race conditions)
-        if (usersToCreate.length > 0) {
-            await prisma.user.createMany({ data: usersToCreate, skipDuplicates: true });
-            // Re-fetch to get IDs
-            const newUsers = await prisma.user.findMany({
-                where: { email: { in: usersToCreate.map(u => u.email) } },
-                select: { id: true, email: true }
-            });
-            for (const u of newUsers) userByEmail.set(u.email, u);
-        }
-
-        // Batch create enrollments
-        const enrollmentsToCreate: { userId: string; courseId: string }[] = [];
-
-        for (const [email, creds] of credentialsMap) {
-            const user = userByEmail.get(email);
-            if (!user) {
-                results.push({ name: creds.name, email, password: creds.password, enrolled: [], error: 'Falha ao criar usuário' });
-                continue;
-            }
-
-            const enrolled: string[] = [];
-            if (creds.turma) {
-                const turmaLower = creds.turma.toLowerCase().trim();
-                for (const course of allCourses) {
-                    if (course.name.toLowerCase().trim() === turmaLower) {
-                        const key = `${user.id}_${course.id}`;
-                        if (!enrollmentSet.has(key)) {
-                            enrollmentsToCreate.push({ userId: user.id, courseId: course.id });
-                            enrollmentSet.add(key);
-                        }
-                        enrolled.push(course.name);
-                    }
-                }
-            }
-
-            results.push({ name: creds.name, email, password: creds.password, enrolled });
-        }
-
-        if (enrollmentsToCreate.length > 0) {
-            await prisma.courseEnrollment.createMany({ data: enrollmentsToCreate, skipDuplicates: true });
-        }
-
-        const eligibleEmails = Array.from(credentialsMap.entries())
-            .filter(([, credentials]) => credentials.isNew && credentials.deliverable)
-            .map(([email, credentials]) => ({
-                to: email,
-                subject: `[${process.env.PLATFORM_NAME || 'EduVault'}] Acesso criado`,
-                message: `Olá, ${credentials.name}!\n\nSeu acesso foi criado.\nLogin: ${email}\nSenha temporária: ${credentials.password}\n\nPor segurança, altere sua senha no primeiro acesso.`
-            }));
-        const configured = isEmailConfigured();
-        const emailResult = configured
-            ? await sendBulkEmails(eligibleEmails)
-            : { attempted: 0, sent: 0, failed: 0 };
-
-        if (emailResult.failed > 0) {
-            logger.warn({ ...emailResult }, 'Parte dos e-mails da importação não foi entregue');
-        }
-
+        const result = await importStudentsFromWorkbook(filePath);
+        const successful = result.results.filter((row) => !row.error).length;
+        await auditLog(req.user!.id, 'EXCEL_IMPORT', `${result.results.length} linhas`, `Importou planilha: ${successful} OK, ${result.results.length - successful} erros`);
         res.json({
-            message: `Importação concluída: ${results.filter(r => !r.error).length} de ${results.length} alunos processados.`,
-            results,
-            emailDelivery: { configured, eligible: eligibleEmails.length, ...emailResult }
+            message: `Importação concluída: ${successful} de ${result.results.length} alunos processados.`,
+            ...result,
         });
-        await auditLog(req.user!.id, 'EXCEL_IMPORT', `${results.length} linhas`, `Importou planilha: ${results.filter(r => !r.error).length} OK, ${results.filter(r => r.error).length} erros`);
     } catch (error) {
-        console.error('Erro ao processar planilha:', error);
+        if (error instanceof StudentImportInputError) {
+            res.status(400).json({ message: error.message });
+            return;
+        }
+        logger.error({ error, userId: req.user?.id }, 'Erro ao processar planilha de alunos');
         res.status(500).json({ message: 'Erro ao processar planilha.' });
     } finally {
-        // Clean up temp file (async)
-        if (filePath) {
-            fsp.unlink(filePath).catch(() => {});
-        }
+        if (filePath) void fsp.unlink(filePath).catch(() => {});
     }
 });
 
@@ -1577,16 +1173,6 @@ router.post('/users/:id/reset-password', authenticateToken, requireRole(['ADMIN'
     }
 });
 
-function excelCellText(value: ExcelJS.CellValue): string {
-    if (value === null || value === undefined) return '';
-    if (typeof value === 'object') {
-        if ('text' in value && typeof value.text === 'string') return value.text.trim();
-        if ('result' in value) return String(value.result ?? '').trim();
-        if ('richText' in value) return value.richText.map((part) => part.text).join('').trim();
-    }
-    return String(value).trim();
-}
-
 // ============================================================
 // MONITORING & HEALTH
 // ============================================================
@@ -1630,9 +1216,7 @@ router.get('/health', authenticateToken, requireRole(['ADMIN']), async (req: Req
 // ============================================================
 router.get('/audit-log', authenticateToken, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<void> => {
     try {
-        const page = Math.max(1, parseInt(req.query.page as string) || 1);
-        const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 50));
-        const skip = (page - 1) * limit;
+        const { page, limit, skip } = pagination(req.query, 50, 100);
 
         const [logs, total] = await Promise.all([
             prisma.auditLog.findMany({
@@ -1833,11 +1417,8 @@ router.put('/live-classes/:id', authenticateToken, requireRole(['ADMIN']), async
         const id = req.params.id as string;
         const { title, description, startAt, endAt, zoomJoinUrl, zoomStartUrl, zoomMeetingId, status, moduleId } = req.body;
 
-        const existing = await prisma.liveClass.findUnique({ where: { id } });
-        if (!existing) {
-            res.status(404).json({ message: 'Aula ao vivo não encontrada.' });
-            return;
-        }
+        const existing = await requireLiveClass(id, res);
+        if (!existing) return;
 
         const validStatuses = ['SCHEDULED', 'LIVE', 'ENDED', 'RECORDED'];
         if (status && !validStatuses.includes(status)) {
@@ -1873,11 +1454,8 @@ router.delete('/live-classes/:id', authenticateToken, requireRole(['ADMIN']), as
     try {
         const id = req.params.id as string;
 
-        const existing = await prisma.liveClass.findUnique({ where: { id } });
-        if (!existing) {
-            res.status(404).json({ message: 'Aula ao vivo não encontrada.' });
-            return;
-        }
+        const existing = await requireLiveClass(id, res);
+        if (!existing) return;
 
         await prisma.liveClass.delete({ where: { id } });
         await auditLog(req.user!.id, 'DELETE_LIVE_CLASS', id, `Removida: ${existing.title}`);
@@ -1894,11 +1472,8 @@ router.post('/live-classes/:id/attach-recording', authenticateToken, requireRole
         const id = req.params.id as string;
         const { videoId } = req.body;
 
-        const existing = await prisma.liveClass.findUnique({ where: { id } });
-        if (!existing) {
-            res.status(404).json({ message: 'Aula ao vivo não encontrada.' });
-            return;
-        }
+        const existing = await requireLiveClass(id, res);
+        if (!existing) return;
 
         if (!videoId) {
             res.status(400).json({ message: 'videoId é obrigatório.' });

@@ -15,7 +15,7 @@ concurrency:
 jobs:
   application:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v6
@@ -27,6 +27,8 @@ jobs:
             frontend/package-lock.json
       - run: npm ci --prefix backend
       - run: npm ci --prefix frontend
+      - name: Backend typecheck
+        run: npm run typecheck --prefix backend
       - name: Validate Prisma schema
         run: npx --prefix backend prisma validate --schema backend/prisma/schema.prisma
         env:
@@ -37,8 +39,64 @@ jobs:
         env:
           JWT_SECRET: ci-only-secret-with-at-least-32-characters
           DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+      - name: Frontend tests
+        run: npm test --prefix frontend
       - run: npm run build
       - run: npm run audit
+      - name: Validate development Compose
+        run: docker compose -f docker-compose.yml config --quiet
+      - name: Validate production Compose
+        run: docker compose -f docker-compose.prod.yml config --quiet
+        env:
+          POSTGRES_PASSWORD: ci-only-postgres-password
+          DATABASE_URL: postgresql://ci:ci@db:5432/ci
+          JWT_SECRET: ci-only-secret-with-at-least-32-characters
+          FRONTEND_URL: https://school.example.test
+          RTMP_STREAM_KEY: ci-only-rtmp-stream-key-with-at-least-32-characters
+          LOOP_STREAM_KEY: ci-only-loop-stream-key-with-at-least-32-characters
+          GROQ_API_KEY: ci-only-placeholder
+      - name: Build runtime images
+        run: |
+          docker build --tag eduvault/backend:ci backend
+          docker build --tag eduvault/frontend:ci frontend
+          docker build --tag eduvault/broadcast:ci broadcast
+          docker build --file broadcast/Dockerfile.streamer --tag eduvault/broadcast-loop:ci broadcast
+      - name: Scan backend image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: eduvault/backend:ci
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+      - name: Scan frontend image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: eduvault/frontend:ci
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+      - name: Scan broadcast image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: eduvault/broadcast:ci
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+      - name: Scan broadcast loop image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: eduvault/broadcast-loop:ci
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
 
   migrations:
     runs-on: ubuntu-latest
@@ -66,6 +124,10 @@ jobs:
       - run: npm ci --prefix backend
       - name: Apply migrations to empty PostgreSQL
         run: npx --prefix backend prisma migrate deploy --schema backend/prisma/schema.prisma
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+      - name: Verify tenant constraints against PostgreSQL
+        run: npm run test:integration:db --prefix backend
         env:
           DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
       - name: Detect migration drift

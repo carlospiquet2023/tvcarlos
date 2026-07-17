@@ -9,9 +9,19 @@
     "typecheck": "npm run typecheck --prefix backend && npm run build --prefix frontend",
     "lint": "npm run lint --prefix frontend",
     "test:contrast": "npm run test:contrast --prefix frontend",
-    "test": "npm test --prefix backend",
+    "test": "npm run test:backend && npm run test:frontend",
+    "test:backend": "npm test --prefix backend",
+    "test:frontend": "npm test --prefix frontend",
+    "test:e2e": "playwright test",
+    "test:e2e:install": "playwright install --with-deps chromium",
+    "gate:security": "node scripts/security-gate.mjs",
+    "gate:load": "node scripts/load-gate.mjs",
+    "gate:staging": "node scripts/staging-smoke.mjs",
     "build": "npm run build --prefix backend && npm run build --prefix frontend",
-    "audit": "npm audit --omit=dev --prefix backend && npm audit --omit=dev --prefix frontend",
+    "audit": "npm audit && npm audit --omit=dev --prefix backend && npm audit --omit=dev --prefix frontend",
     "quality": "npm run lint && npm run test:contrast && npm run test && npm run build && npm run audit"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1"
   }
 }

@@ -89,7 +89,7 @@ services:
       HLS_STORAGE_PATH: /app/uploads/hls
       IMAGE_STORAGE_PATH: /app/uploads/images
       PDF_STORAGE_PATH: /app/uploads/pdfs
-      PGBOSS_WORKER: "true"
+      PGBOSS_WORKER: "false"
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}
@@ -123,6 +123,34 @@ services:
     networks:
       - eduvault-prod-net
       - broadcast-prod-net
+    logging: *default-logging
+
+  video-worker:
+    <<: *container-hardening
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    init: true
+    restart: unless-stopped
+    depends_on:
+      uploads-init:
+        condition: service_completed_successfully
+      backend:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?defina DATABASE_URL com a senha percent-encoded no ambiente de produção}
+      NODE_ENV: production
+      PROCESS_ROLE: worker
+      RUN_MIGRATIONS: "false"
+      VIDEO_STORAGE_PATH: /app/uploads/videos
+      HLS_STORAGE_PATH: /app/uploads/hls
+    volumes:
+      - eduvault_uploads_prod:/app/uploads
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    stop_grace_period: 45s
+    networks:
+      - eduvault-prod-net
     logging: *default-logging
 
   broadcast:

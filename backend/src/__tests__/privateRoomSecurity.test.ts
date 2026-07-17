@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
     hashRoomPassword,
     matchesRoomPassword,
+    requiredString,
+    requiredUuid,
     validRoomPassword,
     validSlug,
     validVideoUrl,
@@ -34,5 +36,14 @@ describe('private room security', () => {
         expect(validVideoUrl('/hls/video/index.m3u8')).toContain('/hls/');
         expect(() => validVideoUrl('javascript:alert(1)')).toThrow();
         expect(() => validVideoUrl('http://inseguro.example/aula.mp4')).toThrow();
+    });
+
+    it('preserva os contratos de validação de parâmetros', () => {
+        const uuid = '123e4567-e89b-12d3-a456-426614174000';
+        expect(requiredString('  sala  ', 'slug')).toBe('sala');
+        expect(requiredUuid(uuid, 'id')).toBe(uuid);
+        expect(() => requiredString('', 'slug')).toThrow('Missing or invalid slug');
+        expect(() => requiredUuid('invalid', 'id')).toThrow('Missing or invalid UUID id');
+        expect(() => requiredUuid([uuid], 'id')).toThrow('Missing or invalid id');
     });
 });
